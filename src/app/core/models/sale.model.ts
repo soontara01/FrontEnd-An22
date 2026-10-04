@@ -1,4 +1,5 @@
 import type { PaymentType } from './payment-method.model';
+import { toIsoDate } from './price.model';
 import type { VatType } from './product.model';
 
 export type SaleStatus = 'pending' | 'paid' | 'cancelled';
@@ -101,6 +102,25 @@ export const SALE_DEFAULTS: Omit<
   voidedAt: null,
   voidReason: '',
 };
+
+/** Local calendar day ('YYYY-MM-DD') a sale was made. */
+export const saleDay = (sale: Pick<Sale, 'date'>): string => toIsoDate(new Date(sale.date));
+
+/**
+ * Void rule (decided 2026-10-04), shared by the sales menu and the server: a paid bill can be
+ * voided only on the day of sale and with a reason. From the next day on the sale stays as it is
+ * and goods/money go back through a credit note (ใบลดหนี้) instead.
+ */
+export function voidError(
+  sale: Pick<Sale, 'date' | 'status'>,
+  reason: string,
+  today: string,
+): string | null {
+  if (sale.status !== 'paid') return 'ยกเลิกได้เฉพาะบิลที่ชำระแล้ว';
+  if (saleDay(sale) !== today) return 'ยกเลิกได้เฉพาะบิลของวันนี้ บิลข้ามวันต้องออกใบลดหนี้';
+  if (!reason.trim()) return 'กรุณาระบุเหตุผลการยกเลิก';
+  return null;
+}
 
 /** One cart line as entered by the cashier (prices and promotions are derived). */
 export interface CartItem {

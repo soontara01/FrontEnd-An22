@@ -71,6 +71,7 @@ import {
   paymentError,
   paymentSummary,
   priceCart,
+  voidError,
 } from '../models';
 import { StorageService } from '../services/storage.service';
 
@@ -1805,12 +1806,12 @@ function issueStock(db: MockDb, line: Omit<SaleLine, 'cogs'>, now: Date, note: s
 }
 
 /**
- * Cancels a paid sale and puts its goods back at their sale-time cost (serials back in stock,
+ * Cancels a paid sale of today (`voidError()`) and puts its goods back at their sale-time cost (serials back in stock,
  * non-serial re-averaged). Orders from before the POS have no lines and just change status.
  */
 function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpResponse<unknown>> {
-  if (sale.status !== 'paid') return error(400, 'ยกเลิกได้เฉพาะบิลที่ชำระแล้ว');
-  if (!reason) return error(400, 'กรุณาระบุเหตุผลการยกเลิก');
+  const problem = voidError(sale, reason, todayIso());
+  if (problem) return error(400, problem);
   for (const line of sale.lines) {
     const product = db.products.find((p) => p.id === line.productId);
     if (!product) return error(400, `ไม่พบ SKU ${line.sku} คืนสต็อกไม่ได้`);

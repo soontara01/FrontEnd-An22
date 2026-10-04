@@ -602,6 +602,15 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await product(MOUSE)).stock).toBe(3); // the free mouse came back too
   });
 
+  it('voids only on the day of sale (later → credit note)', async () => {
+    const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    vi.setSystemTime(new Date(2026, 9, 5, 0, 5));
+    expect(await errorOf(post(`sales/${sale.id}/void`, { reason: 'ลูกค้าคืน' }))).toBe(
+      'ยกเลิกได้เฉพาะบิลของวันนี้ บิลข้ามวันต้องออกใบลดหนี้',
+    );
+    expect((await get<Sale>(`sales/${sale.id}`)).status).toBe('paid');
+  });
+
   it('keeps payment methods and SKUs that sales refer to', async () => {
     await sell([item(ESIM)], 199, [pay(QR, 199)]);
     expect(await errorOf(del(`payment-methods/${QR}`))).toBe(
