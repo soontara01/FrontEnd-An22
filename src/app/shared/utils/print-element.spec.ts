@@ -28,7 +28,7 @@ describe('printElement', () => {
 
     expect(during?.hidden.sort()).toEqual(['nav', 'other', 'overlay', 'sib']);
     expect(during?.mode).toBe(true);
-    expect(during?.chain).toEqual(['SECTION', 'MAIN']);
+    expect(during?.chain).toEqual(['MAIN', 'SECTION']);
     expect(during?.page).toBe('@page { size: 80mm 105mm; margin: 0; }');
     expect(document.querySelectorAll('.print-hide, .print-chain')).toHaveLength(0);
     expect(document.documentElement.classList.contains('print-receipt')).toBe(false);
