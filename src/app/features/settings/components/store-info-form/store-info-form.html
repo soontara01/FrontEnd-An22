@@ -45,6 +45,16 @@
       </mat-form-field>
     </div>
 
+    @if (info().vatRegistered) {
+      <div class="paper">
+        <span>กระดาษใบกำกับภาษีเต็มรูป</span>
+        <mat-button-toggle-group formControlName="taxInvoicePaper" aria-label="กระดาษใบกำกับภาษี">
+          <mat-button-toggle value="A4">A4</mat-button-toggle>
+          <mat-button-toggle value="80mm">80 มม. (เครื่องพิมพ์ใบเสร็จ)</mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+    }
+
     <mat-form-field appearance="outline" class="w-full">
       <mat-label>ข้อความท้ายใบเสร็จ</mat-label>
       <textarea matInput formControlName="receiptFooter" rows="2"></textarea>

@@ -5,6 +5,9 @@ import { BranchType, isValidThaiTaxId } from './supplier.model';
  * A VAT-registered store prints "ใบกำกับภาษีอย่างย่อ/ใบเสร็จรับเงิน" with its tax ID, branch and
  * POS registration number (Revenue Department requirements); otherwise a plain receipt.
  */
+/** Paper of the full tax invoice: A4 sheet or the 80 mm receipt printer. */
+export type InvoicePaper = 'A4' | '80mm';
+
 export interface StoreInfo {
   /** Registered business name */
   name: string;
@@ -20,6 +23,8 @@ export interface StoreInfo {
   posId: string;
   /** Printed at the bottom of every receipt, e.g. return policy */
   receiptFooter: string;
+  /** Default paper for full tax invoices (the POS prints on it; the bill page can switch) */
+  taxInvoicePaper: InvoicePaper;
 }
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {
@@ -32,6 +37,7 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
   phone: '',
   posId: '',
   receiptFooter: 'ขอบคุณที่ใช้บริการ',
+  taxInvoicePaper: 'A4',
 };
 
 /** Receipt title by VAT registration. */
@@ -51,6 +57,9 @@ export function storeInfoError(s: StoreInfo): string | null {
   if (!s.address.trim()) return 'กรุณากรอกที่อยู่';
   if (s.posId.length > 30) return 'หมายเลขเครื่อง POS ต้องไม่เกิน 30 ตัวอักษร';
   if (s.receiptFooter.length > 200) return 'ข้อความท้ายใบเสร็จต้องไม่เกิน 200 ตัวอักษร';
+  if (s.taxInvoicePaper !== 'A4' && s.taxInvoicePaper !== '80mm') {
+    return 'ขนาดกระดาษใบกำกับภาษีไม่ถูกต้อง';
+  }
   return null;
 }
 

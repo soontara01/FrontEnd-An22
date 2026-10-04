@@ -24,6 +24,7 @@ import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { Receipt } from '@shared/components/receipt/receipt';
 import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
+import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
 import { printElement } from '@shared/utils/print-element';
@@ -57,6 +58,7 @@ interface UnitOption extends SellUnit {
     LoadingSpinner,
     Receipt,
     TaxInvoiceDocument,
+    TaxInvoiceSlip,
     AutofocusDirective,
     MATERIAL,
   ],
@@ -102,7 +104,8 @@ export default class PosPage {
       const el = this.invoiceDoc()?.nativeElement;
       if (!this.invoicePrintPending() || !el) return;
       this.invoicePrintPending.set(false);
-      setTimeout(() => printElement(el, 'A4'));
+      const paper = this.store.storeInfo()?.taxInvoicePaper === '80mm' ? 'fit' : 'A4';
+      setTimeout(() => printElement(el, paper));
     });
   }
 
@@ -240,8 +243,8 @@ export default class PosPage {
   }
 
   /**
-   * Prints the last sale (rendered off-screen below the page): its A4 full tax invoice when one
-   * was issued with it, else the 80 mm receipt.
+   * Prints the last sale (rendered off-screen below the page): its full tax invoice (A4 or 80 mm
+   * per the store setting) when one was issued with it, else the 80 mm receipt.
    */
   protected printLast(): void {
     if (this.store.lastSale()?.taxInvoiceNo) {

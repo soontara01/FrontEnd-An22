@@ -92,14 +92,13 @@
   <section class="summary">
     <div class="words">({{ words() }})</div>
     <div class="totals">
-      @if (exempt()) {
+      @if (totals().exempt) {
         <div>
-          <span>มูลค่าสินค้ายกเว้นภาษี</span><span>{{ exempt() | number: '1.2-2' }}</span>
+          <span>มูลค่าสินค้ายกเว้นภาษี</span><span>{{ totals().exempt | number: '1.2-2' }}</span>
         </div>
       }
       <div>
-        <span>มูลค่าสินค้าที่ต้องเสียภาษี</span
-        ><span>{{ vatable() - s.vat | number: '1.2-2' }}</span>
+        <span>มูลค่าสินค้าที่ต้องเสียภาษี</span><span>{{ totals().net | number: '1.2-2' }}</span>
       </div>
       <div>
         <span>ภาษีมูลค่าเพิ่ม 7%</span><span>{{ s.vat | number: '1.2-2' }}</span>

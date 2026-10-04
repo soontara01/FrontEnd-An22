@@ -7,16 +7,19 @@ import {
   effect,
   inject,
   input,
+  signal,
   viewChildren,
   viewChild,
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '@core/auth/auth.service';
 import { Router, RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import {
   CreditNote,
+  InvoicePaper,
   SALE_STATUS_BADGE,
   SALE_STATUS_LABEL,
   Sale,
@@ -33,6 +36,7 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { CreditNoteReceipt } from '@shared/components/receipt/credit-note-receipt';
 import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
+import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip';
 import { Receipt } from '@shared/components/receipt/receipt';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
@@ -55,6 +59,8 @@ import { VoidDialog } from '../../dialogs/void-dialog/void-dialog';
     Receipt,
     CreditNoteReceipt,
     TaxInvoiceDocument,
+    TaxInvoiceSlip,
+    MatButtonToggleModule,
     ThaiDatePipe,
     MATERIAL,
   ],
@@ -118,6 +124,11 @@ export default class SaleDetail {
   );
   private printed = false;
   private invoicePrinted = false;
+  /** Paper for printing the full tax invoice here (null = the store's default). */
+  private readonly paperChoice = signal<InvoicePaper | null>(null);
+  protected readonly paper = computed<InvoicePaper>(
+    () => this.paperChoice() ?? this.store.storeInfo()?.taxInvoicePaper ?? 'A4',
+  );
 
   /** Why the bill cannot be voided (a reason is asked later, so pass a placeholder). */
   protected readonly voidBlocker = computed(() =>
@@ -145,7 +156,7 @@ export default class SaleDetail {
       const el = this.invOriginal()?.nativeElement;
       if (this.invoicePrinted || !this.printInv() || !el) return;
       this.invoicePrinted = true;
-      setTimeout(() => printElement(el, 'A4'));
+      setTimeout(() => printElement(el, this.paper() === '80mm' ? 'fit' : 'A4'));
     });
     // Print a credit note just issued by the credit-note page (once).
     effect(() => {
@@ -185,9 +196,13 @@ export default class SaleDetail {
     if (slip) printElement(slip.nativeElement);
   }
 
+  protected setPaper(paper: InvoicePaper): void {
+    this.paperChoice.set(paper);
+  }
+
   protected printInvoice(copy: boolean): void {
     const el = (copy ? this.invCopy() : this.invOriginal())?.nativeElement;
-    if (el) printElement(el, 'A4');
+    if (el) printElement(el, this.paper() === '80mm' ? 'fit' : 'A4');
   }
 
   protected printCopy(): void {

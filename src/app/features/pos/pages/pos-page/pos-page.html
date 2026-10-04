@@ -293,7 +293,11 @@
       <app-receipt #receipt [sale]="sale" [store]="info" />
       @if (store.lastInvoice(); as inv) {
         @if (inv.saleId === sale.id) {
-          <app-tax-invoice-document #invoiceDoc [sale]="sale" [invoice]="inv" [store]="info" />
+          @if (info.taxInvoicePaper === '80mm') {
+            <app-tax-invoice-slip #invoiceDoc [sale]="sale" [invoice]="inv" [store]="info" />
+          } @else {
+            <app-tax-invoice-document #invoiceDoc [sale]="sale" [invoice]="inv" [store]="info" />
+          }
         }
       }
     </div>

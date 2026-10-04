@@ -56,3 +56,11 @@ form {
   max-width: 100%;
   overflow-x: auto;
 }
+
+.paper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 20px;
+}

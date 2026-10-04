@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { SALE_DEFAULTS, STORE_INFO_DEFAULTS, Sale, SaleLine, TaxInvoice } from '@core/models';
 import { TaxInvoiceDocument } from './tax-invoice-document';
+import { TaxInvoiceSlip } from './tax-invoice-slip';
 
 describe('TaxInvoiceDocument', () => {
   const line = (over: Partial<SaleLine>): SaleLine => ({
@@ -106,5 +107,23 @@ describe('TaxInvoiceDocument', () => {
   it('marks copies and cancelled invoices', () => {
     expect(render(true)).toContain('สำเนา');
     expect(render(false, { ...invoice, cancelledAt: sale.date })).toContain('ยกเลิกแล้ว');
+  });
+
+  it('prints the same content on the 80 mm slip', () => {
+    const fixture = TestBed.createComponent(TaxInvoiceSlip);
+    fixture.componentRef.setInput('sale', sale);
+    fixture.componentRef.setInput('invoice', { ...invoice, atSale: true });
+    fixture.componentRef.setInput('store', store);
+    fixture.detectChanges();
+    const text = (fixture.nativeElement as HTMLElement).textContent?.replace(/\s+/g, '') ?? '';
+    expect(text).toContain('ใบกำกับภาษี/ใบเสร็จรับเงิน');
+    expect(text).toContain('ต้นฉบับ');
+    expect(text).toContain('ผู้ซื้อบริษัทลูกค้าจำกัด');
+    expect(text).toContain('0105550123451(สาขา00002)');
+    expect(text).toContain('เลขที่บิลPOS-20261004-0001');
+    expect(text).toContain('มูลค่าสินค้าที่ต้องเสียภาษี10,000.00');
+    expect(text).toContain('ภาษีมูลค่าเพิ่ม7%700.00');
+    expect(text).toContain('(หนึ่งหมื่นเก้าร้อยห้าสิบบาทห้าสิบสตางค์)');
+    expect(text).not.toContain('ออกแทน');
   });
 });

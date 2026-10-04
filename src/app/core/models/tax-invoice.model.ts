@@ -1,5 +1,6 @@
 import { STORE_INFO_DEFAULTS, StoreInfo } from './store-info.model';
 import { BranchType, isValidThaiTaxId } from './supplier.model';
+import { round2 } from './costing.model';
 import type { Sale } from './sale.model';
 
 /**
@@ -35,6 +36,28 @@ export interface TaxInvoice {
   cancelledAt: string | null;
   /** Issued together with the sale (true) or later in place of the abbreviated invoice (false) */
   atSale: boolean;
+}
+
+export interface InvoiceTotals {
+  /** VAT-able goods before VAT */
+  net: number;
+  vat: number;
+  /** VAT-exempt goods */
+  exempt: number;
+  total: number;
+}
+
+/** VAT split printed on a full tax invoice (A4 and 80 mm alike). */
+export function invoiceTotals(sale: Pick<Sale, 'lines' | 'total' | 'vat'>): InvoiceTotals {
+  const vatable = round2(
+    sale.lines.filter((l) => l.vatType === 'vat7').reduce((n, l) => n + l.amount, 0),
+  );
+  return {
+    net: round2(vatable - sale.vat),
+    vat: sale.vat,
+    exempt: round2(sale.total - vatable),
+    total: sale.total,
+  };
 }
 
 export const EMPTY_BUYER: TaxInvoiceBuyer = {

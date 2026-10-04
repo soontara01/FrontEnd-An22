@@ -1,4 +1,10 @@
-import { EMPTY_BUYER, buyerError, normalizeBuyer, taxInvoiceError } from './tax-invoice.model';
+import {
+  EMPTY_BUYER,
+  buyerError,
+  invoiceTotals,
+  normalizeBuyer,
+  taxInvoiceError,
+} from './tax-invoice.model';
 
 describe('tax invoice model', () => {
   const buyer = normalizeBuyer({
@@ -30,6 +36,19 @@ describe('tax invoice model', () => {
       'เลขที่สาขาผู้ซื้อต้องเป็นตัวเลข 5 หลัก',
     );
     expect(buyerError({ ...buyer, address: '' })).toBe('กรุณากรอกที่อยู่ผู้ซื้อ');
+  });
+
+  it('splits the total into VAT-able net, VAT and exempt goods', () => {
+    const lines = [
+      { vatType: 'vat7', amount: 10700 },
+      { vatType: 'exempt', amount: 250.5 },
+    ] as never[];
+    expect(invoiceTotals({ lines, total: 10950.5, vat: 700 })).toEqual({
+      net: 10000,
+      vat: 700,
+      exempt: 250.5,
+      total: 10950.5,
+    });
   });
 
   it('issues once per paid POS bill of a VAT-registered store', () => {

@@ -227,6 +227,15 @@
                 <span></span>
                 @if (store.storeInfo()) {
                   <span class="print-buttons">
+                    <mat-button-toggle-group
+                      hideSingleSelectionIndicator
+                      aria-label="กระดาษ"
+                      [value]="paper()"
+                      (change)="setPaper($event.value)"
+                    >
+                      <mat-button-toggle value="A4">A4</mat-button-toggle>
+                      <mat-button-toggle value="80mm">80 มม.</mat-button-toggle>
+                    </mat-button-toggle-group>
                     <button mat-button (click)="printInvoice(false)">
                       <mat-icon>print</mat-icon>
                       ต้นฉบับ
@@ -301,14 +310,19 @@
         <app-credit-note-receipt #noteSlip [note]="cn" [store]="info" />
       }
       @if (taxInvoice.value(); as inv) {
-        <app-tax-invoice-document #invOriginal [sale]="s" [invoice]="inv" [store]="info" />
-        <app-tax-invoice-document
-          #invCopy
-          [sale]="s"
-          [invoice]="inv"
-          [store]="info"
-          [copy]="true"
-        />
+        @if (paper() === '80mm') {
+          <app-tax-invoice-slip #invOriginal [sale]="s" [invoice]="inv" [store]="info" />
+          <app-tax-invoice-slip #invCopy [sale]="s" [invoice]="inv" [store]="info" [copy]="true" />
+        } @else {
+          <app-tax-invoice-document #invOriginal [sale]="s" [invoice]="inv" [store]="info" />
+          <app-tax-invoice-document
+            #invCopy
+            [sale]="s"
+            [invoice]="inv"
+            [store]="info"
+            [copy]="true"
+          />
+        }
       }
     </div>
   }
