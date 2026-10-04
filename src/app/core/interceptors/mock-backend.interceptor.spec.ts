@@ -2,9 +2,15 @@ import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
+  CartItem,
+  CreditNote,
+  CreditNoteLineInput,
   Category,
   PRODUCT_DEFAULTS,
+  PaymentInput,
   Product,
+  Sale,
+  StoreInfo,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
@@ -12,7 +18,7 @@ import {
   StockCardResult,
   Supplier,
 } from '../models';
-import { addDaysIso, todayIso } from '../models';
+import { addDaysIso, storeInfoError, todayIso } from '../models';
 import { mockBackendInterceptor } from './mock-backend.interceptor';
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
@@ -454,5 +460,269 @@ describe('mockBackendInterceptor – costing', () => {
     expect(card).toEqual([
       expect.objectContaining({ type: 'opening', qty: 4, unitCost: 50, balanceValue: 200 }),
     ]);
+  });
+});
+
+describe('mockBackendInterceptor – POS sales', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // serial, 24,900 today; promo 3 gives a mouse + setup service
+  const MOUSE = 2; // 590, stock 3, avg 350; promo 1 (−10%)
+  const ESIM = 8; // service, 199
+  const CASH = 1; // rounds to 0.25
+  const CARD = 2; // needs a reference, min 300
+  const QR = 3;
+
+  beforeEach(() => {
+    // Seed prices / promotions are dated around October 2026.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${url}`));
+  const post = <T>(url: string, body: unknown) => firstValueFrom(http.post<T>(`/api/${url}`, body));
+  const put = <T>(url: string, body: unknown) => firstValueFrom(http.put<T>(`/api/${url}`, body));
+  const del = (url: string) => firstValueFrom(http.delete(`/api/${url}`));
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => e.error.message,
+    );
+  const item = (productId: number, qty = 1, serial: string | null = null): CartItem => ({
+    productId,
+    factor: 1,
+    qty,
+    serial,
+  });
+  const pay = (methodId: number, amount: number, reference = ''): PaymentInput => ({
+    methodId,
+    amount,
+    reference,
+    installmentMonths: null,
+  });
+  const sell = (
+    items: CartItem[],
+    expectedTotal: number,
+    payments: PaymentInput[],
+  ): Promise<Sale> =>
+    post<Sale>('sales', { items, freeSerials: [], payments, customer: '', expectedTotal });
+  const product = (id: number) => get<Product>(`products/${id}`);
+
+  it('re-prices the cart, issues stock with COGS and numbers the receipt', async () => {
+    const [unit] = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    const setup = await product(9);
+    const sale = await sell([item(NOTEBOOK, 1, unit.serial)], 24600, [
+      pay(CARD, 20000, 'A1'),
+      pay(CASH, 5000),
+    ]);
+
+    expect(sale).toMatchObject({
+      orderNo: 'POS-20261004-0001',
+      status: 'paid',
+      cashier: 'Admin',
+      subtotal: 24900,
+      billDiscount: 300,
+      total: 24600,
+      rounding: 0,
+      change: 400,
+      billPromotionIds: [2],
+      itemCount: 3,
+    });
+    expect(sale.payments.map((p) => [p.name, p.amount, p.tendered])).toEqual([
+      ['บัตรเครดิต/เดบิต', 20000, 20000],
+      ['เงินสด', 4600, 5000],
+    ]);
+    expect(sale.lines.map((l) => [l.sku, l.amount, l.freeOfPromotionId, l.cogs])).toEqual([
+      ['NB-001', 24600, null, unit.cost],
+      ['MS-010', 0, 3, 350],
+      ['SV-SETUP', 0, 3, setup.cost],
+    ]);
+
+    expect((await product(NOTEBOOK)).stock).toBe(11);
+    expect((await product(MOUSE)).stock).toBe(2);
+    const serials = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    expect(serials.find((s) => s.id === unit.id)?.status).toBe('sold');
+    const card = await get<StockCardResult>(`products/${MOUSE}/movements`);
+    expect(card.movements.at(-1)).toMatchObject({
+      type: 'issue',
+      qty: -1,
+      note: 'ของแถม POS-20261004-0001',
+    });
+
+    const next = await sell([item(ESIM)], 199, [pay(QR, 199)]);
+    expect(next.orderNo).toBe('POS-20261004-0002');
+    expect(next.lines[0].cogs).toBe((await product(ESIM)).cost);
+    expect(await get<Sale>(`sales/${next.id}`)).toEqual(next);
+  });
+
+  it('rejects the sale without changing anything when a check fails', async () => {
+    expect(await errorOf(sell([item(MOUSE)], 590, [pay(CASH, 590)]))).toBe(
+      'ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง กรุณาตรวจสอบบิลอีกครั้ง',
+    );
+    expect(await errorOf(sell([item(MOUSE, 4)], 2124, [pay(CASH, 2124)]))).toBe(
+      'MS-010 สต็อกไม่พอ (คงเหลือ 3 ชิ้น)',
+    );
+    expect(
+      await errorOf(sell([item(NOTEBOOK, 1, 'NB-999999999')], 24600, [pay(CASH, 24600)])),
+    ).toBe('ซีเรียล NB-999999999 ไม่อยู่ในคลังของ NB-001');
+    expect(await errorOf(sell([item(MOUSE)], 531, [pay(CASH, 500)]))).toBe(
+      'ยอดชำระยังไม่ครบ (ขาด ฿31)',
+    );
+    expect(await errorOf(sell([], 0, []))).toBe('ยังไม่มีสินค้าในบิล');
+    expect((await product(MOUSE)).stock).toBe(3);
+    expect(await get<Sale[]>('sales')).toHaveLength(7);
+  });
+
+  it('voids a sale and puts goods back at their sale cost', async () => {
+    const [unit] = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    const sale = await sell([item(MOUSE, 2)], 1062, [pay(CASH, 1062)]);
+    expect((await product(MOUSE)).stock).toBe(1);
+    const nb = await sell([item(NOTEBOOK, 1, unit.serial)], 24600, [pay(CASH, 24600)]);
+
+    expect(await errorOf(post(`sales/${sale.id}/void`, { reason: ' ' }))).toBe(
+      'กรุณาระบุเหตุผลการยกเลิก',
+    );
+    expect(await errorOf(put(`sales/${sale.id}/status`, { status: 'cancelled' }))).toBe(
+      'บิลขายหน้าร้านเปลี่ยนสถานะไม่ได้ (ใช้การยกเลิกบิล)',
+    );
+    const voided = await post<Sale>(`sales/${sale.id}/void`, { reason: 'ลูกค้าเปลี่ยนใจ' });
+    expect(voided).toMatchObject({ status: 'cancelled', voidReason: 'ลูกค้าเปลี่ยนใจ' });
+    // 1 left − 1 free with the notebook + 2 back
+    expect(await product(MOUSE)).toMatchObject({ stock: 2, avgCost: 350 });
+    expect(await errorOf(post(`sales/${sale.id}/void`, { reason: 'x' }))).toBe(
+      'ยกเลิกได้เฉพาะบิลที่ชำระแล้ว',
+    );
+
+    await post<Sale>(`sales/${nb.id}/void`, { reason: 'ทดสอบ' });
+    const serials = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    expect(serials.find((s) => s.id === unit.id)?.status).toBe('in_stock');
+    expect((await product(NOTEBOOK)).stock).toBe(12);
+    expect((await product(MOUSE)).stock).toBe(3); // the free mouse came back too
+  });
+
+  it('voids only on the day of sale (later → credit note)', async () => {
+    const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    vi.setSystemTime(new Date(2026, 9, 5, 0, 5));
+    expect(await errorOf(post(`sales/${sale.id}/void`, { reason: 'ลูกค้าคืน' }))).toBe(
+      'ยกเลิกได้เฉพาะบิลของวันนี้ บิลข้ามวันต้องออกใบลดหนี้',
+    );
+    expect((await get<Sale>(`sales/${sale.id}`)).status).toBe('paid');
+  });
+
+  it('lists sales by local day of sale, newest first', async () => {
+    const today = await sell([item(ESIM)], 199, [pay(QR, 199)]);
+    const listed = await get<Sale[]>('sales?from=2026-10-04&to=2026-10-04');
+    expect(listed.map((s) => s.orderNo)).toEqual([today.orderNo]);
+    const all = await get<Sale[]>('sales');
+    expect(all[0].orderNo).toBe(today.orderNo);
+    expect(all).toHaveLength(8);
+    expect(await get<Sale[]>('sales?from=2026-09-01&to=2026-09-30')).toHaveLength(5);
+    expect(await errorOf(get('sales?from=2026-10-05&to=2026-10-04'))).toBe(
+      'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด',
+    );
+  });
+
+  it('issues credit notes from the next day: stock back, free goods deducted', async () => {
+    const [unit] = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    const sale = await sell([item(NOTEBOOK, 1, unit.serial), item(MOUSE)], 25131, [
+      pay(CARD, 20000, 'A1'),
+      pay(CASH, 5131),
+    ]);
+    const body = (lines: CreditNoteLineInput[], total: number, refunds: PaymentInput[]) => ({
+      lines,
+      refunds,
+      reason: 'ลูกค้าคืนสินค้า',
+      expectedTotal: total,
+    });
+    const notebookOnly = body([{ saleLineIndex: 0, qty: 1, restock: true }], 23516.26, [
+      pay(CARD, 20000, 'R1'),
+      pay(CASH, 3516.26),
+    ]);
+    expect(await errorOf(post(`sales/${sale.id}/credit-notes`, notebookOnly))).toBe(
+      'บิลของวันนี้ให้ยกเลิกบิลแทนการออกใบลดหนี้',
+    );
+
+    vi.setSystemTime(new Date(2026, 9, 5, 11, 0));
+    // the notebook (24,606.26 after its bill-discount share) comes back; the free mouse (590)
+    // and setup (500) stay with the customer
+    const cn = await post<CreditNote>(`sales/${sale.id}/credit-notes`, notebookOnly);
+    expect(cn).toMatchObject({
+      cnNo: 'CN-20261005-0001',
+      subtotal: 24606.26,
+      deduction: 1090,
+      total: 23516.26,
+    });
+    expect(cn.refunds.map((r) => [r.name, r.amount])).toEqual([
+      ['บัตรเครดิต/เดบิต', 20000],
+      ['เงินสด', 3516.26],
+    ]);
+    expect((await product(NOTEBOOK)).stock).toBe(12);
+    const serials = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    expect(serials.find((s) => s.id === unit.id)?.status).toBe('in_stock');
+
+    // the paid mouse comes back damaged: no restock; the card has nothing left to refund
+    const mouseBefore = (await product(MOUSE)).stock;
+    const damaged = body([{ saleLineIndex: 1, qty: 1, restock: false }], 524.74, [
+      pay(CARD, 524.74, 'R2'),
+    ]);
+    expect(await errorOf(post(`sales/${sale.id}/credit-notes`, damaged))).toBe(
+      'คืนเงินได้เฉพาะเงินสดหรือช่องทางที่ลูกค้าชำระบิลนี้',
+    );
+    const second = await post<CreditNote>(`sales/${sale.id}/credit-notes`, {
+      ...damaged,
+      refunds: [pay(CASH, 524.74)],
+    });
+    expect(second.cnNo).toBe('CN-20261005-0002');
+    expect((await product(MOUSE)).stock).toBe(mouseBefore);
+    expect(await errorOf(post(`sales/${sale.id}/credit-notes`, damaged))).toBe(
+      'MS-010 คืนได้ไม่เกิน 0 ชิ้น',
+    );
+
+    expect(await get<CreditNote[]>(`sales/${sale.id}/credit-notes`)).toHaveLength(2);
+    expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
+    expect(await get<CreditNote[]>('credit-notes?from=2026-10-04&to=2026-10-04')).toHaveLength(0);
+  });
+
+  it('keeps payment methods and SKUs that sales refer to', async () => {
+    await sell([item(ESIM)], 199, [pay(QR, 199)]);
+    expect(await errorOf(del(`payment-methods/${QR}`))).toBe(
+      'มีการขายที่ใช้ช่องทางนี้แล้ว ลบไม่ได้ (ปิดใช้งานแทน)',
+    );
+    expect(await errorOf(del(`products/${ESIM}`))).toBe(
+      'SKU นี้มีประวัติการขาย ลบไม่ได้ (เปลี่ยนสถานะเป็นเลิกจำหน่ายแทน)',
+    );
+  });
+});
+
+describe('mockBackendInterceptor – store info', () => {
+  let http: HttpClient;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('serves the seed store info and validates updates', async () => {
+    const info = await firstValueFrom(http.get<StoreInfo>('/api/settings/store'));
+    expect(storeInfoError(info)).toBeNull();
+    const saved = await firstValueFrom(
+      http.put<StoreInfo>('/api/settings/store', { ...info, name: ' ร้านใหม่ ' }),
+    );
+    expect(saved.name).toBe('ร้านใหม่');
+    const bad = await firstValueFrom(
+      http.put('/api/settings/store', { ...info, taxId: '123' }),
+    ).then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+    expect(bad).toBe('เลขประจำตัวผู้เสียภาษีต้องเป็น 13 หลักที่ถูกต้อง');
   });
 });

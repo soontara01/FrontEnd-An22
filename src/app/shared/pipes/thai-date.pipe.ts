@@ -1,18 +1,25 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import { fromIsoDate } from '@core/models';
 
-/** Formats a date in Thai (Buddhist era), e.g. `{{ value | thaiDate }}` → "5 ม.ค. 2569". */
+type Format = 'short' | 'datetime' | 'long';
+
+/** Formats a date in Thai (Buddhist era), e.g. `{{ value | thaiDate }}` → "5 ม.ค. 2569"
+ * (`datetime` → "5 ม.ค. 2569 14:05", `long` → full month + time). */
 @Pipe({ name: 'thaiDate' })
 export class ThaiDatePipe implements PipeTransform {
-  private static readonly formats: Record<'short' | 'long', Intl.DateTimeFormatOptions> = {
+  private static readonly formats: Record<Format, Intl.DateTimeFormatOptions> = {
     short: { day: 'numeric', month: 'short', year: 'numeric' },
+    datetime: {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
     long: { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' },
   };
 
-  transform(
-    value: string | number | Date | null | undefined,
-    format: 'short' | 'long' = 'short',
-  ): string {
+  transform(value: string | number | Date | null | undefined, format: Format = 'short'): string {
     if (value === null || value === undefined || value === '') return '';
     // Date-only 'YYYY-MM-DD' is a local calendar date (new Date() would read it as UTC).
     const date =

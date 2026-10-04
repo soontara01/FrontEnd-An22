@@ -1,0 +1,144 @@
+@let s = sale();
+@let shop = store();
+<div class="receipt">
+  <header>
+    <div class="shop">{{ shop.name }}</div>
+    @if (shop.address) {
+      <div>{{ shop.address }}</div>
+    }
+    @if (shop.phone) {
+      <div>โทร {{ shop.phone }}</div>
+    }
+    @if (shop.taxId) {
+      <div>เลขประจำตัวผู้เสียภาษี {{ shop.taxId }} ({{ branch() }})</div>
+    }
+    @if (shop.posId) {
+      <div>POS ID {{ shop.posId }}</div>
+    }
+    <div class="title">{{ title() }}</div>
+    @if (shop.vatRegistered) {
+      <div>(VAT Included)</div>
+    }
+    @if (copy()) {
+      <div class="mark">*** สำเนา ***</div>
+    }
+    @if (s.status === 'cancelled') {
+      <div class="mark">*** ยกเลิกแล้ว ***</div>
+    }
+  </header>
+
+  <div class="meta">
+    <div>
+      <span>เลขที่</span><span>{{ s.orderNo }}</span>
+    </div>
+    <div>
+      <span>วันที่</span><span>{{ s.date | thaiDate: 'datetime' }}</span>
+    </div>
+    @if (s.cashier) {
+      <div>
+        <span>พนักงาน</span><span>{{ s.cashier }}</span>
+      </div>
+    }
+    @if (s.customer) {
+      <div>
+        <span>ลูกค้า</span><span>{{ s.customer }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="lines">
+    @for (line of s.lines; track $index) {
+      <div class="line">
+        <div class="row">
+          <span class="name">
+            {{ line.shortName }}
+            @if (line.vatType === 'exempt') {
+              <span class="flag">(E)</span>
+            }
+          </span>
+          <span>{{ lineGross(line) | number: '1.2-2' }}</span>
+        </div>
+        <div class="sub">
+          {{ line.qty }} {{ line.unit }} × {{ line.unitPrice | number: '1.2-2' }}
+          @if (line.freeOfPromotionId !== null) {
+            · ของแถม
+          }
+        </div>
+        @if (line.itemDiscount) {
+          <div class="row sub">
+            <span>ส่วนลด</span><span>-{{ line.itemDiscount | number: '1.2-2' }}</span>
+          </div>
+        }
+        @if (line.serial) {
+          <div class="sub">SN {{ line.serial }}</div>
+        }
+        @if (line.warrantyMonths) {
+          <div class="sub">รับประกัน {{ line.warrantyMonths }} เดือน</div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="totals">
+    <div class="row">
+      <span>รวม {{ s.itemCount }} ชิ้น</span><span>{{ s.subtotal | number: '1.2-2' }}</span>
+    </div>
+    @if (s.itemDiscount) {
+      <div class="row">
+        <span>ส่วนลดสินค้า</span><span>-{{ s.itemDiscount | number: '1.2-2' }}</span>
+      </div>
+    }
+    @if (s.billDiscount) {
+      <div class="row">
+        <span>ส่วนลดท้ายบิล</span><span>-{{ s.billDiscount | number: '1.2-2' }}</span>
+      </div>
+    }
+    <div class="row grand">
+      <span>ยอดสุทธิ</span><span>{{ s.total | number: '1.2-2' }}</span>
+    </div>
+    @if (shop.vatRegistered) {
+      <div class="row sub">
+        <span>มูลค่าสินค้ามีภาษี</span><span>{{ vatable() - s.vat | number: '1.2-2' }}</span>
+      </div>
+      <div class="row sub">
+        <span>ภาษีมูลค่าเพิ่ม 7%</span><span>{{ s.vat | number: '1.2-2' }}</span>
+      </div>
+      @if (exempt()) {
+        <div class="row sub">
+          <span>มูลค่าสินค้ายกเว้นภาษี (E)</span><span>{{ exempt() | number: '1.2-2' }}</span>
+        </div>
+      }
+    }
+  </div>
+
+  <div class="payments">
+    @for (p of s.payments; track $index) {
+      <div class="row">
+        <span
+          >{{ p.name }}{{ p.installmentMonths ? ' ' + p.installmentMonths + ' เดือน' : '' }}</span
+        >
+        <span>{{ p.tendered | number: '1.2-2' }}</span>
+      </div>
+      @if (p.reference) {
+        <div class="sub">อ้างอิง {{ p.reference }}</div>
+      }
+    }
+    @if (s.rounding) {
+      <div class="row">
+        <span>ปัดเศษ</span><span>{{ s.rounding | number: '1.2-2' }}</span>
+      </div>
+      <div class="row">
+        <span>รับชำระ</span><span>{{ paid() | number: '1.2-2' }}</span>
+      </div>
+    }
+    @if (s.change) {
+      <div class="row">
+        <span>เงินทอน</span><span>{{ s.change | number: '1.2-2' }}</span>
+      </div>
+    }
+  </div>
+
+  @if (shop.receiptFooter) {
+    <footer>{{ shop.receiptFooter }}</footer>
+  }
+</div>

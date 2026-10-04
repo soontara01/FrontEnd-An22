@@ -1,0 +1,199 @@
+@if (data.hasValue()) {
+  @let s = data.value().sale;
+  @let d = draft();
+  <app-page-header
+    title="ออกใบลดหนี้"
+    [subtitle]="'อ้างอิงบิล ' + s.orderNo + ' · ' + ((s.date | thaiDate: 'datetime') ?? '')"
+  >
+    <a mat-button [routerLink]="['/sales', s.id]">
+      <mat-icon>arrow_back</mat-icon>
+      กลับไปบิล
+    </a>
+  </app-page-header>
+
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>สินค้าที่รับคืน</mat-card-title>
+      <span class="spacer"></span>
+      <button mat-button type="button" (click)="returnAll()">คืนทั้งหมดที่เหลือ</button>
+    </mat-card-header>
+    <mat-card-content class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>สินค้า</th>
+            <th class="num">ขาย</th>
+            <th class="num">คืนได้</th>
+            <th class="num">คืน</th>
+            <th>เข้าคลัง</th>
+            <th class="num">ยอดในบิล</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of rows(); track row.index) {
+            @let l = line(row);
+            <tr [class.done]="!row.remaining">
+              <td>
+                {{ l.name }}
+                @if (l.freeOfPromotionId !== null) {
+                  <span class="badge badge-success">ของแถม</span>
+                }
+                <div class="text-muted small">
+                  <span class="mono">{{ l.sku }}</span>
+                  @if (l.serial) {
+                    · SN <span class="mono">{{ l.serial }}</span>
+                  }
+                </div>
+              </td>
+              <td class="num">{{ l.qty }} {{ l.unit }}</td>
+              <td class="num">{{ row.remaining }}</td>
+              <td class="num">
+                @if (!row.remaining) {
+                  <span class="text-muted">คืนครบแล้ว</span>
+                } @else if (row.remaining === 1) {
+                  <mat-checkbox
+                    [checked]="row.qty === 1"
+                    (change)="setQty(row, $event.checked ? 1 : 0)"
+                    aria-label="รับคืน"
+                  />
+                } @else {
+                  <input
+                    class="qty"
+                    type="number"
+                    min="0"
+                    [max]="row.remaining"
+                    aria-label="จำนวนที่คืน"
+                    [value]="row.qty"
+                    (change)="setQty(row, $any($event.target).value)"
+                  />
+                }
+              </td>
+              <td>
+                @if (l.itemType === 'service') {
+                  <span class="text-muted small">บริการ</span>
+                } @else if (row.qty) {
+                  <mat-slide-toggle
+                    [checked]="row.restock"
+                    (change)="setRestock(row, $event.checked)"
+                  >
+                    {{ row.restock ? 'รับเข้าคลัง' : 'ชำรุด/ตัดทิ้ง' }}
+                  </mat-slide-toggle>
+                }
+              </td>
+              <td class="num">{{ l.amount | number: '1.2-2' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </mat-card-content>
+  </mat-card>
+
+  <div class="cards">
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>ยอดลดหนี้</mat-card-title></mat-card-header>
+      <mat-card-content class="totals">
+        @if (d) {
+          @for (l of d.lines; track l.saleLineIndex) {
+            <div>
+              <span>{{ l.shortName }} × {{ l.qty }}</span
+              ><span>{{ l.amount | number: '1.2-2' }}</span>
+            </div>
+          }
+          @for (x of d.deductions; track $index) {
+            <div class="deduct">
+              <span>หักของแถมที่ลูกค้าไม่คืน: {{ x.name }} × {{ x.qty }}</span>
+              <span>-{{ x.amount | number: '1.2-2' }}</span>
+            </div>
+          }
+          @if (d.deductions.length) {
+            <div class="text-muted small">
+              สินค้าที่เหลือไม่ถึงเงื่อนไขโปรของแถมแล้ว — ให้ลูกค้าคืนของแถมเพื่อไม่ต้องหักเงิน
+            </div>
+          }
+          <div class="grand">
+            <span>คืนเงินลูกค้า</span><span>{{ d.total | number: '1.2-2' }}</span>
+          </div>
+          <div class="text-muted">
+            <span>VAT ที่ลดลง</span><span>{{ d.vat | number: '1.2-2' }}</span>
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>คืนเงินผ่าน</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <div class="methods">
+          @for (o of options(); track o.method.id) {
+            <button mat-stroked-button type="button" (click)="addRefund(o)">
+              <mat-icon>{{ icon[o.method.type] }}</mat-icon>
+              {{ o.method.name }}
+              @if (o.max !== null) {
+                (สูงสุด {{ o.max | number: '1.0-2' }})
+              }
+            </button>
+          }
+        </div>
+        @for (r of refunds(); track r.methodId; let i = $index) {
+          @let o = optionOf(r);
+          <div class="refund">
+            <mat-icon>{{ o ? icon[o.method.type] : 'help' }}</mat-icon>
+            <span class="name">{{ o?.method?.name ?? 'ไม่พบช่องทาง' }}</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="amount">
+              <mat-label>จำนวนเงิน</mat-label>
+              <input
+                matInput
+                type="number"
+                min="0"
+                step="0.01"
+                [value]="r.amount"
+                (input)="setRefundAmount(i, $any($event.target).value)"
+              />
+            </mat-form-field>
+            @if (o?.method?.requireReference && o?.method?.type !== 'cash') {
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>{{ o?.method?.referenceLabel }}</mat-label>
+                <input
+                  matInput
+                  [value]="r.reference"
+                  (input)="setRefund(i, { reference: $any($event.target).value })"
+                />
+              </mat-form-field>
+            }
+            <button mat-icon-button type="button" matTooltip="ลบ" (click)="removeRefund(i)">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        }
+        <div class="text-muted small">รวมคืนเงิน {{ refunded() | number: '1.2-2' }}</div>
+
+        <div class="quick">
+          @for (q of quickReasons; track q) {
+            <button mat-stroked-button type="button" (click)="reason.set(q)">{{ q }}</button>
+          }
+        </div>
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>เหตุผล (จำเป็น)</mat-label>
+          <textarea
+            matInput
+            rows="2"
+            [value]="reason()"
+            (input)="reason.set($any($event.target).value)"
+          ></textarea>
+        </mat-form-field>
+
+        @if (problem(); as message) {
+          <div class="problem">{{ message }}</div>
+        }
+        <div class="actions">
+          <button mat-flat-button [disabled]="!!problem() || saving()" (click)="save()">
+            <mat-icon>assignment_return</mat-icon>
+            ออกใบลดหนี้ {{ d?.total ?? 0 | number: '1.2-2' }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+}

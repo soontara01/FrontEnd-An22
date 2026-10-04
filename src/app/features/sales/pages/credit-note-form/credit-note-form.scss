@@ -1,0 +1,120 @@
+mat-card {
+  margin-bottom: 16px;
+}
+
+mat-card-header {
+  align-items: center;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 8px;
+    text-align: left;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  th {
+    font: var(--mat-sys-label-large);
+    color: var(--mat-sys-on-surface-variant);
+    white-space: nowrap;
+  }
+
+  tr.done td {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .num {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.qty {
+  width: 64px;
+  padding: 6px 4px;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 6px;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.totals {
+  padding-top: 8px;
+  line-height: 1.9;
+
+  > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .deduct {
+    color: var(--mat-sys-error);
+  }
+
+  .grand {
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-primary);
+  }
+}
+
+.methods,
+.quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.refund {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+
+  .name {
+    min-width: 120px;
+  }
+
+  mat-form-field {
+    flex: 1 1 140px;
+  }
+}
+
+.problem {
+  color: var(--mat-sys-error);
+  margin-bottom: 8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}

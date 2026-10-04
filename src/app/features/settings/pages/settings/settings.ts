@@ -4,10 +4,11 @@ import { AuthService } from '@core/auth/auth.service';
 import { ThemeService } from '@core/services/theme.service';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
+import { StoreInfoForm } from '../../components/store-info-form/store-info-form';
 
 @Component({
   selector: 'app-settings',
-  imports: [PageHeader, MatListModule, MATERIAL],
+  imports: [PageHeader, MatListModule, StoreInfoForm, MATERIAL],
   template: `
     <app-page-header title="ตั้งค่า" />
 
@@ -20,6 +21,15 @@ import { MATERIAL } from '@shared/material';
         >
           โหมดมืด
         </mat-slide-toggle>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined" class="section">
+      <mat-card-header>
+        <mat-card-title>ข้อมูลร้าน (หัว/ท้ายใบเสร็จ)</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <app-store-info-form [editable]="auth.user()?.role === 'admin'" />
       </mat-card-content>
     </mat-card>
 

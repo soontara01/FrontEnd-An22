@@ -1,0 +1,70 @@
+<div class="layout">
+  <form [formGroup]="form" (ngSubmit)="save()">
+    @if (!editable()) {
+      <p class="text-muted small">เฉพาะผู้ดูแลระบบ (admin) แก้ไขได้</p>
+    }
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>ชื่อร้าน / ชื่อบริษัท</mat-label>
+      <input matInput formControlName="name" />
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="vatRegistered" class="toggle">
+      จดทะเบียนภาษีมูลค่าเพิ่ม (ออกใบกำกับภาษีอย่างย่อ)
+    </mat-slide-toggle>
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>เลขประจำตัวผู้เสียภาษี</mat-label>
+        <input matInput formControlName="taxId" inputmode="numeric" maxlength="17" />
+      </mat-form-field>
+      <mat-button-toggle-group formControlName="branchType" aria-label="ประเภทสาขา">
+        <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
+        <mat-button-toggle value="branch">สาขา</mat-button-toggle>
+      </mat-button-toggle-group>
+      @if (info().branchType === 'branch') {
+        <mat-form-field appearance="outline" class="branch-no">
+          <mat-label>เลขที่สาขา</mat-label>
+          <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" />
+        </mat-form-field>
+      }
+    </div>
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>ที่อยู่</mat-label>
+      <textarea matInput formControlName="address" rows="2"></textarea>
+    </mat-form-field>
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>โทรศัพท์</mat-label>
+        <input matInput formControlName="phone" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>หมายเลขเครื่อง POS (สรรพากร)</mat-label>
+        <input matInput formControlName="posId" />
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>ข้อความท้ายใบเสร็จ</mat-label>
+      <textarea matInput formControlName="receiptFooter" rows="2"></textarea>
+    </mat-form-field>
+
+    @if (editable()) {
+      <div class="actions">
+        @if (problem(); as message) {
+          <span class="problem">{{ message }}</span>
+        }
+        <button mat-flat-button type="submit" [disabled]="!loaded() || !!problem() || saving()">
+          <mat-icon>save</mat-icon>
+          บันทึก
+        </button>
+      </div>
+    }
+  </form>
+
+  <div class="preview">
+    <div class="text-muted small">ตัวอย่างใบเสร็จ (80 มม.)</div>
+    <app-receipt [sale]="sample" [store]="info()" />
+  </div>
+</div>

@@ -1,0 +1,82 @@
+// Width = the paper; printElement() sizes the printed page to this host.
+:host {
+  display: block;
+  width: fit-content;
+}
+
+// Paper look on screen (tokens, so dark mode stays readable); pure black on white when printed.
+.receipt {
+  box-sizing: border-box;
+  width: 80mm;
+  padding: 4mm;
+  font:
+    12px/1.35 ui-monospace,
+    'Sarabun',
+    monospace;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface-container-lowest);
+
+  @media print {
+    color: #000;
+    background: #fff;
+  }
+}
+
+header,
+footer {
+  text-align: center;
+}
+
+.shop {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.title {
+  margin-top: 4px;
+  font-weight: 700;
+}
+
+.mark {
+  margin-top: 2px;
+  font-weight: 700;
+}
+
+.meta,
+.lines,
+.totals,
+.payments,
+footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed currentColor;
+}
+
+.row,
+.meta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.line + .line {
+  margin-top: 4px;
+}
+
+.name {
+  overflow-wrap: anywhere;
+}
+
+.sub {
+  padding-left: 8px;
+  font-size: 11px;
+}
+
+.row.sub {
+  padding-left: 8px;
+}
+
+.grand {
+  font-size: 15px;
+  font-weight: 700;
+}

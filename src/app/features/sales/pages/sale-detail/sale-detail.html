@@ -1,0 +1,265 @@
+@if (sale.hasValue()) {
+  @let s = sale.value();
+  <app-page-header [title]="'บิล ' + s.orderNo" [subtitle]="(s.date | thaiDate: 'long') ?? ''">
+    <a mat-button routerLink="/sales">
+      <mat-icon>arrow_back</mat-icon>
+      การขาย
+    </a>
+    @if (isPos() && store.storeInfo()) {
+      <button mat-stroked-button (click)="printCopy()">
+        <mat-icon>print</mat-icon>
+        พิมพ์สำเนาใบเสร็จ
+      </button>
+    }
+    @if (canCredit() && isAdmin()) {
+      <a mat-stroked-button [routerLink]="['/sales', s.id, 'credit-note']">
+        <mat-icon>assignment_return</mat-icon>
+        ออกใบลดหนี้
+      </a>
+    }
+    @if (isPos() && s.status === 'paid' && !voidBlocker()) {
+      <button mat-stroked-button class="danger" (click)="voidSale(s)">
+        <mat-icon>cancel</mat-icon>
+        ยกเลิกบิล
+      </button>
+    }
+  </app-page-header>
+
+  <div class="layout">
+    <div class="main">
+      <mat-card appearance="outlined">
+        <mat-card-content class="info">
+          <div>
+            <span class="text-muted">สถานะ</span>
+            <span class="badge" [class]="statusBadge(s)">{{ statusText(s) }}</span>
+          </div>
+          <div><span class="text-muted">ลูกค้า</span>{{ s.customer || 'ลูกค้าทั่วไป' }}</div>
+          <div><span class="text-muted">พนักงาน</span>{{ s.cashier || '-' }}</div>
+          @if (s.status === 'cancelled' && s.voidedAt) {
+            <div class="voided">
+              <span class="text-muted">ยกเลิกเมื่อ</span>
+              {{ s.voidedAt | thaiDate: 'datetime' }} — {{ s.voidReason }}
+            </div>
+          }
+          @if (isPos() && s.status === 'paid' && voidBlocker()) {
+            <div class="text-muted small hint">
+              <mat-icon inline>info</mat-icon> {{ voidBlocker() }}
+              @if (canCredit() && !isAdmin()) {
+                — ให้ผู้ดูแลระบบออกใบลดหนี้
+              }
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+
+      @if (isPos()) {
+        <mat-card appearance="outlined">
+          <mat-card-header><mat-card-title>รายการสินค้า</mat-card-title></mat-card-header>
+          <mat-card-content class="table-wrap">
+            <table class="lines">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>สินค้า</th>
+                  <th class="num">จำนวน</th>
+                  @if (creditNotes().length) {
+                    <th class="num">คืนแล้ว</th>
+                  }
+                  <th class="num">ราคา/หน่วย</th>
+                  <th class="num">ส่วนลด</th>
+                  <th class="num">ยอดสุทธิ</th>
+                  <th class="num">ต้นทุน</th>
+                  <th class="num">กำไรขั้นต้น</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (l of s.lines; track $index; let n = $index) {
+                  <tr>
+                    <td>{{ n + 1 }}</td>
+                    <td>
+                      <div>
+                        {{ l.name }}
+                        @if (l.freeOfPromotionId !== null) {
+                          <span class="badge badge-success">ของแถม</span>
+                        }
+                        @if (l.vatType === 'exempt') {
+                          <span class="badge">ยกเว้น VAT</span>
+                        }
+                      </div>
+                      <div class="text-muted small">
+                        <span class="mono">{{ l.sku }}</span>
+                        @if (l.serial) {
+                          · SN <span class="mono">{{ l.serial }}</span>
+                        }
+                        @if (l.warrantyMonths) {
+                          · รับประกัน {{ l.warrantyMonths }} เดือน
+                        }
+                      </div>
+                      @for (name of promotionNames(l.promotionIds); track name) {
+                        <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
+                      }
+                    </td>
+                    <td class="num">{{ l.qty }} {{ l.unit }}</td>
+                    @if (creditNotes().length) {
+                      <td class="num" [class.loss]="returnedQty(n)">
+                        {{ returnedQty(n) || '' }}
+                      </td>
+                    }
+                    <td class="num">{{ l.unitPrice | number: '1.2-2' }}</td>
+                    <td class="num">
+                      @if (l.itemDiscount + l.billDiscount) {
+                        -{{ l.itemDiscount + l.billDiscount | number: '1.2-2' }}
+                      }
+                    </td>
+                    <td class="num">{{ l.amount | number: '1.2-2' }}</td>
+                    <td class="num">{{ l.cogs | number: '1.2-2' }}</td>
+                    <td class="num" [class.loss]="lineProfit(l) < 0">
+                      {{ lineProfit(l) | number: '1.2-2' }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </mat-card-content>
+        </mat-card>
+
+        <div class="cards">
+          <mat-card appearance="outlined">
+            <mat-card-header><mat-card-title>สรุปยอด</mat-card-title></mat-card-header>
+            <mat-card-content class="totals">
+              <div>
+                <span>รวม {{ s.itemCount }} ชิ้น</span
+                ><span>{{ s.subtotal | number: '1.2-2' }}</span>
+              </div>
+              @if (s.itemDiscount) {
+                <div>
+                  <span>ส่วนลดสินค้า</span><span>-{{ s.itemDiscount | number: '1.2-2' }}</span>
+                </div>
+              }
+              @if (s.billDiscount) {
+                <div>
+                  <span>ส่วนลดท้ายบิล</span><span>-{{ s.billDiscount | number: '1.2-2' }}</span>
+                </div>
+                @for (name of promotionNames(s.billPromotionIds); track name) {
+                  <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
+                }
+              }
+              <div class="grand">
+                <span>ยอดสุทธิ</span><span>{{ s.total | number: '1.2-2' }}</span>
+              </div>
+              <div class="text-muted">
+                <span>VAT ที่รวมอยู่</span><span>{{ s.vat | number: '1.2-2' }}</span>
+              </div>
+              <div class="text-muted">
+                <span>ยอดก่อน VAT</span><span>{{ s.total - s.vat | number: '1.2-2' }}</span>
+              </div>
+              <div class="text-muted">
+                <span>ต้นทุนขาย</span><span>{{ cogs() | number: '1.2-2' }}</span>
+              </div>
+              <div [class.loss]="profit() < 0">
+                <span>กำไรขั้นต้น</span><span>{{ profit() | number: '1.2-2' }}</span>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          <mat-card appearance="outlined">
+            <mat-card-header><mat-card-title>การชำระเงิน</mat-card-title></mat-card-header>
+            <mat-card-content class="totals">
+              @for (p of s.payments; track $index) {
+                <div>
+                  <span>
+                    {{ p.name }}
+                    @if (p.installmentMonths) {
+                      ({{ p.installmentMonths }} เดือน)
+                    }
+                    @if (p.reference) {
+                      <span class="text-muted small"> · {{ p.reference }}</span>
+                    }
+                  </span>
+                  <span>{{ p.amount | number: '1.2-2' }}</span>
+                </div>
+                @if (p.tendered !== p.amount) {
+                  <div class="text-muted small">
+                    <span>รับมา</span><span>{{ p.tendered | number: '1.2-2' }}</span>
+                  </div>
+                }
+              } @empty {
+                <div class="text-muted">ไม่มีการรับชำระ (ยอด 0)</div>
+              }
+              @if (s.rounding) {
+                <div class="text-muted">
+                  <span>ปัดเศษ</span><span>{{ s.rounding | number: '1.2-2' }}</span>
+                </div>
+              }
+              @if (s.change) {
+                <div>
+                  <span>เงินทอน</span><span>{{ s.change | number: '1.2-2' }}</span>
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        </div>
+        @if (creditNotes().length) {
+          <mat-card appearance="outlined">
+            <mat-card-header><mat-card-title>ใบลดหนี้</mat-card-title></mat-card-header>
+            <mat-card-content class="notes">
+              @for (cn of creditNotes(); track cn.id; let i = $index) {
+                <div class="note">
+                  <div>
+                    <strong class="mono">{{ cn.cnNo }}</strong>
+                    <span class="text-muted">
+                      · {{ cn.date | thaiDate: 'datetime' }} · {{ cn.reason }}</span
+                    >
+                    <div class="text-muted small">
+                      @for (l of cn.lines; track $index) {
+                        {{ l.shortName }} × {{ l.qty }}{{ l.restock ? '' : ' (ชำรุด)'
+                        }}{{ $last ? '' : ', ' }}
+                      }
+                      @if (cn.deduction) {
+                        · หักของแถม {{ cn.deduction | number: '1.2-2' }}
+                      }
+                      · คืนผ่าน
+                      @for (r of cn.refunds; track $index) {
+                        {{ r.name }} {{ r.amount | number: '1.2-2' }}{{ $last ? '' : ', ' }}
+                      }
+                    </div>
+                  </div>
+                  <strong class="loss">-{{ cn.total | number: '1.2-2' }}</strong>
+                  @if (store.storeInfo()) {
+                    <button mat-icon-button matTooltip="พิมพ์ใบลดหนี้" (click)="printNote(i)">
+                      <mat-icon>print</mat-icon>
+                    </button>
+                  }
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        }
+      } @else {
+        <mat-card appearance="outlined">
+          <mat-card-content class="text-muted">
+            คำสั่งขายก่อนมีระบบขายหน้าร้าน — ไม่มีรายการสินค้า ({{ s.itemCount }} ชิ้น, ยอด
+            {{ s.total | number: '1.2-2' }})
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+
+    @if (isPos() && store.storeInfo(); as info) {
+      <aside class="preview">
+        <div class="text-muted small">ใบเสร็จ (สำเนา)</div>
+        <app-receipt #receipt [sale]="s" [store]="info" [copy]="true" />
+      </aside>
+    }
+  </div>
+  <!-- Off-screen credit note slips, printed by printNote() -->
+  @if (store.storeInfo(); as info) {
+    <div class="print-stage" aria-hidden="true">
+      @for (cn of creditNotes(); track cn.id) {
+        <app-credit-note-receipt #noteSlip [note]="cn" [store]="info" />
+      }
+    </div>
+  }
+} @else if (sale.isLoading()) {
+  <app-loading-spinner />
+}
