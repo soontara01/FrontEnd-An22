@@ -26,6 +26,8 @@ import {
   PromotionPayload,
   SALE_DEFAULTS,
   Sale,
+  SaleLine,
+  SalePayload,
   SaleStatus,
   SkuSupplier,
   SerialNumber,
@@ -65,6 +67,10 @@ import {
   hasStarted,
   serialFormatError,
   todayIso,
+  cartError,
+  paymentError,
+  paymentSummary,
+  priceCart,
 } from '../models';
 import { StorageService } from '../services/storage.service';
 
@@ -853,6 +859,9 @@ function handleProducts(
       }
       case 'DELETE': {
         if (products[index].stock > 0) return error(400, 'ยังมีสต็อกคงเหลือ ลบไม่ได้');
+        if (db.sales.some((s) => s.lines.some((l) => l.productId === id))) {
+          return error(400, 'SKU นี้มีประวัติการขาย ลบไม่ได้ (เปลี่ยนสถานะเป็นเลิกจำหน่ายแทน)');
+        }
         const usedBy = promotionsUsing(db, (p) => promotionRefersToProduct(p, id));
         if (usedBy) return error(400, `SKU นี้อยู่ในโปรโมชั่น ${usedBy} ลบไม่ได้`);
         products.splice(index, 1);
@@ -1653,7 +1662,9 @@ function handlePaymentMethods(
         if (isLastActiveCash(db.paymentMethods, id)) {
           return error(400, 'ต้องมีช่องทางเงินสดที่เปิดใช้งานอย่างน้อย 1 ช่องทาง ลบไม่ได้');
         }
-        // No sales reference payment methods yet; once the POS exists, used ones must be kept.
+        if (db.sales.some((s) => s.payments.some((p) => p.methodId === id))) {
+          return error(400, 'มีการขายที่ใช้ช่องทางนี้แล้ว ลบไม่ได้ (ปิดใช้งานแทน)');
+        }
         db.paymentMethods.splice(index, 1);
         return ok(null);
     }
@@ -1661,7 +1672,11 @@ function handlePaymentMethods(
   return notFound(req, path);
 }
 
-/** GET /sales, PUT /sales/:id/status { status } */
+/**
+ * GET /sales, GET /sales/:id,
+ * POST /sales (POS checkout: SalePayload → Sale), POST /sales/:id/void { reason },
+ * PUT /sales/:id/status { status } (orders from before the POS only)
+ */
 function handleSales(
   req: HttpRequest<unknown>,
   path: string,
@@ -1671,15 +1686,172 @@ function handleSales(
   if (path === 'sales' && req.method === 'GET') {
     return ok([...sales]);
   }
-  const statusMatch = /^sales\/(\d+)\/status$/.exec(path);
-  if (statusMatch && req.method === 'PUT') {
-    const index = sales.findIndex((s) => s.id === Number(statusMatch[1]));
-    if (index < 0) return error(404, 'ไม่พบคำสั่งขาย');
+  if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
+
+  const idMatch = /^sales\/(\d+)(?:\/(status|void))?$/.exec(path);
+  if (!idMatch) return notFound(req, path);
+  const index = sales.findIndex((s) => s.id === Number(idMatch[1]));
+  if (index < 0) return error(404, 'ไม่พบบิลขาย');
+  const sale = sales[index];
+  const action = idMatch[2];
+
+  if (!action && req.method === 'GET') return ok(sale);
+  if (action === 'void' && req.method === 'POST') {
+    const { reason } = req.body as { reason: string };
+    return voidSale(sale, (reason ?? '').trim(), db);
+  }
+  if (action === 'status' && req.method === 'PUT') {
+    if (sale.lines.length) return error(400, 'บิลขายหน้าร้านเปลี่ยนสถานะไม่ได้ (ใช้การยกเลิกบิล)');
     const { status } = req.body as { status: SaleStatus };
-    sales[index] = { ...sales[index], status };
+    sales[index] = { ...sale, status };
     return ok(sales[index]);
   }
   return notFound(req, path);
+}
+
+/**
+ * POS checkout. Everything is validated before anything changes: the cart is re-priced with
+ * `priceCart()` (a different total than the screen showed → 400), serials must be in stock and
+ * payments must pass `paymentError()`. Then stock is issued line by line with COGS
+ * (serial: the unit's own cost, others: the current average, services: the standard cost).
+ */
+function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknown>> {
+  const today = todayIso();
+  const cart = priceCart(
+    body.items ?? [],
+    { products: db.products, promotions: db.promotions, categories: db.categories, date: today },
+    body.freeSerials ?? [],
+  );
+  const cartProblem = cartError(cart);
+  if (cartProblem) return error(400, cartProblem);
+  for (const line of cart.lines) {
+    if (!line.serial) continue;
+    const unit = db.serials.find((s) => s.serial === line.serial);
+    if (unit?.productId !== line.productId || unit.status !== 'in_stock') {
+      return error(400, `ซีเรียล ${line.serial} ไม่อยู่ในคลังของ ${line.sku}`);
+    }
+  }
+  if (round2(body.expectedTotal) !== cart.total) {
+    return error(400, 'ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง กรุณาตรวจสอบบิลอีกครั้ง');
+  }
+  const payments = body.payments ?? [];
+  const paymentProblem = paymentError(cart.total, payments, db.paymentMethods);
+  if (paymentProblem) return error(400, paymentProblem);
+  const paid = paymentSummary(cart.total, payments, db.paymentMethods);
+
+  const now = new Date();
+  const orderNo = nextOrderNo(db, today);
+  const lines: SaleLine[] = cart.lines.map((priced) => {
+    const line: Omit<SaleLine, 'cogs'> & { cartIndex?: number | null } = { ...priced };
+    delete line.cartIndex;
+    return {
+      ...line,
+      cogs: issueStock(db, line, now, `${line.freeOfPromotionId ? 'ของแถม' : 'ขาย'} ${orderNo}`),
+    };
+  });
+  const sale: Sale = {
+    id: Math.max(0, ...db.sales.map((s) => s.id)) + 1,
+    orderNo,
+    date: now.toISOString(),
+    // The real server takes the cashier from the token; the mock only knows the admin login.
+    cashier: db.users[0]?.name ?? '',
+    customer: (body.customer ?? '').trim(),
+    lines,
+    payments: paid.payments,
+    subtotal: cart.subtotal,
+    itemDiscount: cart.itemDiscount,
+    billDiscount: cart.billDiscount,
+    total: cart.total,
+    vat: cart.vat,
+    rounding: paid.rounding,
+    change: paid.change,
+    billPromotionIds: cart.billPromotionIds,
+    itemCount: cart.itemCount,
+    status: 'paid',
+    voidedAt: null,
+    voidReason: '',
+  };
+  db.sales.push(sale);
+  return ok(sale);
+}
+
+/** 'POS-YYYYMMDD-NNNN', numbered per day. */
+function nextOrderNo(db: MockDb, today: string): string {
+  const prefix = `POS-${today.replaceAll('-', '')}-`;
+  const last = db.sales
+    .filter((s) => s.orderNo.startsWith(prefix))
+    .map((s) => Number(s.orderNo.slice(prefix.length)))
+    .reduce((max, n) => Math.max(max, n), 0);
+  return prefix + String(last + 1).padStart(4, '0');
+}
+
+/** Takes one sale line out of stock (stock card + serial status); returns its COGS. */
+function issueStock(db: MockDb, line: Omit<SaleLine, 'cogs'>, now: Date, note: string): number {
+  const index = db.products.findIndex((p) => p.id === line.productId);
+  const product = db.products[index];
+  const baseQty = line.qty * line.factor;
+  if (isService(product)) return round2(product.cost * baseQty);
+  if (line.serial) {
+    const unit = db.serials.find((s) => s.serial === line.serial)!;
+    Object.assign(unit, { status: 'sold', removedAt: now.toISOString(), note });
+    db.products[index] = withSerialStock(product, db);
+    recordMovement(db, db.products[index], 'issue', -1, unit.cost, -unit.cost, [unit.serial], note);
+    return round2(unit.cost);
+  }
+  const cogs = round2(product.avgCost * baseQty);
+  db.products[index] = { ...product, stock: product.stock - baseQty };
+  recordMovement(db, db.products[index], 'issue', -baseQty, product.avgCost, -cogs, [], note);
+  return cogs;
+}
+
+/**
+ * Cancels a paid sale and puts its goods back at their sale-time cost (serials back in stock,
+ * non-serial re-averaged). Orders from before the POS have no lines and just change status.
+ */
+function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpResponse<unknown>> {
+  if (sale.status !== 'paid') return error(400, 'ยกเลิกได้เฉพาะบิลที่ชำระแล้ว');
+  if (!reason) return error(400, 'กรุณาระบุเหตุผลการยกเลิก');
+  for (const line of sale.lines) {
+    const product = db.products.find((p) => p.id === line.productId);
+    if (!product) return error(400, `ไม่พบ SKU ${line.sku} คืนสต็อกไม่ได้`);
+    const unit = line.serial ? db.serials.find((s) => s.serial === line.serial) : undefined;
+    if (line.serial && (unit?.productId !== line.productId || unit.status !== 'sold')) {
+      return error(400, `ซีเรียล ${line.serial} ไม่อยู่ในสถานะขายแล้ว คืนสต็อกไม่ได้`);
+    }
+  }
+  const now = new Date().toISOString();
+  const note = `ยกเลิกบิล ${sale.orderNo}`;
+  for (const line of sale.lines) {
+    const index = db.products.findIndex((p) => p.id === line.productId);
+    const product = db.products[index];
+    const baseQty = line.qty * line.factor;
+    if (isService(product)) continue;
+    if (line.serial) {
+      const unit = db.serials.find((s) => s.serial === line.serial)!;
+      Object.assign(unit, { status: 'in_stock', removedAt: null, receivedAt: now, note });
+      db.products[index] = withSerialStock(product, db);
+      recordMovement(
+        db,
+        db.products[index],
+        'receive',
+        1,
+        unit.cost,
+        unit.cost,
+        [unit.serial],
+        note,
+      );
+      continue;
+    }
+    const unitCost = line.cogs / baseQty;
+    db.products[index] = {
+      ...product,
+      stock: product.stock + baseQty,
+      avgCost: movingAverage(product.stock, product.avgCost, baseQty, unitCost),
+    };
+    recordMovement(db, db.products[index], 'receive', baseQty, unitCost, line.cogs, [], note);
+  }
+  Object.assign(sale, { status: 'cancelled', voidedAt: now, voidReason: reason });
+  return ok(sale);
 }
 
 function login(

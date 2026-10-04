@@ -1,6 +1,6 @@
 # แผนหน้าจอขาย (POS)
 
-สถานะ: ข้อตัดสินใจหัวข้อ 9 ยืนยันแล้ว (2026-10-04) · ขั้นที่ 1 เสร็จ (โมเดล + `priceCart()` + การชำระ + เทสต์)
+สถานะ: ข้อตัดสินใจหัวข้อ 9 ยืนยันแล้ว (2026-10-04) · ขั้นที่ 1–2 เสร็จ (โมเดล + `priceCart()` + การชำระ + mock `/sales`)
 
 อ้างอิงกติกาที่ตกลงไว้แล้วใน `CLAUDE.md`: Promotions (POS rules), Payment methods (POS rules),
 Inventory costing (COGS ตอนขาย), Serial SKUs, Service SKUs, SKU retail fields (pack units / barcode).
@@ -157,7 +157,17 @@ Output: บรรทัดที่คำนวณแล้ว (รวมบร�
 | `GET /sales/:id`                                                                             | ใหม่ — รายละเอียดบิล                                                                                                                                                                                                                                      |
 | `POST /sales/:id/void { reason }`                                                            | ใหม่ — แทนการเปลี่ยน status เป็น cancelled ตรง ๆ; คืนสต็อก (movement `receive` ที่ทุนเดิมของบรรทัด), ซีเรียล → `in_stock`                                                                                                                                 |
 
-หลังมีบิลจริง: ลบ payment method / promotion / SKU ที่บิลอ้างถึงไม่ได้ (mock มี TODO รอไว้แล้ว)
+หลังมีบิลจริง: ลบ payment method / SKU ที่บิลอ้างถึงไม่ได้ (โปรที่เริ่มแล้วลบไม่ได้อยู่แล้ว)
+
+ที่ลงตัวในขั้นที่ 2:
+
+- ตรวจทุกอย่างก่อนแก้ข้อมูล (ราคา/โปร, ซีเรียลต้อง `in_stock` และเป็นของ SKU นั้น, ยอดตรง `expectedTotal`, การชำระ)
+  — ไม่ผ่านข้อใดข้อหนึ่ง → 400 และไม่มีอะไรเปลี่ยน
+- COGS ต่อบรรทัด: serial = ทุนของเครื่อง, ปกติ = `avgCost` × จำนวนฐาน, service = `cost` × จำนวน (ไม่มี movement)
+- stock card: `issue` note `ขาย <เลขบิล>` / `ของแถม <เลขบิล>`; void → `receive` note `ยกเลิกบิล <เลขบิล>`
+  ที่ทุนเดิมของบรรทัด (non-serial คิดค่าเฉลี่ยใหม่), ซีเรียลกลับเป็น `in_stock`
+- void ได้เฉพาะบิล `paid` และต้องมีเหตุผล (ยังไม่จำกัดว่าต้องเป็นวันเดียวกัน); `PUT /sales/:id/status` ใช้ได้เฉพาะบิลก่อนมี POS
+- `cashier` ใน mock = ผู้ใช้ admin (server จริงอ่านจาก token)
 
 ต้องเพิ่ม movement type หรือไม่: ใช้ `issue` / `receive` เดิม + note อ้างเลขบิล (ไม่ต้องแก้ stock card)
 
@@ -189,7 +199,7 @@ Output: บรรทัดที่คำนวณแล้ว (รวมบร�
 ## 8. ลำดับงาน (แต่ละขั้น build + test + lint ผ่าน แล้ว commit)
 
 1. ✅ **โมเดล + เครื่องคิดราคา + การชำระ** — `sale.model.ts`, `pos-pricing.model.ts`, `pos-payment.model.ts` + spec
-2. **Mock** — `POST /sales`, `GET /sales/:id`, `POST /sales/:id/void`, migrate seed sales, ล็อกการลบ master ที่ถูกอ้าง
+2. ✅ **Mock** — `POST /sales`, `GET /sales/:id`, `POST /sales/:id/void`, migrate seed sales, ล็อกการลบ master ที่ถูกอ้าง
 3. **หน้าจอ POS** — store, สแกน/ค้นหา, ตะกร้า, ซีเรียล dialog, payment dialog, hold bills
 4. **ใบเสร็จ + ข้อมูลร้าน** — `shared/components/receipt`, print CSS 80 มม., ฟอร์มข้อมูลร้านในเมนูตั้งค่า
 5. **เมนูการขาย** — รายการบิลจริง, หน้า `/sales/:id`, พิมพ์ซ้ำ, void, ตัวกรองวันที่
