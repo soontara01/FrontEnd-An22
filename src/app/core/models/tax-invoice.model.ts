@@ -6,7 +6,9 @@ import type { Sale } from './sale.model';
 /**
  * Full tax invoice (ใบกำกับภาษีเต็มรูป, decided 2026-10-04) of a POS bill of a VAT-registered
  * store: issued together with the sale when the buyer's details are entered at the POS (no
- * abbreviated invoice involved), or later on request in place of the abbreviated one. The buyer's details are typed
+ * abbreviated invoice involved), or later on request in place of the abbreviated one. Either
+ * way it is dated (and numbered) on the day of sale; `issuedAt` keeps when it was really issued
+ * (accountant's decision 2026-10-04; no time limit for later requests). The buyer's details are typed
  * on the invoice (no customer master yet); amounts always come from the bill. One per bill;
  * voiding the bill cancels it.
  */
@@ -28,8 +30,10 @@ export interface TaxInvoice {
   /** Abbreviated receipt it replaces */
   orderNo: string;
   saleDate: string;
-  /** ISO timestamp of issue */
+  /** Document date = the sale's timestamp (tax point), also for invoices issued later */
   date: string;
+  /** When it was actually issued (audit) */
+  issuedAt: string;
   buyer: TaxInvoiceBuyer;
   issuedBy: string;
   /** Set when the bill is voided */

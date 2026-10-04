@@ -67,6 +67,7 @@ describe('TaxInvoiceDocument', () => {
     },
     issuedBy: 'Admin',
     cancelledAt: null,
+    issuedAt: '2026-10-04T03:00:00Z',
     atSale: false,
   };
   const store = { ...STORE_INFO_DEFAULTS, name: 'ร้าน', taxId: '0105550123451', address: 'กทม.' };

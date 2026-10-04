@@ -15,8 +15,8 @@ import {
  * - abbreviated invoices (POS bills) are summarised per day as one line with their number range;
  *   bills whose full tax invoice was issued *with the sale* are left out of that range — the full
  *   invoice is their only tax document and is listed on its own line
- * - a full invoice issued *later* replaces an abbreviated one already counted on its sale day, so
- *   it is listed for reference only (not in the totals) — pending the accountant's confirmation
+ * - a full invoice issued *later* is dated on the sale day (accountant's decision) and replaces an
+ *   abbreviated one already counted that day, so it is listed for reference only (not in the totals)
  * - voided bills count 0 (their numbers stay in the day's range; a voided full invoice is listed
  *   as cancelled); credit notes reduce the month they are issued in
  */
@@ -138,7 +138,7 @@ export function buildSalesTaxReport(
         cancelled ? 'ยกเลิก' : '',
         inv.atSale
           ? ''
-          : `ออกแทนใบกำกับภาษีอย่างย่อ ${inv.orderNo} (นับภาษีในวันที่ขาย ${saleDay({ date: inv.saleDate })} แล้ว)`,
+          : `ออกแทนใบกำกับภาษีอย่างย่อ ${inv.orderNo} (ภาษีนับในใบอย่างย่อแล้ว · ออกใบเมื่อ ${toIsoDate(new Date(inv.issuedAt))})`,
       ]
         .filter(Boolean)
         .join(' · '),

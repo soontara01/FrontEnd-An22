@@ -748,7 +748,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.sales = db.sales.map(withSaleDefaults);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.creditNotes = db.creditNotes.map((n) => ({ ...n, taxInvoiceNo: n.taxInvoiceNo ?? null }));
-  db.taxInvoices = db.taxInvoices.map((t) => ({ ...t, atSale: t.atSale ?? false }));
+  db.taxInvoices = db.taxInvoices.map((t) => ({
+    ...t,
+    atSale: t.atSale ?? false,
+    issuedAt: t.issuedAt ?? t.date,
+  }));
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
@@ -2031,9 +2035,9 @@ function createTaxInvoice(
   buyer: TaxInvoiceBuyer,
   atSale: boolean,
 ): TaxInvoice {
-  // Issued with the sale → exactly the sale's date (tax point); later → the issue date.
-  const now = atSale ? new Date(sale.date) : new Date();
-  const prefix = `INV-${toIsoDate(now).replaceAll('-', '')}-`;
+  // Dated and numbered on the day of sale, even when issued later (accountant's decision).
+  const date = new Date(sale.date);
+  const prefix = `INV-${toIsoDate(date).replaceAll('-', '')}-`;
   const last = db.taxInvoices
     .filter((t) => t.invoiceNo.startsWith(prefix))
     .reduce((max, t) => Math.max(max, Number(t.invoiceNo.slice(prefix.length))), 0);
@@ -2043,7 +2047,8 @@ function createTaxInvoice(
     saleId: sale.id,
     orderNo: sale.orderNo,
     saleDate: sale.date,
-    date: now.toISOString(),
+    date: sale.date,
+    issuedAt: atSale ? sale.date : new Date().toISOString(),
     buyer,
     issuedBy: db.users[0]?.name ?? '',
     cancelledAt: null,

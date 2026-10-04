@@ -212,7 +212,12 @@
               <div class="note">
                 <div>
                   <strong class="mono">{{ inv.invoiceNo }}</strong>
-                  <span class="text-muted"> · {{ inv.date | thaiDate: 'datetime' }}</span>
+                  <span class="text-muted"> · ลงวันที่ {{ inv.date | thaiDate }}</span>
+                  @if (!inv.atSale) {
+                    <span class="text-muted">
+                      · ออกใบเมื่อ {{ inv.issuedAt | thaiDate: 'datetime' }}</span
+                    >
+                  }
                   @if (inv.cancelledAt) {
                     <span class="badge badge-error">ยกเลิกแล้ว</span>
                   }

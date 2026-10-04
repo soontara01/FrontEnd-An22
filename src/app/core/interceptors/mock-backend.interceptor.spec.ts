@@ -723,6 +723,27 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
   });
 
+  it('dates a full tax invoice requested later on the day of sale', async () => {
+    const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    vi.setSystemTime(new Date(2026, 10, 3, 9, 0)); // next month
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
+    expect(invoice).toMatchObject({
+      invoiceNo: 'INV-20261004-0001',
+      date: sale.date,
+      atSale: false,
+    });
+    expect(invoice.issuedAt).toBe(new Date(2026, 10, 3, 9, 0).toISOString());
+    // listed with the sale's month
+    expect(await get<TaxInvoice[]>('tax-invoices?from=2026-10-01&to=2026-10-31')).toHaveLength(1);
+  });
+
   it('issues the full tax invoice together with the sale when a buyer is given', async () => {
     const buyer = {
       name: 'บริษัท ลูกค้า จำกัด',

@@ -62,6 +62,7 @@ describe('buildSalesTaxReport', () => {
     },
     issuedBy: 'Admin',
     cancelledAt: null,
+    issuedAt: '2026-10-04T03:00:00Z',
     atSale,
   });
 
@@ -71,9 +72,10 @@ describe('buildSalesTaxReport', () => {
   const b4 = sale(4, 'POS-20261004-0004', at(4, 12), [line(200, 0, 'exempt')]);
   const b5 = sale(5, 'POS-20261005-0001', at(5), [line(214, 14)]);
   const other = sale(6, 'POS-20260930-0001', at(30, 10, 9), [line(107, 7)]);
+  // INV-2 was requested on the 5th for b1 but is dated on its sale day (the 4th).
   const invoices = [
     invoice(1, 'INV-1', b2, b2.date, true),
-    invoice(2, 'INV-2', b1, at(5, 15), false),
+    { ...invoice(2, 'INV-2', b1, b1.date, false), issuedAt: at(5, 15) },
   ];
   const note: CreditNote = {
     id: 1,
@@ -126,12 +128,12 @@ describe('buildSalesTaxReport', () => {
     expect(report.rows.map((r) => [r.date, r.kind, r.counted])).toEqual([
       ['2026-10-04', 'abbreviated', true],
       ['2026-10-04', 'full', true],
+      ['2026-10-04', 'replacement', false],
       ['2026-10-05', 'abbreviated', true],
-      ['2026-10-05', 'replacement', false],
       ['2026-10-06', 'credit', true],
     ]);
-    expect(report.rows[3].note).toBe(
-      'ออกแทนใบกำกับภาษีอย่างย่อ POS-20261004-0001 (นับภาษีในวันที่ขาย 2026-10-04 แล้ว)',
+    expect(report.rows[2].note).toBe(
+      'ออกแทนใบกำกับภาษีอย่างย่อ POS-20261004-0001 (ภาษีนับในใบอย่างย่อแล้ว · ออกใบเมื่อ 2026-10-05)',
     );
     expect(report.rows[4]).toMatchObject({
       net: -500,
