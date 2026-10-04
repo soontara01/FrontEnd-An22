@@ -26,11 +26,8 @@
     <div>
       <span>วันที่</span><span>{{ inv.date | thaiDate: 'datetime' }}</span>
     </div>
-    @if (inv.atSale) {
-      <div>
-        <span>เลขที่บิล</span><span>{{ inv.orderNo }}</span>
-      </div>
-    } @else {
+    <!-- Issued with the sale: the internal bill number is not printed. -->
+    @if (!inv.atSale) {
       <div>
         <span>อ้างอิงใบเสร็จ</span><span>{{ inv.orderNo }}</span>
       </div>

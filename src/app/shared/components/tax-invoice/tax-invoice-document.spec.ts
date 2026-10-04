@@ -101,7 +101,7 @@ describe('TaxInvoiceDocument', () => {
     expect(render()).toContain('ออกแทนใบกำกับภาษีอย่างย่อ');
     const atSale = render(false, { ...invoice, atSale: true });
     expect(atSale).not.toContain('ออกแทน');
-    expect(atSale).toContain('เลขที่บิลPOS-20261004-0001');
+    expect(atSale).not.toContain('POS-20261004-0001');
   });
 
   it('marks copies and cancelled invoices', () => {
@@ -120,7 +120,7 @@ describe('TaxInvoiceDocument', () => {
     expect(text).toContain('ต้นฉบับ');
     expect(text).toContain('ผู้ซื้อบริษัทลูกค้าจำกัด');
     expect(text).toContain('0105550123451(สาขา00002)');
-    expect(text).toContain('เลขที่บิลPOS-20261004-0001');
+    expect(text).not.toContain('POS-20261004-0001');
     expect(text).toContain('มูลค่าสินค้าที่ต้องเสียภาษี10,000.00');
     expect(text).toContain('ภาษีมูลค่าเพิ่ม7%700.00');
     expect(text).toContain('(หนึ่งหมื่นเก้าร้อยห้าสิบบาทห้าสิบสตางค์)');
