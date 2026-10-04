@@ -8,6 +8,7 @@ import {
   StockCardResult,
   Supplier,
   isDiscontinued,
+  isService,
   mainSupplier,
   orderMultiple,
   costValue,
@@ -40,7 +41,7 @@ export interface ReorderGroup {
 
 /**
  * Signals-based state for the inventory feature (provided in inventory.routes.ts).
- * Data comes from the SKU master (`products`); only active SKUs are shown here.
+ * Data comes from the SKU master (`products`); only stocked, non-discontinued SKUs are shown here.
  */
 @Injectable()
 export class InventoryStore {
@@ -51,9 +52,11 @@ export class InventoryStore {
   private readonly _loading = signal(false);
   private loaded = false;
 
-  /** Everything except discontinued SKUs (those are hidden from stock management). */
-  readonly products = computed(() => this._products().filter((p) => !isDiscontinued(p)));
-  /** Every SKU incl. discontinued (for import validation messages). */
+  /** Stocked SKUs except discontinued ones (services have no stock and are hidden here). */
+  readonly products = computed(() =>
+    this._products().filter((p) => !isDiscontinued(p) && !isService(p)),
+  );
+  /** Every SKU incl. discontinued and services (for import validation messages). */
   readonly allProducts = this._products.asReadonly();
   readonly loading = this._loading.asReadonly();
 

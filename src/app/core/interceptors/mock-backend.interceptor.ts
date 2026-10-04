@@ -39,6 +39,8 @@ import {
   allBarcodes,
   canPurchase,
   categoryPath,
+  isService,
+  withServiceRules,
   buildStockCard,
   costValue,
   movingAverage,
@@ -136,6 +138,11 @@ const SEED_CATEGORIES: Category[] = [
   cat(10, 'EA', 'เครื่องใช้ไฟฟ้า', null, 1),
   cat(11, 'EA-AUD', 'เครื่องเสียง', 10, 2),
   cat(12, 'EA-AUD-HP', 'หูฟัง', 11, 3),
+  cat(13, 'SV', 'บริการ', null, 1),
+  cat(14, 'SV-IT', 'บริการไอที', 13, 2),
+  cat(15, 'SV-IT-SET', 'ติดตั้งและตั้งค่า', 14, 3),
+  cat(16, 'SV-MOB', 'บริการมือถือ', 13, 2),
+  cat(17, 'SV-MOB-ESIM', 'eSIM', 16, 3),
 ];
 
 const supplier = (
@@ -344,6 +351,27 @@ const SEED_PRODUCTS: Product[] = [
     stock: 60,
     minStock: 20,
   }),
+  // Service SKUs: sold at the POS, never stocked (see ItemType).
+  seedProduct({
+    id: 8,
+    sku: 'SV-ESIM',
+    name: 'บริการเปิดเบอร์ eSIM',
+    shortName: 'บริการ eSIM',
+    itemType: 'service',
+    categoryId: 17,
+    unit: 'ครั้ง',
+    cost: 50,
+  }),
+  seedProduct({
+    id: 9,
+    sku: 'SV-SETUP',
+    name: 'บริการติดตั้งโปรแกรมและตั้งค่าเครื่อง',
+    shortName: 'ค่าติดตั้งโปรแกรม',
+    itemType: 'service',
+    categoryId: 15,
+    unit: 'ครั้ง',
+    warrantyMonths: 1,
+  }),
 ];
 
 /** Sale price periods (as of the seed: notebook has expired/active/scheduled, USB cable only expired). */
@@ -386,6 +414,8 @@ const SEED_PRICES: SkuPrice[] = [
     endDate: '2026-09-30',
     note: 'รอราคาใหม่',
   },
+  { id: 11, productId: 8, price: 199, startDate: '2026-01-01', endDate: null, note: '' },
+  { id: 12, productId: 9, price: 500, startDate: '2026-01-01', endDate: null, note: '' },
 ];
 
 const SEED_SALES: Sale[] = [
@@ -571,6 +601,7 @@ function handleUsers(
 /**
  * SKU master + stock:
  * GET/POST /products, GET/PUT/DELETE /products/:id, PUT /products/:id/stock { delta, unitCost?, note? },
+ * (service SKUs: stock fields are cleared on save and stock endpoints are rejected)
  * GET /products/:id/movements?from&to (stock card for a date range → StockCardResult),
  * and /products/:id/serials… (see handleSerials)
  */
@@ -584,7 +615,7 @@ function handleProducts(
     return ok([...products]);
   }
   if (path === 'products' && req.method === 'POST') {
-    const payload = withoutDerived(req.body as ProductPayload);
+    const payload = withServiceRules(withoutDerived(req.body as ProductPayload));
     const problem = validateSku(payload, db);
     if (problem) return error(400, problem);
     const product: Product = {
@@ -622,11 +653,14 @@ function handleProducts(
       case 'GET':
         return ok(products[index]);
       case 'PUT': {
-        const payload = withoutDerived(req.body as ProductPayload);
+        const payload = withServiceRules(withoutDerived(req.body as ProductPayload));
         const problem = validateSku(payload, db, id);
         if (problem) return error(400, problem);
         if (payload.serialControl !== products[index].serialControl && products[index].stock > 0) {
           return error(400, 'ยังมีสต็อกคงเหลือ เปลี่ยนการคุม Serial ไม่ได้');
+        }
+        if (payload.itemType !== products[index].itemType && products[index].stock > 0) {
+          return error(400, 'ยังมีสต็อกคงเหลือ เปลี่ยนเป็นสินค้าบริการไม่ได้');
         }
         // Stock is owned by the Inventory menu; never overwritten from the SKU form.
         products[index] = {
@@ -648,6 +682,7 @@ function handleProducts(
   if (stockMatch && req.method === 'PUT') {
     const index = products.findIndex((p) => p.id === Number(stockMatch[1]));
     if (index < 0) return error(404, 'ไม่พบสินค้า');
+    if (isService(products[index])) return error(400, 'สินค้าบริการไม่มีสต็อก');
     if (products[index].serialControl) {
       return error(400, 'สินค้าคุม Serial ต้องรับเข้า/ตัดออกด้วย Serial');
     }
@@ -1058,6 +1093,9 @@ function refreshCategoryInfo(db: MockDb): void {
 /** SKU master validation shared by create/update. Returns a Thai message or null. */
 function validateSku(payload: ProductPayload, db: MockDb, exceptId?: number): string | null {
   const others = db.products.filter((p) => p.id !== exceptId);
+  if (payload.itemType !== 'stock' && payload.itemType !== 'service') {
+    return 'ประเภทสินค้าไม่ถูกต้อง';
+  }
   if (others.some((p) => p.sku.toUpperCase() === payload.sku.toUpperCase())) {
     return `รหัส SKU ${payload.sku} ซ้ำ`;
   }

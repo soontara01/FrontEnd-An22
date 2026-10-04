@@ -21,6 +21,7 @@ import {
   SkuStatus,
   allBarcodes,
   isDiscontinued,
+  isService,
 } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
@@ -34,7 +35,14 @@ import { SkuStore } from '../../data/sku.store';
 import { saveBlob, timestampedName } from '@shared/utils/download';
 import { MatMenuModule } from '@angular/material/menu';
 
-type SerialFilter = 'all' | 'serial' | 'none';
+/** serial / none = stock SKUs with / without serial control; service = no stock at all. */
+type TypeFilter = 'all' | 'serial' | 'none' | 'service';
+
+const matchesType = (s: Product, type: TypeFilter): boolean => {
+  if (type === 'all') return true;
+  if (type === 'service') return isService(s);
+  return !isService(s) && s.serialControl === (type === 'serial');
+};
 
 @Component({
   selector: 'app-sku-list',
@@ -79,14 +87,14 @@ export default class SkuList {
 
   protected readonly filterText = signal('');
   protected readonly categoryFilter = signal<number | null>(null);
-  protected readonly serialFilter = signal<SerialFilter>('all');
+  protected readonly typeFilter = signal<TypeFilter>('all');
   /** 'current' = everything except discontinued (default). */
   protected readonly statusFilter = signal<SkuStatus | 'all' | 'current'>('current');
 
   private readonly filtered = computed(() => {
     const text = this.filterText().trim().toLowerCase();
     const category = this.categoryFilter();
-    const serial = this.serialFilter();
+    const type = this.typeFilter();
     return this.store
       .skus()
       .filter((s) => {
@@ -96,7 +104,7 @@ export default class SkuList {
         return s.saleStatus === status;
       })
       .filter((s) => category === null || s.categoryId === category)
-      .filter((s) => serial === 'all' || s.serialControl === (serial === 'serial'))
+      .filter((s) => matchesType(s, type))
       .filter(
         (s) =>
           !text ||
@@ -136,6 +144,10 @@ export default class SkuList {
     } finally {
       this.exporting.set(false);
     }
+  }
+
+  protected isService(sku: Product): boolean {
+    return isService(sku);
   }
 
   protected statusText(sku: Product): string {

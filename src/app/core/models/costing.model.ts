@@ -47,7 +47,10 @@ export function movingAverage(stock: number, avg: number, qtyIn: number, unitCos
   return round4((Math.max(stock, 0) * avg + qtyIn * unitCost) / qty);
 }
 
-/** Cost to use for margins/estimates: real average while in stock, else the standard cost. */
+/**
+ * Cost to use for margins/estimates: real average while in stock, else the standard cost.
+ * Service SKUs never have stock, so this is always their standard cost (= cost per sale).
+ */
 export const effectiveCost = (p: Pick<Product, 'stock' | 'avgCost' | 'cost'>): number =>
   p.stock > 0 && p.avgCost > 0 ? p.avgCost : p.cost;
 

@@ -26,11 +26,17 @@ describe('Excel goods receipt', () => {
     }),
     product(2, 'NB-1', { serialControl: true, serialPrefix: 'NB' }),
     product(3, 'OLD-1', { saleStatus: 'discontinued' }),
+    product(4, 'SV-1', { itemType: 'service', unit: 'ครั้ง' }),
   ];
   const ctx = { products, inStockSerials: new Map([[2, new Set(['NB-EXIST'])]]) };
   const row = (rowNo: number, values: Partial<RawReceiveRow>): RawReceiveRow => ({
     rowNo,
     ...values,
+  });
+
+  it('rejects service SKUs (no stock)', () => {
+    const [line] = validateReceiveRows([row(2, { sku: 'SV-1', qty: '1' })], ctx);
+    expect(line.errors).toEqual(['สินค้าบริการไม่มีสต็อก รับเข้าไม่ได้']);
   });
 
   it('converts pack quantities/costs to base units and defaults the cost', () => {

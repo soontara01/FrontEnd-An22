@@ -57,17 +57,20 @@ describe('InventoryStore', () => {
     expect(store.saleValue()).toBe(1300);
   });
 
-  it('hides discontinued SKUs only', () => {
+  it('hides discontinued and service SKUs', () => {
     api.list.mockReturnValueOnce(
       of([
         product(1, 10),
         { ...product(2, 3), saleStatus: 'discontinued' },
         { ...product(3, 3), saleStatus: 'no_purchase' },
+        { ...product(4, 0, 0), itemType: 'service' },
       ]),
     );
     store.load();
     expect(store.products().map((p) => p.id)).toEqual([1, 3]);
     expect(store.totalItems()).toBe(2);
+    expect(store.outOfStockCount()).toBe(0);
+    expect(store.allProducts().length).toBe(4);
   });
 
   it('adjustStock replaces the product in the list', () => {

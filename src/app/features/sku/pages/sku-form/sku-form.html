@@ -80,6 +80,20 @@
           <mat-label>รุ่น</mat-label>
           <input matInput formControlName="model" />
         </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ประเภท</mat-label>
+          <mat-select formControlName="itemType">
+            @for (t of itemTypes; track t) {
+              <mat-option [value]="t">{{ itemTypeLabel[t] }}</mat-option>
+            }
+          </mat-select>
+          @if (form.controls.itemType.disabled) {
+            <mat-hint>ยังมีสต็อกคงเหลือ เปลี่ยนประเภทไม่ได้</mat-hint>
+          } @else {
+            <mat-hint>{{ itemTypeHint[form.controls.itemType.value] }}</mat-hint>
+          }
+        </mat-form-field>
       </mat-card-content>
     </mat-card>
 
@@ -108,34 +122,40 @@
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>ต้นทุนมาตรฐาน (ไม่รวม VAT)</mat-label>
+          <mat-label>{{ isService() ? 'ต้นทุนต่อครั้ง' : 'ต้นทุนมาตรฐาน' }} (ไม่รวม VAT)</mat-label>
           <input matInput type="number" min="0" formControlName="cost" />
           <span matTextSuffix>฿ / {{ baseUnit() }}</span>
-          <mat-hint>ใช้ตั้งต้นตอนรับเข้า และประมาณกำไรเมื่อยังไม่มีสต็อก</mat-hint>
+          <mat-hint>{{
+            isService()
+              ? 'ใช้เป็นต้นทุนขายทุกครั้งที่ขาย (0 = ไม่มีต้นทุน)'
+              : 'ใช้ตั้งต้นตอนรับเข้า และประมาณกำไรเมื่อยังไม่มีสต็อก'
+          }}</mat-hint>
           @if (form.controls.cost.invalid) {
             <mat-error>ต้องไม่ติดลบ</mat-error>
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>จุดสั่งซื้อ (สต็อกขั้นต่ำ)</mat-label>
-          <input matInput type="number" min="0" formControlName="minStock" />
-          <span matTextSuffix>{{ baseUnit() }}</span>
-          <mat-hint>ถึงค่านี้ = "ใกล้หมด" และควรสั่งซื้อ</mat-hint>
-          @if (form.controls.minStock.invalid) {
-            <mat-error>ต้องไม่ติดลบ</mat-error>
-          }
-        </mat-form-field>
+        @if (!isService()) {
+          <mat-form-field appearance="outline">
+            <mat-label>จุดสั่งซื้อ (สต็อกขั้นต่ำ)</mat-label>
+            <input matInput type="number" min="0" formControlName="minStock" />
+            <span matTextSuffix>{{ baseUnit() }}</span>
+            <mat-hint>ถึงค่านี้ = "ใกล้หมด" และควรสั่งซื้อ</mat-hint>
+            @if (form.controls.minStock.invalid) {
+              <mat-error>ต้องไม่ติดลบ</mat-error>
+            }
+          </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>สต็อกสูงสุด</mat-label>
-          <input matInput type="number" min="0" formControlName="maxStock" />
-          <span matTextSuffix>{{ baseUnit() }}</span>
-          <mat-hint>สั่งเติมให้ถึงค่านี้ (0 = 2 เท่าของจุดสั่งซื้อ)</mat-hint>
-          @if (form.controls.maxStock.invalid) {
-            <mat-error>ต้องไม่ติดลบ</mat-error>
-          }
-        </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>สต็อกสูงสุด</mat-label>
+            <input matInput type="number" min="0" formControlName="maxStock" />
+            <span matTextSuffix>{{ baseUnit() }}</span>
+            <mat-hint>สั่งเติมให้ถึงค่านี้ (0 = 2 เท่าของจุดสั่งซื้อ)</mat-hint>
+            @if (form.controls.maxStock.invalid) {
+              <mat-error>ต้องไม่ติดลบ</mat-error>
+            }
+          </mat-form-field>
+        }
 
         <div class="readonly">
           <div class="text-muted">ราคาขายวันนี้</div>
@@ -147,17 +167,19 @@
           <div class="text-muted small">กำหนดที่เมนูจัดการราคา</div>
         </div>
 
-        <div class="readonly">
-          <div class="text-muted">ต้นทุนเฉลี่ยจริง</div>
-          <strong>{{ avgCost() | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
-          <div class="text-muted small">คำนวณจากการรับเข้า (ดูบัตรสต็อกที่เมนูคลังสินค้า)</div>
-        </div>
+        @if (!isService()) {
+          <div class="readonly">
+            <div class="text-muted">ต้นทุนเฉลี่ยจริง</div>
+            <strong>{{ avgCost() | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+            <div class="text-muted small">คำนวณจากการรับเข้า (ดูบัตรสต็อกที่เมนูคลังสินค้า)</div>
+          </div>
 
-        <div class="readonly">
-          <div class="text-muted">สต็อกคงเหลือ</div>
-          <strong>{{ currentStock() ?? 0 }} {{ baseUnit() }}</strong>
-          <div class="text-muted small">ปรับจำนวนได้ที่เมนูคลังสินค้า</div>
-        </div>
+          <div class="readonly">
+            <div class="text-muted">สต็อกคงเหลือ</div>
+            <strong>{{ currentStock() ?? 0 }} {{ baseUnit() }}</strong>
+            <div class="text-muted small">ปรับจำนวนได้ที่เมนูคลังสินค้า</div>
+          </div>
+        }
       </mat-card-content>
     </mat-card>
 
@@ -167,7 +189,7 @@
       <mat-card-content>
         <div class="grid">
           <mat-form-field appearance="outline">
-            <mat-label>หน่วยฐาน (นับสต็อก)</mat-label>
+            <mat-label>{{ isService() ? 'หน่วยขาย' : 'หน่วยฐาน (นับสต็อก)' }}</mat-label>
             <input matInput formControlName="unit" [matAutocomplete]="unitAuto" />
             <mat-autocomplete #unitAuto="matAutocomplete">
               @for (u of unitOptions(); track u) {
@@ -191,7 +213,12 @@
           </mat-form-field>
         </div>
 
-        @if (serialControl()) {
+        @if (isService()) {
+          <p class="text-muted small">
+            <mat-icon inline>info</mat-icon>
+            สินค้าบริการมีหน่วยเดียว (ไม่มีหน่วยแพ็ค/ลัง)
+          </p>
+        } @else if (serialControl()) {
           <p class="text-muted small">
             <mat-icon inline>info</mat-icon>
             สินค้าคุม Serial มีหน่วยเดียว (1 Serial = 1 {{ baseUnit() }})
@@ -369,22 +396,26 @@
     <!-- Serial & warranty -->
     <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>Serial Number และการรับประกัน</mat-card-title>
+        <mat-card-title>{{
+          isService() ? 'การรับประกัน' : 'Serial Number และการรับประกัน'
+        }}</mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <mat-slide-toggle formControlName="serialControl">ควบคุม Serial Number</mat-slide-toggle>
-        <p class="text-muted small">
-          @if (serialControl()) {
-            สินค้าแต่ละชิ้นของ SKU นี้ต้องมี Serial Number ประจำตัว
-          } @else {
-            ไม่ต้องบันทึก Serial Number นับเป็นจำนวนอย่างเดียว
-          }
-          @if (form.controls.serialControl.disabled) {
-            <br />
-            <mat-icon inline>lock</mat-icon>
-            ยังมีสต็อกคงเหลือ ต้องตัดสต็อกเป็น 0 ก่อนจึงเปลี่ยนการคุม Serial ได้
-          }
-        </p>
+        @if (!isService()) {
+          <mat-slide-toggle formControlName="serialControl">ควบคุม Serial Number</mat-slide-toggle>
+          <p class="text-muted small">
+            @if (serialControl()) {
+              สินค้าแต่ละชิ้นของ SKU นี้ต้องมี Serial Number ประจำตัว
+            } @else {
+              ไม่ต้องบันทึก Serial Number นับเป็นจำนวนอย่างเดียว
+            }
+            @if (form.controls.serialControl.disabled) {
+              <br />
+              <mat-icon inline>lock</mat-icon>
+              ยังมีสต็อกคงเหลือ ต้องตัดสต็อกเป็น 0 ก่อนจึงเปลี่ยนการคุม Serial ได้
+            }
+          </p>
+        }
 
         <div class="grid">
           @if (serialControl()) {

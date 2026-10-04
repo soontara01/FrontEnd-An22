@@ -2,6 +2,7 @@ import type { Workbook, Worksheet } from 'exceljs';
 import { loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
 import {
   Category,
+  ItemType,
   PRODUCT_DEFAULTS,
   PackUnit,
   Product,
@@ -14,6 +15,7 @@ import {
   categoryPath,
   isLeaf,
   mainSupplier,
+  withServiceRules,
 } from '@core/models';
 
 /**
@@ -29,6 +31,7 @@ type ColumnKey =
   | 'categoryPath'
   | 'brand'
   | 'model'
+  | 'itemType'
   | 'unit'
   | 'barcode'
   | 'packs'
@@ -85,6 +88,12 @@ export const SKU_COLUMNS: Column[] = [
   },
   { key: 'brand', header: 'ยี่ห้อ', width: 12, help: '' },
   { key: 'model', header: 'รุ่น', width: 14, help: '' },
+  {
+    key: 'itemType',
+    header: 'ประเภท',
+    width: 9,
+    help: 'STOCK หรือ SERVICE (ว่าง = STOCK) · SERVICE = บริการ ไม่มีสต็อก ห้ามคุม Serial / หน่วยแพ็ค / จุดสั่งซื้อ',
+  },
   { key: 'unit', header: 'หน่วยฐาน*', width: 10, help: 'หน่วยที่นับสต็อก เช่น ชิ้น, เครื่อง' },
   {
     key: 'barcode',
@@ -153,6 +162,7 @@ export const SKU_COLUMNS: Column[] = [
 ];
 
 const VAT_CODES: Record<string, VatType> = { VAT7: 'vat7', EXEMPT: 'exempt' };
+const ITEM_TYPE_CODES: Record<string, ItemType> = { STOCK: 'stock', SERVICE: 'service' };
 const STATUS_CODES: Record<string, SkuStatus> = {
   ACTIVE: 'active',
   NO_SALE: 'no_sale',
@@ -218,6 +228,7 @@ export async function exportSkusToExcel(
       categoryPath: p.categoryPath,
       brand: p.brand,
       model: p.model,
+      itemType: codeOf(ITEM_TYPE_CODES, p.itemType),
       unit: p.unit,
       barcode: p.barcode,
       packs: formatPacks(p.packUnits),
@@ -251,6 +262,7 @@ export async function buildImportTemplate(categories: Category[]): Promise<Blob>
     name: 'ตัวอย่าง: เมาส์ไร้สาย',
     shortName: 'เมาส์ไร้สาย',
     categoryCode: leaf?.code ?? '',
+    itemType: 'STOCK',
     unit: 'ชิ้น',
     barcode: '',
     packs: 'กล่อง:20:',
@@ -486,7 +498,27 @@ function validateRow(
   const maxStock = integer('maxStock', base.maxStock, 'สต็อกสูงสุด');
   if (maxStock > 0 && maxStock < minStock) errors.push('สต็อกสูงสุดต้องไม่น้อยกว่าจุดสั่งซื้อ');
 
-  const payload: ProductPayload = {
+  let itemType = base.itemType;
+  if (raw.itemType !== undefined) {
+    const t = ITEM_TYPE_CODES[raw.itemType.toUpperCase()];
+    if (t) itemType = t;
+    else errors.push(`ประเภทต้องเป็น STOCK หรือ SERVICE (${raw.itemType})`);
+  }
+  if (existing && existing.stock > 0 && itemType !== existing.itemType) {
+    errors.push('ยังมีสต็อก เปลี่ยนประเภทไม่ได้');
+  }
+  // Explicit stock-only values on a service row are errors; inherited ones are just cleared.
+  if (itemType === 'service') {
+    if (raw.serialControl?.toUpperCase() === 'Y') errors.push('สินค้าบริการคุม Serial ไม่ได้');
+    if (raw.packs !== undefined && packUnits.length) {
+      errors.push('สินค้าบริการมีหน่วยแพ็คไม่ได้');
+    }
+    if ((raw.minStock !== undefined && minStock) || (raw.maxStock !== undefined && maxStock)) {
+      errors.push('สินค้าบริการไม่มีจุดสั่งซื้อ / สต็อกสูงสุด');
+    }
+  }
+
+  const payload: ProductPayload = withServiceRules({
     ...base,
     sku,
     name,
@@ -506,7 +538,8 @@ function validateRow(
     serialPrefix: serialControl ? serialPrefix : '',
     serialLength: serialControl ? serialLength : null,
     saleStatus,
-  };
+    itemType,
+  });
 
   return {
     rowNo: raw.rowNo,
