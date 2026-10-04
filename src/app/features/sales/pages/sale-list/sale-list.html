@@ -1,27 +1,89 @@
-<app-page-header title="การขาย" subtitle="คำสั่งขายและสรุปยอดขาย">
-  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+<app-page-header title="การขาย" [subtitle]="'บิลขาย · ช่วงวันที่: ' + rangeText()">
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="reload()">
     <mat-icon>refresh</mat-icon>
   </button>
+  <a mat-flat-button href="/pos">
+    <mat-icon>point_of_sale</mat-icon>
+    ขายหน้าร้าน
+  </a>
 </app-page-header>
 
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="range">
+    <mat-label>ช่วงวันที่</mat-label>
+    <mat-date-range-input [formGroup]="rangeForm" [rangePicker]="picker">
+      <input matStartDate formControlName="start" placeholder="เริ่ม" />
+      <input matEndDate formControlName="end" placeholder="สิ้นสุด" />
+    </mat-date-range-input>
+    <mat-datepicker-toggle matIconSuffix [for]="picker" />
+    <mat-date-range-picker #picker />
+  </mat-form-field>
+  <button mat-flat-button (click)="search()">
+    <mat-icon>search</mat-icon>
+    ค้นหา
+  </button>
+  <div class="presets">
+    @for (p of presets; track p.id) {
+      <button
+        mat-stroked-button
+        type="button"
+        [class.selected]="activePreset() === p.id"
+        (click)="applyPreset(p.id)"
+      >
+        {{ p.label }}
+      </button>
+    }
+  </div>
+</div>
+
+@let sum = summary();
 <section class="stat-grid">
   <app-stat-card
-    label="ยอดขาย (ชำระแล้ว)"
-    [value]="(store.revenue() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    [label]="'ยอดขายสุทธิ (' + sum.count + ' บิล)'"
+    [value]="(sum.total | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
     icon="payments"
   />
-  <app-stat-card label="คำสั่งขายทั้งหมด" [value]="store.orderCount()" icon="receipt_long" />
-  <app-stat-card label="รอชำระ" [value]="store.pendingCount()" icon="pending_actions" tone="warn" />
   <app-stat-card
-    label="เฉลี่ยต่อออเดอร์"
-    [value]="(store.averageOrder() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    label="เฉลี่ยต่อบิล"
+    [value]="(sum.average | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
     icon="trending_up"
+  />
+  <app-stat-card
+    [label]="
+      'กำไรขั้นต้น' + (sum.margin === null ? '' : ' (' + (sum.margin | number: '1.1-1') + '%)')
+    "
+    [value]="(sum.grossProfit | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="savings"
+  />
+  <app-stat-card
+    [label]="'ยกเลิก (' + sum.cancelledCount + ' บิล)'"
+    [value]="(sum.cancelledTotal | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="cancel"
+    tone="warn"
   />
 </section>
 
+@if (sum.byMethod.length) {
+  <mat-card appearance="outlined" class="methods">
+    <mat-card-content>
+      <div class="methods-title">รับชำระตามช่องทาง</div>
+      <div class="method-grid">
+        @for (m of sum.byMethod; track m.methodId) {
+          <div class="method">
+            <mat-icon>{{ methodIcon[m.type] }}</mat-icon>
+            <span class="name">{{ m.name }}</span>
+            <span class="text-muted small">{{ m.count }} รายการ</span>
+            <strong>{{ m.amount | number: '1.2-2' }}</strong>
+          </div>
+        }
+      </div>
+    </mat-card-content>
+  </mat-card>
+}
+
 <div class="filter-row">
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
-    <mat-label>ค้นหาเลขที่ / ลูกค้า</mat-label>
+    <mat-label>ค้นหาเลขที่ / ลูกค้า / พนักงาน / Serial</mat-label>
     <input matInput [value]="filterText()" (input)="filterText.set($any($event.target).value)" />
     <mat-icon matPrefix>search</mat-icon>
   </mat-form-field>
@@ -37,45 +99,56 @@
 </div>
 
 <mat-card appearance="outlined">
-  @if (store.loading() && store.orderCount() === 0) {
+  @if (sales.isLoading() && !sales.hasValue()) {
     <app-loading-spinner />
   }
 
-  <div class="table-wrap" [hidden]="store.orderCount() === 0">
-    <table mat-table matSort matSortActive="date" matSortDirection="desc" [dataSource]="dataSource">
+  <div
+    class="table-wrap"
+    [hidden]="!dataSource.data.length && !filterText() && statusFilter() === 'all'"
+  >
+    <table mat-table matSort [dataSource]="dataSource">
       <ng-container matColumnDef="orderNo">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>เลขที่</th>
-        <td mat-cell *matCellDef="let s" class="mono">{{ s.orderNo }}</td>
+        <td mat-cell *matCellDef="let s">
+          <a class="mono" [routerLink]="['/sales', s.id]">{{ s.orderNo }}</a>
+        </td>
       </ng-container>
 
       <ng-container matColumnDef="date">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>วันที่</th>
-        <td mat-cell *matCellDef="let s">{{ s.date | thaiDate }}</td>
+        <td mat-cell *matCellDef="let s">{{ s.date | thaiDate: 'datetime' }}</td>
       </ng-container>
 
       <ng-container matColumnDef="customer">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>ลูกค้า</th>
-        <td mat-cell *matCellDef="let s">{{ s.customer }}</td>
+        <td mat-cell *matCellDef="let s">{{ s.customer || 'ลูกค้าทั่วไป' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="cashier">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>พนักงาน</th>
+        <td mat-cell *matCellDef="let s">{{ s.cashier || '-' }}</td>
       </ng-container>
 
       <ng-container matColumnDef="itemCount">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">จำนวนชิ้น</th>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">ชิ้น</th>
         <td mat-cell *matCellDef="let s" class="num">{{ s.itemCount }}</td>
       </ng-container>
 
       <ng-container matColumnDef="total">
-        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">ยอดรวม</th>
-        <td mat-cell *matCellDef="let s" class="num">
-          {{ s.total | currency: 'THB' : 'symbol-narrow' : '1.0-0' }}
-        </td>
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">ยอดสุทธิ</th>
+        <td mat-cell *matCellDef="let s" class="num">{{ s.total | number: '1.2-2' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="payments">
+        <th mat-header-cell *matHeaderCellDef>ชำระโดย</th>
+        <td mat-cell *matCellDef="let s" class="text-muted small">{{ methodNames(s) }}</td>
       </ng-container>
 
       <ng-container matColumnDef="status">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>สถานะ</th>
         <td mat-cell *matCellDef="let s">
-          <span class="badge" [class]="statusBadge(s)">
-            {{ statusText(s) }}
-          </span>
+          <span class="badge" [class]="statusBadge(s)">{{ statusText(s) }}</span>
         </td>
       </ng-container>
 
@@ -96,22 +169,28 @@
                 <span>ยกเลิกคำสั่งขาย</span>
               </button>
             </mat-menu>
+          } @else {
+            <a mat-icon-button matTooltip="ดูบิล" [routerLink]="['/sales', s.id]">
+              <mat-icon>chevron_right</mat-icon>
+            </a>
           }
         </td>
       </ng-container>
 
       <tr mat-header-row *matHeaderRowDef="columns"></tr>
-      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      <tr
+        mat-row
+        *matRowDef="let row; columns: columns"
+        [class.cancelled]="row.status === 'cancelled'"
+      ></tr>
       <tr class="mat-row" *matNoDataRow>
-        <td class="mat-cell no-data" [attr.colspan]="columns.length">
-          ไม่พบคำสั่งขายที่ตรงเงื่อนไข
-        </td>
+        <td class="mat-cell no-data" [attr.colspan]="columns.length">ไม่พบบิลที่ตรงเงื่อนไข</td>
       </tr>
     </table>
-    <mat-paginator [pageSizeOptions]="[5, 10, 25]" [pageSize]="10" showFirstLastButtons />
+    <mat-paginator [pageSizeOptions]="[10, 25, 50]" [pageSize]="25" showFirstLastButtons />
   </div>
 
-  @if (!store.loading() && store.orderCount() === 0) {
-    <app-empty-state icon="receipt_long" message="ยังไม่มีคำสั่งขาย" />
+  @if (sales.hasValue() && !sales.value().length) {
+    <app-empty-state icon="receipt_long" message="ไม่มีบิลในช่วงวันที่นี้" />
   }
 </mat-card>

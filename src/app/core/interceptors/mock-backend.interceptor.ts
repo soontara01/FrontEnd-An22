@@ -74,6 +74,7 @@ import {
   paymentSummary,
   priceCart,
   voidError,
+  saleDay,
   normalizeStoreInfo,
   storeInfoError,
 } from '../models';
@@ -1693,7 +1694,7 @@ function handlePaymentMethods(
 }
 
 /**
- * GET /sales, GET /sales/:id,
+ * GET /sales[?from&to] (local day of sale, newest first), GET /sales/:id,
  * POST /sales (POS checkout: SalePayload → Sale), POST /sales/:id/void { reason },
  * PUT /sales/:id/status { status } (orders from before the POS only)
  */
@@ -1704,7 +1705,17 @@ function handleSales(
 ): Observable<HttpResponse<unknown>> {
   const { sales } = db;
   if (path === 'sales' && req.method === 'GET') {
-    return ok([...sales]);
+    // Optional local-date range on the day of sale; newest first.
+    const from = req.params.get('from') || null;
+    const to = req.params.get('to') || null;
+    const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
+    if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
+    if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    return ok(
+      sales
+        .filter((s) => (!from || saleDay(s) >= from) && (!to || saleDay(s) <= to))
+        .sort((a, b) => b.date.localeCompare(a.date)),
+    );
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
 

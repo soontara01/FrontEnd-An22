@@ -16,17 +16,22 @@ import {
   MOVEMENT_TYPE_LABEL,
   MovementType,
   StockMovement,
-  addDaysIso,
   formatDateRange,
   fromIsoDate,
   toIsoDate,
-  todayIso,
 } from '@core/models';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
+import {
+  DATE_PRESETS,
+  DatePreset,
+  DateRange,
+  matchingPreset,
+  presetRange,
+} from '@shared/utils/date-range';
 import { InventoryStore } from '../../data/inventory.store';
 
 const TYPE_BADGE: Record<MovementType, string> = {
@@ -34,33 +39,6 @@ const TYPE_BADGE: Record<MovementType, string> = {
   receive: 'badge-success',
   issue: 'badge-warn',
 };
-
-type Preset = 'today' | 'last7' | 'thisMonth' | 'lastMonth' | 'all';
-
-interface Range {
-  from: string | null;
-  to: string | null;
-}
-
-const firstOfMonth = (iso: string): string => `${iso.slice(0, 7)}-01`;
-
-/** Local-date range for a preset ('all' = unbounded). */
-function presetRange(preset: Preset, today = todayIso()): Range {
-  switch (preset) {
-    case 'today':
-      return { from: today, to: today };
-    case 'last7':
-      return { from: addDaysIso(today, -6), to: today };
-    case 'thisMonth':
-      return { from: firstOfMonth(today), to: today };
-    case 'lastMonth': {
-      const lastDay = addDaysIso(firstOfMonth(today), -1);
-      return { from: firstOfMonth(lastDay), to: lastDay };
-    }
-    case 'all':
-      return { from: null, to: null };
-  }
-}
 
 /**
  * Stock card (inventory ledger) of one SKU for a date range
@@ -95,30 +73,16 @@ export default class StockCard {
   readonly to = input<string>();
   readonly all = input<string>();
 
-  protected readonly presets: { id: Preset; label: string }[] = [
-    { id: 'today', label: 'วันนี้' },
-    { id: 'last7', label: '7 วันล่าสุด' },
-    { id: 'thisMonth', label: 'เดือนนี้' },
-    { id: 'lastMonth', label: 'เดือนก่อน' },
-    { id: 'all', label: 'ทั้งหมด' },
-  ];
+  protected readonly presets = DATE_PRESETS;
 
   /** Effective range from the URL; no params → this month. */
-  protected readonly range = computed<Range>(() => {
+  protected readonly range = computed<DateRange>(() => {
     if (this.all()) return presetRange('all');
     if (!this.from() && !this.to()) return presetRange('thisMonth');
     return { from: this.from() || null, to: this.to() || null };
   });
 
-  protected readonly activePreset = computed<Preset | null>(() => {
-    const r = this.range();
-    return (
-      this.presets.find((p) => {
-        const pr = presetRange(p.id);
-        return pr.from === r.from && pr.to === r.to;
-      })?.id ?? null
-    );
-  });
+  protected readonly activePreset = computed(() => matchingPreset(this.range()));
 
   protected readonly rangeText = computed(() => {
     const { from, to } = this.range();
@@ -157,7 +121,7 @@ export default class StockCard {
     });
   }
 
-  protected applyPreset(preset: Preset): void {
+  protected applyPreset(preset: DatePreset): void {
     if (preset === 'all') {
       this.navigate({ all: '1', from: null, to: null });
     } else {

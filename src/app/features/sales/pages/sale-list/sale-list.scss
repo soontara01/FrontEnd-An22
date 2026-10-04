@@ -8,14 +8,86 @@ table {
 
 .num {
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .mono {
   font-family: ui-monospace, monospace;
 }
 
+a.mono {
+  color: var(--mat-sys-primary);
+}
+
 .status-filter {
   max-width: 180px;
+}
+
+.range {
+  max-width: 280px;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .selected {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
+
+.methods {
+  margin-bottom: 16px;
+}
+
+.methods-title {
+  font: var(--mat-sys-title-small);
+  margin-bottom: 8px;
+}
+
+.method-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 24px;
+}
+
+.method {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'icon name amount'
+    'icon count amount';
+  align-items: center;
+  column-gap: 8px;
+
+  mat-icon {
+    grid-area: icon;
+    color: var(--mat-sys-primary);
+  }
+
+  .name {
+    grid-area: name;
+  }
+
+  .small {
+    grid-area: count;
+  }
+
+  strong {
+    grid-area: amount;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+tr.cancelled td {
+  color: var(--mat-sys-on-surface-variant);
+  text-decoration: line-through;
+}
+
+tr.cancelled td:nth-last-child(-n + 2) {
+  text-decoration: none;
 }
 
 .actions {

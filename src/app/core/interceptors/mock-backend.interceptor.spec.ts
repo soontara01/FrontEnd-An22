@@ -612,6 +612,19 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await get<Sale>(`sales/${sale.id}`)).status).toBe('paid');
   });
 
+  it('lists sales by local day of sale, newest first', async () => {
+    const today = await sell([item(ESIM)], 199, [pay(QR, 199)]);
+    const listed = await get<Sale[]>('sales?from=2026-10-04&to=2026-10-04');
+    expect(listed.map((s) => s.orderNo)).toEqual([today.orderNo]);
+    const all = await get<Sale[]>('sales');
+    expect(all[0].orderNo).toBe(today.orderNo);
+    expect(all).toHaveLength(8);
+    expect(await get<Sale[]>('sales?from=2026-09-01&to=2026-09-30')).toHaveLength(5);
+    expect(await errorOf(get('sales?from=2026-10-05&to=2026-10-04'))).toBe(
+      'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด',
+    );
+  });
+
   it('keeps payment methods and SKUs that sales refer to', async () => {
     await sell([item(ESIM)], 199, [pay(QR, 199)]);
     expect(await errorOf(del(`payment-methods/${QR}`))).toBe(

@@ -4,6 +4,19 @@ import type { VatType } from './product.model';
 
 export type SaleStatus = 'pending' | 'paid' | 'cancelled';
 
+export const SALE_STATUS_LABEL: Record<SaleStatus, string> = {
+  pending: 'รอชำระ',
+  paid: 'ชำระแล้ว',
+  cancelled: 'ยกเลิก',
+};
+
+/** Badge class per status (global `.badge-*` classes). */
+export const SALE_STATUS_BADGE: Record<SaleStatus, string> = {
+  pending: 'badge-warn',
+  paid: 'badge-success',
+  cancelled: 'badge-error',
+};
+
 /**
  * One line of a sale receipt (POS, decided 2026-10-04). Product fields are a snapshot taken at
  * sale time. Amounts are VAT-inclusive baht; `cogs` excludes VAT.
