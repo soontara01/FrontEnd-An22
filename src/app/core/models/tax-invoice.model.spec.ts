@@ -2,7 +2,9 @@ import {
   EMPTY_BUYER,
   buyerError,
   invoiceTotals,
+  currentInvoice,
   normalizeBuyer,
+  reissueError,
   taxInvoiceError,
 } from './tax-invoice.model';
 
@@ -49,6 +51,34 @@ describe('tax invoice model', () => {
       exempt: 250.5,
       total: 10950.5,
     });
+  });
+
+  it('cancels and reissues only a valid invoice of a paid bill, with a reason', () => {
+    const valid = { cancelledAt: null };
+    expect(reissueError({ status: 'paid' }, valid, buyer, 'ชื่อผิด')).toBeNull();
+    expect(reissueError({ status: 'paid' }, valid, buyer, ' ')).toBe(
+      'กรุณาระบุเหตุผลที่ยกเลิกใบเดิม',
+    );
+    expect(reissueError({ status: 'paid' }, null, buyer, 'x')).toBe(
+      'บิลนี้ไม่มีใบกำกับภาษีเต็มรูปที่ใช้งานอยู่',
+    );
+    expect(reissueError({ status: 'paid' }, { cancelledAt: 'x' }, buyer, 'x')).toBe(
+      'บิลนี้ไม่มีใบกำกับภาษีเต็มรูปที่ใช้งานอยู่',
+    );
+    expect(reissueError({ status: 'cancelled' }, valid, buyer, 'x')).toBe(
+      'ออกใบใหม่ได้เฉพาะบิลที่ชำระแล้ว',
+    );
+    expect(reissueError({ status: 'paid' }, valid, { ...buyer, name: '' }, 'x')).toBe(
+      'กรุณากรอกชื่อผู้ซื้อ',
+    );
+  });
+
+  it('picks the valid invoice of a bill, else the latest', () => {
+    const a = { id: 1, cancelledAt: 'x' } as never;
+    const b = { id: 2, cancelledAt: null } as never;
+    expect(currentInvoice([a, b])).toBe(b);
+    expect(currentInvoice([a])).toBe(a);
+    expect(currentInvoice([])).toBeNull();
   });
 
   it('issues once per paid POS bill of a VAT-registered store', () => {

@@ -36,8 +36,14 @@ export interface TaxInvoice {
   issuedAt: string;
   buyer: TaxInvoiceBuyer;
   issuedBy: string;
-  /** Set when the bill is voided */
+  /** Set when the bill is voided or the invoice is replaced */
   cancelledAt: string | null;
+  /** Why it was cancelled ('' while valid) */
+  cancelReason: string;
+  /** The cancelled invoice this one replaces (wrong buyer details), null = original */
+  replacesInvoiceNo: string | null;
+  /** The invoice that replaced this cancelled one */
+  replacedByNo: string | null;
   /** Issued together with the sale (true) or later in place of the abbreviated invoice (false) */
   atSale: boolean;
 }
@@ -90,6 +96,35 @@ export function buyerError(b: TaxInvoiceBuyer): string | null {
   }
   if (!b.address) return 'กรุณากรอกที่อยู่ผู้ซื้อ';
   return null;
+}
+
+/** Defaults for fields missing from invoices stored before cancel-and-reissue existed. */
+export const TAX_INVOICE_DEFAULTS = {
+  cancelReason: '',
+  replacesInvoiceNo: null,
+  replacedByNo: null,
+} satisfies Partial<TaxInvoice>;
+
+/** The bill's valid invoice (not cancelled), else the latest one, else null. */
+export function currentInvoice<T extends TaxInvoice>(invoices: readonly T[]): T | null {
+  return invoices.find((i) => !i.cancelledAt) ?? invoices.at(-1) ?? null;
+}
+
+/**
+ * Cancel-and-reissue rule (decided 2026-10-04; form + server): wrong buyer details are never edited
+ * in place — the valid invoice is cancelled with a reason and a new one (new number, same sale day,
+ * same amounts) refers to it. Admins only. `buyer` must be normalized.
+ */
+export function reissueError(
+  sale: Pick<Sale, 'status'>,
+  current: Pick<TaxInvoice, 'cancelledAt'> | null,
+  buyer: TaxInvoiceBuyer,
+  reason: string,
+): string | null {
+  if (sale.status !== 'paid') return 'ออกใบใหม่ได้เฉพาะบิลที่ชำระแล้ว';
+  if (!current || current.cancelledAt) return 'บิลนี้ไม่มีใบกำกับภาษีเต็มรูปที่ใช้งานอยู่';
+  if (!reason.trim()) return 'กรุณาระบุเหตุผลที่ยกเลิกใบเดิม';
+  return buyerError(buyer);
 }
 
 /** Buyer entered at the POS for a full tax invoice issued with the sale (POS + server). */

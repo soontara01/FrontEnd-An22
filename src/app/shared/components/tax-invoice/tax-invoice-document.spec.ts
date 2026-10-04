@@ -67,6 +67,9 @@ describe('TaxInvoiceDocument', () => {
     },
     issuedBy: 'Admin',
     cancelledAt: null,
+    cancelReason: '',
+    replacesInvoiceNo: null,
+    replacedByNo: null,
     issuedAt: '2026-10-04T03:00:00Z',
     atSale: false,
   };

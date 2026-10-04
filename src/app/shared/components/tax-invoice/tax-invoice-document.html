@@ -16,6 +16,9 @@
       <div class="kind">{{ copy() ? 'สำเนา' : 'ต้นฉบับ' }}</div>
       @if (inv.cancelledAt) {
         <div class="cancelled">ยกเลิกแล้ว</div>
+        @if (inv.replacedByNo) {
+          <div class="cancelled">แทนด้วย {{ inv.replacedByNo }}</div>
+        }
       }
     </div>
   </header>
@@ -120,6 +123,9 @@
       <div>ผู้รับเงิน ({{ inv.issuedBy }})</div>
     </div>
   </footer>
+  @if (inv.replacesInvoiceNo) {
+    <p class="note">ใบกำกับภาษีนี้ออกแทนใบกำกับภาษีเลขที่ {{ inv.replacesInvoiceNo }} ที่ยกเลิก</p>
+  }
   @if (!inv.atSale) {
     <p class="note">ใบกำกับภาษีนี้ออกแทนใบกำกับภาษีอย่างย่อเลขที่ {{ inv.orderNo }}</p>
   }

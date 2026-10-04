@@ -91,6 +91,18 @@ export class SalesStore {
     return this.api.taxInvoiceOf(saleId);
   }
 
+  taxInvoicesOf(saleId: number): Observable<TaxInvoice[]> {
+    return this.api.taxInvoicesOf(saleId);
+  }
+
+  reissueTaxInvoice(
+    saleId: number,
+    buyer: TaxInvoiceBuyer,
+    reason: string,
+  ): Observable<TaxInvoice> {
+    return this.api.reissueTaxInvoice(saleId, buyer, reason);
+  }
+
   issueTaxInvoice(saleId: number, buyer: TaxInvoiceBuyer): Observable<TaxInvoice> {
     return this.api.issueTaxInvoice(saleId, buyer);
   }

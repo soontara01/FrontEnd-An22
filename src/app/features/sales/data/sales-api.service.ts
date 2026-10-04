@@ -58,6 +58,20 @@ export class SalesApi {
     return this.api.get<TaxInvoice | null>(`sales/${saleId}/tax-invoice`);
   }
 
+  /** Every full tax invoice of the bill, oldest first (cancelled ones, then the valid one). */
+  taxInvoicesOf(saleId: number): Observable<TaxInvoice[]> {
+    return this.api.get<TaxInvoice[]>(`sales/${saleId}/tax-invoices`);
+  }
+
+  /** Cancels the valid invoice and issues a new one with corrected buyer details. */
+  reissueTaxInvoice(
+    saleId: number,
+    buyer: TaxInvoiceBuyer,
+    reason: string,
+  ): Observable<TaxInvoice> {
+    return this.api.post<TaxInvoice>(`sales/${saleId}/tax-invoice/reissue`, { buyer, reason });
+  }
+
   issueTaxInvoice(saleId: number, buyer: TaxInvoiceBuyer): Observable<TaxInvoice> {
     return this.api.post<TaxInvoice>(`sales/${saleId}/tax-invoice`, { buyer });
   }

@@ -18,8 +18,10 @@ import {
   TaxInvoiceBuyer,
   isValidThaiTaxId,
   normalizeBuyer,
+  reissueError,
   taxInvoiceError,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -30,8 +32,9 @@ import { SalesStore } from '../../data/sales.store';
 
 /**
  * Issues the full tax invoice of a bill (`/sales/:id/tax-invoice`): buyer details (filled from
- * the last invoice with the same tax ID) with a live A4 preview. Saving goes back to the bill
- * page, which prints the original.
+ * the last invoice with the same tax ID) with a live A4 preview. With `?reissue=1` (admins) it
+ * cancels the valid invoice with a reason and issues a corrected one (`reissueError()`). Saving goes
+ * back to the bill page, which prints the original.
  */
 @Component({
   selector: 'app-tax-invoice-form',
@@ -53,9 +56,26 @@ export default class TaxInvoiceForm {
   protected readonly store = inject(SalesStore);
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
+  private readonly auth = inject(AuthService);
 
   /** Route param (withComponentInputBinding). */
   readonly id = input.required<string>();
+  /** Query param `reissue=1`: cancel the valid invoice and issue a corrected one */
+  readonly reissue = input<string>();
+
+  protected readonly isReissue = computed(() => !!this.reissue());
+  protected readonly quickReasons = [
+    'ชื่อผู้ซื้อผิด',
+    'เลขประจำตัวผู้เสียภาษีผิด',
+    'ที่อยู่/สาขาผิด',
+  ];
+  protected readonly reason = signal('');
+  /** The invoice being replaced (reissue mode only). */
+  protected readonly current = rxResource({
+    params: () => (this.isReissue() ? Number(this.id()) : undefined),
+    stream: ({ params }) => this.store.taxInvoiceOf(params),
+  });
+  private prefilled = false;
 
   protected readonly sale = rxResource({
     params: () => Number(this.id()),
@@ -71,6 +91,12 @@ export default class TaxInvoiceForm {
   protected readonly problem = computed(() => {
     const info = this.store.storeInfo();
     if (!this.sale.hasValue() || !info) return null;
+    if (this.isReissue()) {
+      if (this.auth.user()?.role !== 'admin')
+        return 'เฉพาะผู้ดูแลระบบ (admin) ยกเลิกใบกำกับภาษีได้';
+      if (!this.current.hasValue()) return null;
+      return reissueError(this.sale.value(), this.current.value(), this.buyer(), this.reason());
+    }
     return taxInvoiceError(this.sale.value(), this.buyer(), info);
   });
 
@@ -89,7 +115,10 @@ export default class TaxInvoiceForm {
       buyer: this.buyer(),
       issuedBy: s.cashier,
       cancelledAt: null,
-      atSale: false,
+      cancelReason: '',
+      replacesInvoiceNo: this.isReissue() ? (this.current.value()?.invoiceNo ?? null) : null,
+      replacedByNo: null,
+      atSale: this.isReissue() ? (this.current.value()?.atSale ?? false) : false,
     };
   });
 
@@ -97,6 +126,13 @@ export default class TaxInvoiceForm {
     this.store.loadLookups();
     effect(() => {
       if (this.sale.error()) void this.router.navigate(['/sales']);
+    });
+    // Reissue: start from the current buyer details, to correct them.
+    effect(() => {
+      const current = this.current.value();
+      if (this.prefilled || !current) return;
+      this.prefilled = true;
+      this.form.reset({ ...current.buyer });
     });
     // A known tax ID fills the rest from the last invoice issued to that buyer.
     this.form.controls.taxId.valueChanges
@@ -119,7 +155,10 @@ export default class TaxInvoiceForm {
     if (!this.sale.hasValue() || this.problem() || this.saving()) return;
     const sale = this.sale.value();
     this.saving.set(true);
-    this.store.issueTaxInvoice(sale.id, this.buyer()).subscribe({
+    const request = this.isReissue()
+      ? this.store.reissueTaxInvoice(sale.id, this.buyer(), this.reason().trim())
+      : this.store.issueTaxInvoice(sale.id, this.buyer());
+    request.subscribe({
       next: (invoice) => {
         this.notify.success(`ออกใบกำกับภาษี ${invoice.invoiceNo} แล้ว`);
         void this.router.navigate(['/sales', sale.id], { queryParams: { printInv: 1 } });

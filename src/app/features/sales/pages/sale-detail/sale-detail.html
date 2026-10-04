@@ -205,7 +205,7 @@
             </mat-card-content>
           </mat-card>
         </div>
-        @if (taxInvoice.value(); as inv) {
+        @if (taxInvoice(); as inv) {
           <mat-card appearance="outlined">
             <mat-card-header><mat-card-title>ใบกำกับภาษีเต็มรูป</mat-card-title></mat-card-header>
             <mat-card-content class="notes">
@@ -221,6 +221,9 @@
                   @if (inv.cancelledAt) {
                     <span class="badge badge-error">ยกเลิกแล้ว</span>
                   }
+                  @if (inv.replacesInvoiceNo) {
+                    <span class="text-muted small"> · ออกแทน {{ inv.replacesInvoiceNo }}</span>
+                  }
                   <div class="text-muted small">
                     {{ inv.buyer.name }} · เลขผู้เสียภาษี {{ inv.buyer.taxId }} ({{
                       inv.buyer.branchType === 'head'
@@ -232,6 +235,17 @@
                 <span></span>
                 @if (store.storeInfo()) {
                   <span class="print-buttons">
+                    @if (canReissue()) {
+                      <a
+                        mat-button
+                        [routerLink]="['/sales', s.id, 'tax-invoice']"
+                        [queryParams]="{ reissue: 1 }"
+                        matTooltip="ข้อมูลผู้ซื้อผิด: ยกเลิกใบนี้และออกใบใหม่"
+                      >
+                        <mat-icon>edit_document</mat-icon>
+                        ยกเลิกและออกใบใหม่
+                      </a>
+                    }
                     <mat-button-toggle-group
                       hideSingleSelectionIndicator
                       aria-label="กระดาษ"
@@ -252,6 +266,19 @@
                   </span>
                 }
               </div>
+              @for (old of replacedInvoices(); track old.id) {
+                <div class="text-muted small replaced">
+                  <span class="mono">{{ old.invoiceNo }}</span> ยกเลิกเมื่อ
+                  {{ old.cancelledAt | thaiDate: 'datetime' }}
+                  @if (old.cancelReason) {
+                    — {{ old.cancelReason }}
+                  }
+                  @if (old.replacedByNo) {
+                    · แทนด้วย {{ old.replacedByNo }}
+                  }
+                  · {{ old.buyer.name }} ({{ old.buyer.taxId }})
+                </div>
+              }
             </mat-card-content>
           </mat-card>
         }
@@ -314,7 +341,7 @@
       @for (cn of creditNotes(); track cn.id) {
         <app-credit-note-receipt #noteSlip [note]="cn" [store]="info" />
       }
-      @if (taxInvoice.value(); as inv) {
+      @if (taxInvoice(); as inv) {
         @if (paper() === '80mm') {
           <app-tax-invoice-slip #invOriginal [sale]="s" [invoice]="inv" [store]="info" />
           <app-tax-invoice-slip #invCopy [sale]="s" [invoice]="inv" [store]="info" [copy]="true" />

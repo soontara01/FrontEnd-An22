@@ -1,7 +1,7 @@
 @if (sale.hasValue()) {
   @let s = sale.value();
   <app-page-header
-    title="ออกใบกำกับภาษีเต็มรูป"
+    [title]="isReissue() ? 'ยกเลิกและออกใบกำกับภาษีใหม่' : 'ออกใบกำกับภาษีเต็มรูป'"
     [subtitle]="
       'แทนใบกำกับภาษีอย่างย่อ ' + s.orderNo + ' · ' + ((s.date | thaiDate: 'datetime') ?? '')
     "
@@ -43,6 +43,23 @@
             <textarea matInput formControlName="address" rows="3"></textarea>
           </mat-form-field>
 
+          @if (isReissue()) {
+            @if (current.value(); as cur) {
+              <p class="text-muted small">
+                ใบเดิม <strong class="mono">{{ cur.invoiceNo }}</strong> จะถูกยกเลิก แล้วออกใบใหม่
+                (เลขใหม่ ลงวันที่วันขาย ยอดเท่าเดิม) — ให้ลูกค้าคืนใบเดิมเก็บไว้กับร้าน
+              </p>
+            }
+            <div class="quick">
+              @for (q of quickReasons; track q) {
+                <button mat-stroked-button type="button" (click)="reason.set(q)">{{ q }}</button>
+              }
+            </div>
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>เหตุผลที่ยกเลิกใบเดิม (จำเป็น)</mat-label>
+              <input matInput [value]="reason()" (input)="reason.set($any($event.target).value)" />
+            </mat-form-field>
+          }
           @if (problem(); as message) {
             <div class="problem">{{ message }}</div>
           }
@@ -53,7 +70,7 @@
               [disabled]="!!problem() || saving() || !store.storeInfo()"
             >
               <mat-icon>receipt_long</mat-icon>
-              ออกใบกำกับภาษี
+              {{ isReissue() ? 'ยกเลิกใบเดิมและออกใบใหม่' : 'ออกใบกำกับภาษี' }}
             </button>
           </div>
         </form>

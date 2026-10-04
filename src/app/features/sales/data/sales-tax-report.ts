@@ -135,7 +135,9 @@ export function buildSalesTaxReport(
       total: zero ? 0 : t.total,
       counted,
       note: [
-        cancelled ? 'ยกเลิก' : '',
+        cancelled ? `ยกเลิก${inv.cancelReason ? ` (${inv.cancelReason})` : ''}` : '',
+        inv.replacedByNo ? `แทนด้วย ${inv.replacedByNo}` : '',
+        inv.replacesInvoiceNo ? `ออกแทนใบกำกับภาษี ${inv.replacesInvoiceNo} ที่ยกเลิก` : '',
         inv.atSale
           ? ''
           : `ออกแทนใบกำกับภาษีอย่างย่อ ${inv.orderNo} (ภาษีนับในใบอย่างย่อแล้ว · ออกใบเมื่อ ${toIsoDate(new Date(inv.issuedAt))})`,

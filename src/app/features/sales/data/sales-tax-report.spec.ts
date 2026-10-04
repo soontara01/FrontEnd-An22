@@ -62,6 +62,9 @@ describe('buildSalesTaxReport', () => {
     },
     issuedBy: 'Admin',
     cancelledAt: null,
+    cancelReason: '',
+    replacesInvoiceNo: null,
+    replacedByNo: null,
     issuedAt: '2026-10-04T03:00:00Z',
     atSale,
   });
@@ -143,6 +146,26 @@ describe('buildSalesTaxReport', () => {
     });
     // 1270 + 535 + 214 − 535; VAT counted once per sale
     expect(report.totals).toEqual({ net: 1200, vat: 84, exempt: 200, total: 1484 });
+  });
+
+  it('counts a reissued invoice once: the cancelled one at 0, the replacement in full', () => {
+    const original = {
+      ...invoices[0],
+      cancelledAt: at(6),
+      cancelReason: 'ชื่อผิด',
+      replacedByNo: 'INV-3',
+    };
+    const replacement = {
+      ...invoice(3, 'INV-3', b2, b2.date, true),
+      replacesInvoiceNo: 'INV-1',
+      issuedAt: at(6),
+    };
+    const r = buildSalesTaxReport('2026-10', [b2], [original, replacement], []);
+    expect(r.rows.map((x) => [x.docNo, x.total, x.note])).toEqual([
+      ['INV-1', 0, 'ยกเลิก (ชื่อผิด) · แทนด้วย INV-3'],
+      ['INV-3', 535, 'ออกแทนใบกำกับภาษี INV-1 ที่ยกเลิก'],
+    ]);
+    expect(r.totals).toMatchObject({ vat: 35, total: 535 });
   });
 
   it('shows a voided full invoice as cancelled with no amounts', () => {

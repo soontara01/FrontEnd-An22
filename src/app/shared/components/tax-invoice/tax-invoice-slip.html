@@ -16,6 +16,9 @@
     <div class="mark">{{ copy() ? 'สำเนา' : 'ต้นฉบับ' }}</div>
     @if (inv.cancelledAt) {
       <div class="mark">*** ยกเลิกแล้ว ***</div>
+      @if (inv.replacedByNo) {
+        <div>แทนด้วย {{ inv.replacedByNo }}</div>
+      }
     }
   </header>
 
@@ -99,6 +102,9 @@
 
   <footer>
     <div>ผู้รับเงิน ...................... ({{ inv.issuedBy }})</div>
+    @if (inv.replacesInvoiceNo) {
+      <div class="sub">ออกแทนใบกำกับภาษีเลขที่ {{ inv.replacesInvoiceNo }} ที่ยกเลิก</div>
+    }
     @if (!inv.atSale) {
       <div class="sub">ออกแทนใบกำกับภาษีอย่างย่อเลขที่ {{ inv.orderNo }}</div>
     }

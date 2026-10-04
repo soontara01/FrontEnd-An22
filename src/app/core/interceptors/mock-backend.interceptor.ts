@@ -87,6 +87,9 @@ import {
   normalizeBuyer,
   taxInvoiceError,
   checkoutBuyerError,
+  TAX_INVOICE_DEFAULTS,
+  currentInvoice,
+  reissueError,
   storeInfoError,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -749,6 +752,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.creditNotes = db.creditNotes.map((n) => ({ ...n, taxInvoiceNo: n.taxInvoiceNo ?? null }));
   db.taxInvoices = db.taxInvoices.map((t) => ({
+    ...TAX_INVOICE_DEFAULTS,
     ...t,
     atSale: t.atSale ?? false,
     issuedAt: t.issuedAt ?? t.date,
@@ -1766,7 +1770,10 @@ function handleSales(
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
 
-  const idMatch = /^sales\/(\d+)(?:\/(status|void|credit-notes|tax-invoice))?$/.exec(path);
+  const idMatch =
+    /^sales\/(\d+)(?:\/(status|void|credit-notes|tax-invoice|tax-invoices|tax-invoice\/reissue))?$/.exec(
+      path,
+    );
   if (!idMatch) return notFound(req, path);
   const index = sales.findIndex((s) => s.id === Number(idMatch[1]));
   if (index < 0) return error(404, 'ไม่พบบิลขาย');
@@ -1778,9 +1785,27 @@ function handleSales(
     const { reason } = req.body as { reason: string };
     return voidSale(sale, (reason ?? '').trim(), db);
   }
+  const invoicesOfSale = () => db.taxInvoices.filter((t) => t.saleId === sale.id);
   if (action === 'tax-invoice' && req.method === 'GET') {
-    // null instead of 404: "no invoice yet" is a normal answer (no error toast).
-    return ok(db.taxInvoices.find((t) => t.saleId === sale.id) ?? null);
+    // The valid one (else the latest); null instead of 404: "none yet" is a normal answer.
+    return ok(currentInvoice(invoicesOfSale()));
+  }
+  if (action === 'tax-invoices' && req.method === 'GET') {
+    return ok(invoicesOfSale()); // oldest first: cancelled ones, then the valid one
+  }
+  if (action === 'tax-invoice/reissue' && req.method === 'POST') {
+    const { buyer, reason } = req.body as { buyer: TaxInvoiceBuyer; reason: string };
+    const current = currentInvoice(invoicesOfSale());
+    const normalized = normalizeBuyer(buyer ?? ({} as TaxInvoiceBuyer));
+    const problem = reissueError(sale, current, normalized, reason ?? '');
+    if (problem || !current) return error(400, problem ?? 'ไม่พบใบกำกับภาษี');
+    const replacement = createTaxInvoice(db, sale, normalized, current.atSale, current);
+    Object.assign(current, {
+      cancelledAt: replacement.issuedAt,
+      cancelReason: reason.trim(),
+      replacedByNo: replacement.invoiceNo,
+    });
+    return ok(replacement);
   }
   if (action === 'tax-invoice' && req.method === 'POST') {
     const { buyer } = req.body as { buyer: TaxInvoiceBuyer };
@@ -2034,6 +2059,8 @@ function createTaxInvoice(
   sale: Sale,
   buyer: TaxInvoiceBuyer,
   atSale: boolean,
+  /** The cancelled invoice this one replaces */
+  replaces?: TaxInvoice,
 ): TaxInvoice {
   // Dated and numbered on the day of sale, even when issued later (accountant's decision).
   const date = new Date(sale.date);
@@ -2048,10 +2075,13 @@ function createTaxInvoice(
     orderNo: sale.orderNo,
     saleDate: sale.date,
     date: sale.date,
-    issuedAt: atSale ? sale.date : new Date().toISOString(),
+    issuedAt: atSale && !replaces ? sale.date : new Date().toISOString(),
     buyer,
     issuedBy: db.users[0]?.name ?? '',
     cancelledAt: null,
+    cancelReason: '',
+    replacesInvoiceNo: replaces?.invoiceNo ?? null,
+    replacedByNo: null,
     atSale,
   };
   db.taxInvoices.push(invoice);
@@ -2107,8 +2137,8 @@ function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpRespon
   }
   Object.assign(sale, { status: 'cancelled', voidedAt: now, voidReason: reason });
   // A full tax invoice of a voided bill is cancelled with it.
-  const invoice = db.taxInvoices.find((t) => t.saleId === sale.id);
-  if (invoice) invoice.cancelledAt = now;
+  const invoice = db.taxInvoices.find((t) => t.saleId === sale.id && !t.cancelledAt);
+  if (invoice) Object.assign(invoice, { cancelledAt: now, cancelReason: `ยกเลิกบิล: ${reason}` });
   return ok(sale);
 }
 

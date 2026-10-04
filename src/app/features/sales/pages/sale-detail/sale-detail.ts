@@ -20,6 +20,7 @@ import { filter, switchMap } from 'rxjs';
 import {
   CreditNote,
   InvoicePaper,
+  currentInvoice,
   SALE_STATUS_BADGE,
   SALE_STATUS_LABEL,
   Sale,
@@ -109,10 +110,27 @@ export default class SaleDetail {
       s.lines.some((l, i) => l.qty > creditedQty(this.creditNotes(), i))
     );
   });
-  protected readonly taxInvoice = rxResource({
+  /** Every full tax invoice of the bill (cancelled ones first, the valid one last). */
+  protected readonly invoices = rxResource({
     params: () => Number(this.id()),
-    stream: ({ params }) => this.store.taxInvoiceOf(params),
+    stream: ({ params }) => this.store.taxInvoicesOf(params),
   });
+  protected readonly taxInvoice = computed(() =>
+    currentInvoice(this.invoices.hasValue() ? this.invoices.value() : []),
+  );
+  /** Earlier invoices cancelled and replaced (history). */
+  protected readonly replacedInvoices = computed(() =>
+    (this.invoices.hasValue() ? this.invoices.value() : []).filter((i) => i !== this.taxInvoice()),
+  );
+  /** Wrong buyer details: admins cancel the valid invoice and issue a corrected one. */
+  protected readonly canReissue = computed(
+    () =>
+      this.isAdmin() &&
+      this.sale.hasValue() &&
+      this.sale.value().status === 'paid' &&
+      !!this.taxInvoice() &&
+      !this.taxInvoice()?.cancelledAt,
+  );
   /** Full tax invoice can be issued: VAT store, paid POS bill, none yet. */
   protected readonly canInvoice = computed(
     () =>
@@ -220,7 +238,7 @@ export default class SaleDetail {
       )
       .subscribe((voided) => {
         this.sale.set(voided);
-        this.taxInvoice.reload();
+        this.invoices.reload();
         this.notify.success(`${voided.orderNo}: ยกเลิกบิลแล้ว สินค้ากลับเข้าคลัง`);
       });
   }

@@ -127,3 +127,8 @@ table.lines .num {
   align-items: center;
   gap: 4px;
 }
+
+.replaced {
+  padding-left: 8px;
+  border-left: 2px solid var(--mat-sys-outline-variant);
+}

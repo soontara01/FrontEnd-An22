@@ -723,6 +723,58 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
   });
 
+  it('cancels a full tax invoice with wrong buyer details and issues a corrected one', async () => {
+    const buyer = {
+      name: 'บริษัท ผิดชื่อ จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const sale = await post<Sale>('sales', {
+      items: [item(MOUSE)],
+      freeSerials: [],
+      payments: [pay(CASH, 531)],
+      customer: '',
+      expectedTotal: 531,
+      buyer,
+    });
+    vi.setSystemTime(new Date(2026, 9, 6, 9, 0));
+    const fixed = { ...buyer, name: 'บริษัท ถูกชื่อ จำกัด' };
+    expect(
+      await errorOf(post(`sales/${sale.id}/tax-invoice/reissue`, { buyer: fixed, reason: '' })),
+    ).toBe('กรุณาระบุเหตุผลที่ยกเลิกใบเดิม');
+
+    const next = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice/reissue`, {
+      buyer: fixed,
+      reason: 'ชื่อผู้ซื้อผิด',
+    });
+    expect(next).toMatchObject({
+      invoiceNo: 'INV-20261004-0002',
+      date: sale.date,
+      atSale: true,
+      replacesInvoiceNo: 'INV-20261004-0001',
+      buyer: fixed,
+    });
+    expect(next.issuedAt).toBe(new Date(2026, 9, 6, 9, 0).toISOString());
+    const all = await get<TaxInvoice[]>(`sales/${sale.id}/tax-invoices`);
+    expect(all[0]).toMatchObject({
+      invoiceNo: 'INV-20261004-0001',
+      cancelReason: 'ชื่อผู้ซื้อผิด',
+      replacedByNo: 'INV-20261004-0002',
+    });
+    expect(all[0].cancelledAt).not.toBeNull();
+    expect((await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`)).invoiceNo).toBe(
+      'INV-20261004-0002',
+    );
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0002');
+    // the cancelled one cannot be reissued again; the valid one can
+    expect(
+      (await post<TaxInvoice>(`sales/${sale.id}/tax-invoice/reissue`, { buyer, reason: 'กลับ' }))
+        .replacesInvoiceNo,
+    ).toBe('INV-20261004-0002');
+  });
+
   it('dates a full tax invoice requested later on the day of sale', async () => {
     const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
     vi.setSystemTime(new Date(2026, 10, 3, 9, 0)); // next month
