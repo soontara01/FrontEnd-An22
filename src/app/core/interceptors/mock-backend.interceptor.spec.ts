@@ -11,6 +11,7 @@ import {
   Product,
   Sale,
   StoreInfo,
+  TaxInvoice,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
@@ -686,6 +687,40 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(await get<CreditNote[]>(`sales/${sale.id}/credit-notes`)).toHaveLength(2);
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-04&to=2026-10-04')).toHaveLength(0);
+  });
+
+  it('issues one full tax invoice per bill and cancels it with the bill', async () => {
+    const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'branch',
+      branchNo: '00002',
+      address: 'เชียงใหม่',
+    };
+    expect(await get<TaxInvoice | null>(`sales/${sale.id}/tax-invoice`)).toBeNull();
+    expect(
+      await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer: { ...buyer, name: '' } })),
+    ).toBe('กรุณากรอกชื่อผู้ซื้อ');
+    const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
+    expect(invoice).toMatchObject({ invoiceNo: 'INV-20261004-0001', orderNo: sale.orderNo, buyer });
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0001');
+    expect(await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer }))).toBe(
+      'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-20261004-0001)',
+    );
+    expect(await get('tax-invoices/buyer?taxId=0105550123451')).toEqual(buyer);
+    expect(await get('tax-invoices/buyer?taxId=1111111111119')).toBeNull();
+
+    await post(`sales/${sale.id}/void`, { reason: 'คีย์ผิด' });
+    expect((await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`)).cancelledAt).not.toBeNull();
+
+    // a store that is not VAT-registered issues none
+    const info = await get<StoreInfo>('settings/store');
+    await put('settings/store', { ...info, vatRegistered: false });
+    const other = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    expect(await errorOf(post(`sales/${other.id}/tax-invoice`, { buyer }))).toBe(
+      'ร้านไม่ได้จดทะเบียน VAT ออกใบกำกับภาษีไม่ได้',
+    );
   });
 
   it('keeps payment methods and SKUs that sales refer to', async () => {

@@ -8,6 +8,8 @@ import {
   Sale,
   SaleStatus,
   StoreInfo,
+  TaxInvoice,
+  TaxInvoiceBuyer,
 } from '@core/models';
 import { SalesApi } from './sales-api.service';
 
@@ -69,6 +71,18 @@ export class SalesStore {
 
   createCreditNote(saleId: number, payload: CreditNotePayload): Observable<CreditNote> {
     return this.api.createCreditNote(saleId, payload);
+  }
+
+  taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {
+    return this.api.taxInvoiceOf(saleId);
+  }
+
+  issueTaxInvoice(saleId: number, buyer: TaxInvoiceBuyer): Observable<TaxInvoice> {
+    return this.api.issueTaxInvoice(saleId, buyer);
+  }
+
+  buyerByTaxId(taxId: string): Observable<TaxInvoiceBuyer | null> {
+    return this.api.buyerByTaxId(taxId);
   }
 
   /** Orders from before the POS only (pending → paid / cancelled). */

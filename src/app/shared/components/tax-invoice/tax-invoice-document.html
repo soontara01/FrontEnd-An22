@@ -1,0 +1,125 @@
+@let s = sale();
+@let inv = invoice();
+@let shop = store();
+<div class="doc">
+  <header>
+    <div class="seller">
+      <div class="shop">{{ shop.name }}</div>
+      <div>{{ shop.address }}</div>
+      @if (shop.phone) {
+        <div>โทร {{ shop.phone }}</div>
+      }
+      <div>เลขประจำตัวผู้เสียภาษี {{ shop.taxId }} ({{ sellerBranch() }})</div>
+    </div>
+    <div class="title">
+      <div class="name">ใบกำกับภาษี / ใบเสร็จรับเงิน</div>
+      <div class="kind">{{ copy() ? 'สำเนา' : 'ต้นฉบับ' }}</div>
+      @if (inv.cancelledAt) {
+        <div class="cancelled">ยกเลิกแล้ว</div>
+      }
+    </div>
+  </header>
+
+  <section class="parties">
+    <div class="buyer">
+      <div class="label">ผู้ซื้อ</div>
+      <div class="strong">{{ inv.buyer.name }}</div>
+      <div>{{ inv.buyer.address }}</div>
+      <div>เลขประจำตัวผู้เสียภาษี {{ inv.buyer.taxId }} ({{ buyerBranch() }})</div>
+    </div>
+    <div class="meta">
+      <div>
+        <span>เลขที่</span><span>{{ inv.invoiceNo }}</span>
+      </div>
+      <div>
+        <span>วันที่</span><span>{{ inv.date | thaiDate }}</span>
+      </div>
+      <div>
+        <span>อ้างอิงใบเสร็จ</span><span>{{ inv.orderNo }}</span>
+      </div>
+      <div>
+        <span>วันที่ขาย</span><span>{{ inv.saleDate | thaiDate }}</span>
+      </div>
+    </div>
+  </section>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="no">ลำดับ</th>
+        <th>รายการ</th>
+        <th class="num">จำนวน</th>
+        <th class="num">ราคา/หน่วย</th>
+        <th class="num">ส่วนลด</th>
+        <th class="num">จำนวนเงิน</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (l of s.lines; track $index; let n = $index) {
+        <tr>
+          <td class="no">{{ n + 1 }}</td>
+          <td>
+            {{ l.name }}
+            @if (l.vatType === 'exempt') {
+              (ยกเว้นภาษี)
+            }
+            @if (l.freeOfPromotionId !== null) {
+              (ของแถม)
+            }
+            @if (l.serial) {
+              <div class="sub">S/N {{ l.serial }}</div>
+            }
+          </td>
+          <td class="num">{{ l.qty }} {{ l.unit }}</td>
+          <td class="num">{{ l.unitPrice | number: '1.2-2' }}</td>
+          <td class="num">
+            @if (l.itemDiscount + l.billDiscount) {
+              {{ l.itemDiscount + l.billDiscount | number: '1.2-2' }}
+            }
+          </td>
+          <td class="num">{{ l.amount | number: '1.2-2' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  <section class="summary">
+    <div class="words">({{ words() }})</div>
+    <div class="totals">
+      @if (exempt()) {
+        <div>
+          <span>มูลค่าสินค้ายกเว้นภาษี</span><span>{{ exempt() | number: '1.2-2' }}</span>
+        </div>
+      }
+      <div>
+        <span>มูลค่าสินค้าที่ต้องเสียภาษี</span
+        ><span>{{ vatable() - s.vat | number: '1.2-2' }}</span>
+      </div>
+      <div>
+        <span>ภาษีมูลค่าเพิ่ม 7%</span><span>{{ s.vat | number: '1.2-2' }}</span>
+      </div>
+      <div class="grand">
+        <span>จำนวนเงินรวมทั้งสิ้น</span><span>{{ s.total | number: '1.2-2' }}</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="paid">
+    ชำระโดย
+    @for (p of s.payments; track $index) {
+      {{ p.name }} {{ p.amount | number: '1.2-2' }}{{ $last ? '' : ',' }}
+    }
+  </section>
+
+  <footer>
+    <div class="sign">
+      <div class="line"></div>
+      <div>ผู้รับสินค้า</div>
+    </div>
+    <div class="sign">
+      <div class="line"></div>
+      <div>ผู้รับเงิน ({{ inv.issuedBy }})</div>
+    </div>
+  </footer>
+  <p class="note">ใบกำกับภาษีนี้ออกแทนใบกำกับภาษีอย่างย่อเลขที่ {{ inv.orderNo }}</p>
+</div>

@@ -1,0 +1,74 @@
+@if (sale.hasValue()) {
+  @let s = sale.value();
+  <app-page-header
+    title="ออกใบกำกับภาษีเต็มรูป"
+    [subtitle]="
+      'แทนใบกำกับภาษีอย่างย่อ ' + s.orderNo + ' · ' + ((s.date | thaiDate: 'datetime') ?? '')
+    "
+  >
+    <a mat-button [routerLink]="['/sales', s.id]">
+      <mat-icon>arrow_back</mat-icon>
+      กลับไปบิล
+    </a>
+  </app-page-header>
+
+  <div class="layout">
+    <mat-card appearance="outlined" class="form-card">
+      <mat-card-header><mat-card-title>ข้อมูลผู้ซื้อ</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <form [formGroup]="form" (ngSubmit)="save()">
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน</mat-label>
+            <input matInput formControlName="taxId" inputmode="numeric" maxlength="17" />
+            <mat-hint>ถ้าเคยออกให้แล้ว ระบบจะเติมข้อมูลเดิมให้</mat-hint>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>ชื่อผู้ซื้อ / ชื่อบริษัท</mat-label>
+            <input matInput formControlName="name" />
+          </mat-form-field>
+          <div class="row">
+            <mat-button-toggle-group formControlName="branchType" aria-label="ประเภทสาขา">
+              <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
+              <mat-button-toggle value="branch">สาขา</mat-button-toggle>
+            </mat-button-toggle-group>
+            @if (buyer().branchType === 'branch') {
+              <mat-form-field appearance="outline" class="branch-no">
+                <mat-label>เลขที่สาขา</mat-label>
+                <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" />
+              </mat-form-field>
+            }
+          </div>
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>ที่อยู่</mat-label>
+            <textarea matInput formControlName="address" rows="3"></textarea>
+          </mat-form-field>
+
+          @if (problem(); as message) {
+            <div class="problem">{{ message }}</div>
+          }
+          <div class="actions">
+            <button
+              mat-flat-button
+              type="submit"
+              [disabled]="!!problem() || saving() || !store.storeInfo()"
+            >
+              <mat-icon>receipt_long</mat-icon>
+              ออกใบกำกับภาษี
+            </button>
+          </div>
+        </form>
+      </mat-card-content>
+    </mat-card>
+
+    @if (store.storeInfo(); as info) {
+      @if (preview(); as inv) {
+        <div class="preview">
+          <div class="text-muted small">ตัวอย่าง (A4)</div>
+          <app-tax-invoice-document [sale]="s" [invoice]="inv" [store]="info" />
+        </div>
+      }
+    }
+  </div>
+} @else if (sale.isLoading()) {
+  <app-loading-spinner />
+}

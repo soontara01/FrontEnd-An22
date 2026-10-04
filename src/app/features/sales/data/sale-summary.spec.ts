@@ -113,6 +113,7 @@ describe('summarizeSales', () => {
       cnNo: 'CN-1',
       saleId: 9,
       orderNo: 'B9',
+      taxInvoiceNo: null,
       saleDate: '2026-10-01T03:00:00Z',
       date: '2026-10-04T03:00:00Z',
       cashier: '',

@@ -26,6 +26,8 @@ import {
   PromotionPayload,
   CreditNote,
   CreditNotePayload,
+  TaxInvoice,
+  TaxInvoiceBuyer,
   SALE_DEFAULTS,
   Sale,
   SaleLine,
@@ -81,6 +83,8 @@ import {
   creditNoteError,
   draftCreditNote,
   toRefunds,
+  normalizeBuyer,
+  taxInvoiceError,
   storeInfoError,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -116,6 +120,8 @@ interface MockDb {
   storeInfo: StoreInfo;
   /** Credit notes (returns after the day of sale). */
   creditNotes: CreditNote[];
+  /** Full tax invoices (one per bill, on request). */
+  taxInvoices: TaxInvoice[];
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -709,6 +715,7 @@ const seedDb = (): MockDb => ({
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
   storeInfo: { ...SEED_STORE_INFO },
   creditNotes: [],
+  taxInvoices: [],
 });
 
 const LATENCY_MS = 300;
@@ -738,6 +745,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
+  db.creditNotes = db.creditNotes.map((n) => ({ ...n, taxInvoiceNo: n.taxInvoiceNo ?? null }));
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
@@ -780,6 +788,12 @@ function handle(
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
   if (path === 'credit-notes' && req.method === 'GET') return listCreditNotes(req, db);
+  if (path === 'tax-invoices/buyer' && req.method === 'GET') {
+    // Last buyer details used with this tax ID (+ branch), to fill the form.
+    const taxId = req.params.get('taxId') ?? '';
+    const found = [...db.taxInvoices].reverse().find((t) => t.buyer.taxId === taxId);
+    return ok(found?.buyer ?? null);
+  }
   return notFound(req, path);
 }
 
@@ -1734,7 +1748,7 @@ function handleSales(
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
 
-  const idMatch = /^sales\/(\d+)(?:\/(status|void|credit-notes))?$/.exec(path);
+  const idMatch = /^sales\/(\d+)(?:\/(status|void|credit-notes|tax-invoice))?$/.exec(path);
   if (!idMatch) return notFound(req, path);
   const index = sales.findIndex((s) => s.id === Number(idMatch[1]));
   if (index < 0) return error(404, 'ไม่พบบิลขาย');
@@ -1745,6 +1759,14 @@ function handleSales(
   if (action === 'void' && req.method === 'POST') {
     const { reason } = req.body as { reason: string };
     return voidSale(sale, (reason ?? '').trim(), db);
+  }
+  if (action === 'tax-invoice' && req.method === 'GET') {
+    // null instead of 404: "no invoice yet" is a normal answer (no error toast).
+    return ok(db.taxInvoices.find((t) => t.saleId === sale.id) ?? null);
+  }
+  if (action === 'tax-invoice' && req.method === 'POST') {
+    const { buyer } = req.body as { buyer: TaxInvoiceBuyer };
+    return issueTaxInvoice(sale, normalizeBuyer(buyer ?? ({} as TaxInvoiceBuyer)), db);
   }
   if (action === 'credit-notes' && req.method === 'GET') {
     return ok(db.creditNotes.filter((n) => n.saleId === sale.id));
@@ -1822,6 +1844,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     status: 'paid',
     voidedAt: null,
     voidReason: '',
+    taxInvoiceNo: null,
   };
   db.sales.push(sale);
   return ok(sale);
@@ -1954,6 +1977,7 @@ function createCreditNote(
     cnNo,
     saleId: sale.id,
     orderNo: sale.orderNo,
+    taxInvoiceNo: sale.taxInvoiceNo,
     saleDate: sale.date,
     date: now.toISOString(),
     cashier: db.users[0]?.name ?? '',
@@ -1968,6 +1992,35 @@ function createCreditNote(
   };
   db.creditNotes.push(created);
   return ok(created);
+}
+
+/** POST /sales/:id/tax-invoice { buyer } — one full tax invoice per paid POS bill. */
+function issueTaxInvoice(
+  sale: Sale,
+  buyer: TaxInvoiceBuyer,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const problem = taxInvoiceError(sale, buyer, db.storeInfo);
+  if (problem) return error(400, problem);
+  const now = new Date();
+  const prefix = `INV-${todayIso().replaceAll('-', '')}-`;
+  const last = db.taxInvoices
+    .filter((t) => t.invoiceNo.startsWith(prefix))
+    .reduce((max, t) => Math.max(max, Number(t.invoiceNo.slice(prefix.length))), 0);
+  const invoice: TaxInvoice = {
+    id: Math.max(0, ...db.taxInvoices.map((t) => t.id)) + 1,
+    invoiceNo: prefix + String(last + 1).padStart(4, '0'),
+    saleId: sale.id,
+    orderNo: sale.orderNo,
+    saleDate: sale.date,
+    date: now.toISOString(),
+    buyer,
+    issuedBy: db.users[0]?.name ?? '',
+    cancelledAt: null,
+  };
+  db.taxInvoices.push(invoice);
+  sale.taxInvoiceNo = invoice.invoiceNo;
+  return ok(invoice);
 }
 
 /**
@@ -2017,6 +2070,9 @@ function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpRespon
     recordMovement(db, db.products[index], 'receive', baseQty, unitCost, line.cogs, [], note);
   }
   Object.assign(sale, { status: 'cancelled', voidedAt: now, voidReason: reason });
+  // A full tax invoice of a voided bill is cancelled with it.
+  const invoice = db.taxInvoices.find((t) => t.saleId === sale.id);
+  if (invoice) invoice.cancelledAt = now;
   return ok(sale);
 }
 

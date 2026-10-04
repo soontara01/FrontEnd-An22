@@ -22,6 +22,11 @@
     <div>
       <span>อ้างอิงบิล</span><span>{{ n.orderNo }}</span>
     </div>
+    @if (n.taxInvoiceNo) {
+      <div>
+        <span>ใบกำกับภาษี</span><span>{{ n.taxInvoiceNo }}</span>
+      </div>
+    }
     <div>
       <span>วันที่บิล</span><span>{{ n.saleDate | thaiDate: 'datetime' }}</span>
     </div>

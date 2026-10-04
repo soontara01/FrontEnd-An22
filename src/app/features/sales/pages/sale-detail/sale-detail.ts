@@ -32,6 +32,7 @@ import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { CreditNoteReceipt } from '@shared/components/receipt/credit-note-receipt';
+import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
 import { Receipt } from '@shared/components/receipt/receipt';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
@@ -41,7 +42,8 @@ import { VoidDialog } from '../../dialogs/void-dialog/void-dialog';
 
 /**
  * One bill (`/sales/:id`): lines with cost / profit, payments, receipt copy, same-day void and
- * credit notes for later days (`?printCn=<id>` prints a just-issued one).
+ * credit notes for later days and the full tax invoice (`?printCn=<id>` / `?printInv=1` print a
+ * just-issued one).
  */
 @Component({
   selector: 'app-sale-detail',
@@ -52,6 +54,7 @@ import { VoidDialog } from '../../dialogs/void-dialog/void-dialog';
     LoadingSpinner,
     Receipt,
     CreditNoteReceipt,
+    TaxInvoiceDocument,
     ThaiDatePipe,
     MATERIAL,
   ],
@@ -70,9 +73,13 @@ export default class SaleDetail {
   readonly id = input.required<string>();
   /** Query param: credit note to print right away */
   readonly printCn = input<string>();
+  /** Query param: print the full tax invoice (original) right away */
+  readonly printInv = input<string>();
 
   private readonly receipt = viewChild('receipt', { read: ElementRef<HTMLElement> });
   private readonly noteSlips = viewChildren('noteSlip', { read: ElementRef<HTMLElement> });
+  private readonly invOriginal = viewChild('invOriginal', { read: ElementRef<HTMLElement> });
+  private readonly invCopy = viewChild('invCopy', { read: ElementRef<HTMLElement> });
 
   protected readonly sale = rxResource({
     params: () => Number(this.id()),
@@ -96,7 +103,21 @@ export default class SaleDetail {
       s.lines.some((l, i) => l.qty > creditedQty(this.creditNotes(), i))
     );
   });
+  protected readonly taxInvoice = rxResource({
+    params: () => Number(this.id()),
+    stream: ({ params }) => this.store.taxInvoiceOf(params),
+  });
+  /** Full tax invoice can be issued: VAT store, paid POS bill, none yet. */
+  protected readonly canInvoice = computed(
+    () =>
+      !!this.store.storeInfo()?.vatRegistered &&
+      this.isPos() &&
+      this.sale.hasValue() &&
+      this.sale.value().status === 'paid' &&
+      !this.sale.value().taxInvoiceNo,
+  );
   private printed = false;
+  private invoicePrinted = false;
 
   /** Why the bill cannot be voided (a reason is asked later, so pass a placeholder). */
   protected readonly voidBlocker = computed(() =>
@@ -118,6 +139,13 @@ export default class SaleDetail {
     this.store.loadLookups();
     effect(() => {
       if (this.sale.error()) void this.router.navigate(['/sales']);
+    });
+    // Print the original of a tax invoice just issued by the tax-invoice page (once).
+    effect(() => {
+      const el = this.invOriginal()?.nativeElement;
+      if (this.invoicePrinted || !this.printInv() || !el) return;
+      this.invoicePrinted = true;
+      setTimeout(() => printElement(el, 'A4'));
     });
     // Print a credit note just issued by the credit-note page (once).
     effect(() => {
@@ -157,6 +185,11 @@ export default class SaleDetail {
     if (slip) printElement(slip.nativeElement);
   }
 
+  protected printInvoice(copy: boolean): void {
+    const el = (copy ? this.invCopy() : this.invOriginal())?.nativeElement;
+    if (el) printElement(el, 'A4');
+  }
+
   protected printCopy(): void {
     const el = this.receipt()?.nativeElement;
     if (el) printElement(el);
@@ -172,6 +205,7 @@ export default class SaleDetail {
       )
       .subscribe((voided) => {
         this.sale.set(voided);
+        this.taxInvoice.reload();
         this.notify.success(`${voided.orderNo}: ยกเลิกบิลแล้ว สินค้ากลับเข้าคลัง`);
       });
   }

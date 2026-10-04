@@ -154,6 +154,7 @@ const note = (over: Partial<CreditNote>): CreditNote => ({
   cnNo: 'CN-1',
   saleId: 1,
   orderNo: sale.orderNo,
+  taxInvoiceNo: null,
   saleDate: sale.date,
   date: sale.date,
   cashier: '',

@@ -15,6 +15,13 @@
     </div>
   </mat-dialog-content>
   <mat-dialog-actions align="end">
+    @if (store.storeInfo()?.vatRegistered) {
+      <!-- Another menu: full page load (the bill is saved, the cart already cleared). -->
+      <a mat-button class="full-invoice" [href]="'/sales/' + sale.id + '/tax-invoice'">
+        <mat-icon>receipt_long</mat-icon>
+        ใบกำกับภาษีเต็มรูป
+      </a>
+    }
     <button mat-button (click)="finish(false)">
       <mat-icon>add_shopping_cart</mat-icon>
       บิลใหม่ (ไม่พิมพ์)

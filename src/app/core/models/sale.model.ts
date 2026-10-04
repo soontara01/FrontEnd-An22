@@ -99,6 +99,8 @@ export interface Sale {
   status: SaleStatus;
   voidedAt: string | null;
   voidReason: string;
+  /** Full tax invoice issued for this bill (server-set), null = none */
+  taxInvoiceNo: string | null;
 }
 
 /** Defaults for fields missing from older stored sales (before the POS existed). */
@@ -117,6 +119,7 @@ export const SALE_DEFAULTS: Omit<
   billPromotionIds: [],
   voidedAt: null,
   voidReason: '',
+  taxInvoiceNo: null,
 };
 
 /** Local calendar day ('YYYY-MM-DD') a sale was made. */

@@ -59,6 +59,8 @@ export interface CreditNote {
   cnNo: string;
   saleId: number;
   orderNo: string;
+  /** Full tax invoice of the bill, if one was issued (printed as the reference) */
+  taxInvoiceNo: string | null;
   saleDate: string;
   /** ISO timestamp */
   date: string;

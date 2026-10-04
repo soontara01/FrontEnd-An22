@@ -5,6 +5,7 @@ import { SalesStore } from './data/sales.store';
 import CreditNoteForm from './pages/credit-note-form/credit-note-form';
 import SaleDetail from './pages/sale-detail/sale-detail';
 import SaleList from './pages/sale-list/sale-list';
+import TaxInvoiceForm from './pages/tax-invoice-form/tax-invoice-form';
 
 export default [
   {
@@ -16,6 +17,7 @@ export default [
       { path: '', component: SaleList },
       { path: ':id', title: 'บิลขาย', component: SaleDetail },
       { path: ':id/credit-note', title: 'ออกใบลดหนี้', component: CreditNoteForm },
+      { path: ':id/tax-invoice', title: 'ใบกำกับภาษีเต็มรูป', component: TaxInvoiceForm },
     ],
   },
 ] satisfies Routes;
