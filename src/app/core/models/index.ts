@@ -3,6 +3,7 @@ export * from './category.model';
 export * from './costing.model';
 export * from './price.model';
 export * from './product.model';
+export * from './promotion.model';
 export * from './sale.model';
 export * from './serial.model';
 export * from './supplier.model';

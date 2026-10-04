@@ -46,6 +46,12 @@ export const MENU: MenuItem[] = [
     loadChildren: () => import('@features/pricing/pricing.routes'),
   },
   {
+    label: 'โปรโมชั่น',
+    icon: 'campaign',
+    path: 'promotions',
+    loadChildren: () => import('@features/promotions/promotions.routes'),
+  },
+  {
     label: 'ข้อมูลหลัก',
     icon: 'dataset',
     path: 'master-data',

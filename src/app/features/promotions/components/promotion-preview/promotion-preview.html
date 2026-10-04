@@ -1,0 +1,134 @@
+@if (belowCostCount()) {
+  <p class="warn">
+    <mat-icon inline>warning</mat-icon>
+    {{ belowCostCount() }} รายการขายต่ำกว่าทุนเมื่อใช้โปรนี้ (คิดจากราคาวันนี้และต้นทุนปัจจุบัน)
+  </p>
+}
+@if (noPriceCount()) {
+  <p class="warn">
+    <mat-icon inline>info</mat-icon>
+    {{ noPriceCount() }} รายการยังไม่มีราคาขายวันนี้ — กำหนดได้ที่เมนูจัดการราคา
+  </p>
+}
+
+@if (promotion().type === 'item_discount') {
+  @if (discountRows().length) {
+    <div class="table-wrap">
+      <table class="preview">
+        <thead>
+          <tr>
+            <th>SKU</th>
+            <th class="num">ราคาวันนี้</th>
+            <th class="num">ส่วนลด / ชิ้น</th>
+            <th class="num">ราคาหลังลด</th>
+            <th class="num">กำไร</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of discountRows(); track r.product.id) {
+            <tr>
+              <td>
+                <span class="mono">{{ r.product.sku }}</span>
+                <div class="text-muted small">{{ r.product.name }}</div>
+              </td>
+              @if (r.price !== null) {
+                <td class="num">{{ r.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+                <td class="num">−{{ r.discount | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+                <td class="num">
+                  <strong>{{ r.discounted | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+                </td>
+                <td class="num" [class.negative]="r.belowCost">
+                  {{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}
+                  @if (r.belowCost) {
+                    <span class="badge badge-error">ต่ำกว่าทุน</span>
+                  }
+                </td>
+              } @else {
+                <td class="num" colspan="4">
+                  <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="text-muted">ยังไม่มีสินค้าที่ร่วมรายการ</p>
+  }
+}
+
+@if (bill(); as b) {
+  <p>
+    บิล {{ b.minAmount | currency: 'THB' : 'symbol-narrow' : '1.0-0' }} ได้ส่วนลด
+    <strong>{{ b.discount | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+    ({{ b.percent | number: '1.1-1' }}% ของยอดบิลขั้นต่ำ)
+  </p>
+}
+
+@if (freeGoods(); as f) {
+  <table class="preview">
+    <thead>
+      <tr>
+        <th>ของแถมต่อชุด</th>
+        <th class="num">จำนวน</th>
+        <th class="num">ต้นทุน</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (i of f.items; track i.productId) {
+        <tr>
+          <td>
+            @if (i.product) {
+              <span class="mono">{{ i.product.sku }}</span> {{ i.product.name }}
+            } @else {
+              -
+            }
+          </td>
+          <td class="num">{{ i.qty }}</td>
+          <td class="num">{{ i.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+        </tr>
+      }
+      <tr class="total">
+        <td colspan="2">ต้นทุนของแถม / ชุด</td>
+        <td class="num">{{ f.setCost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  @if (f.rows.length) {
+    <div class="table-wrap">
+      <table class="preview">
+        <thead>
+          <tr>
+            <th>ซื้อ</th>
+            <th class="num">ราคาวันนี้</th>
+            <th class="num">ซื้อขั้นต่ำ</th>
+            <th class="num">กำไรรวมของแถม</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of f.rows; track r.product.id) {
+            <tr>
+              <td>
+                <span class="mono">{{ r.product.sku }}</span>
+                <div class="text-muted small">{{ r.product.name }}</div>
+              </td>
+              @if (r.price !== null) {
+                <td class="num">{{ r.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+                <td class="num">{{ r.buyQty }} {{ r.product.unit }}</td>
+                <td class="num" [class.negative]="r.margin !== null && r.margin < 0">
+                  {{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}
+                </td>
+              } @else {
+                <td class="num" colspan="3">
+                  <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

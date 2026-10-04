@@ -1,0 +1,346 @@
+<app-page-header [title]="isEdit() ? 'แก้ไขโปรโมชั่น' : 'เพิ่มโปรโมชั่น'">
+  <a mat-button [routerLink]="isEdit() ? ['/promotions', id()] : ['/promotions']">
+    <mat-icon>arrow_back</mat-icon>
+    กลับ
+  </a>
+</app-page-header>
+
+@if (loading()) {
+  <app-loading-spinner />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="save()" class="layout">
+    @if (locked()) {
+      <p class="info">
+        <mat-icon inline>lock</mat-icon>
+        โปรนี้เริ่มแล้ว แก้ได้เฉพาะวันสิ้นสุด (เลื่อนให้เร็วขึ้น) การเปิด/ปิดใช้งาน และหมายเหตุ —
+        ถ้าต้องการเปลี่ยนเงื่อนไข ให้ปิดโปรนี้แล้วสร้างโปรใหม่
+      </p>
+    }
+
+    <!-- General -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>ข้อมูลโปรโมชั่น</mat-card-title></mat-card-header>
+      <mat-card-content class="grid">
+        <mat-form-field appearance="outline">
+          <mat-label>รหัสโปร</mat-label>
+          <input
+            matInput
+            appAutofocus
+            formControlName="code"
+            class="mono"
+            (input)="toUpperCode()"
+          />
+          <mat-hint>A-Z, 0-9 และ -</mat-hint>
+          @if (form.controls.code.hasError('required')) {
+            <mat-error>กรุณากรอกรหัสโปร</mat-error>
+          } @else if (form.controls.code.invalid) {
+            <mat-error>ใช้ได้เฉพาะ A-Z, 0-9 และ - (ไม่เกิน 30 ตัว)</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>ชื่อโปรโมชั่น</mat-label>
+          <input matInput formControlName="name" />
+          @if (form.controls.name.hasError('required')) {
+            <mat-error>กรุณากรอกชื่อโปรโมชั่น</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ประเภท</mat-label>
+          <mat-select formControlName="type">
+            @for (t of types; track t) {
+              <mat-option [value]="t">
+                <mat-icon>{{ typeIcon[t] }}</mat-icon>
+                {{ typeLabel[t] }}
+              </mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ลำดับความสำคัญ</mat-label>
+          <input matInput type="number" min="0" max="999" formControlName="priority" />
+          <mat-hint>เลขมากใช้ก่อนเมื่อหลายโปรชนกัน</mat-hint>
+          @if (form.controls.priority.invalid) {
+            <mat-error>0 - 999</mat-error>
+          }
+        </mat-form-field>
+
+        <div class="toggles">
+          <mat-slide-toggle formControlName="stackable">ใช้ร่วมกับโปรอื่นได้</mat-slide-toggle>
+          <mat-slide-toggle formControlName="enabled">เปิดใช้งาน</mat-slide-toggle>
+        </div>
+
+        <mat-form-field appearance="outline" class="span-3">
+          <mat-label>หมายเหตุ</mat-label>
+          <input matInput formControlName="note" />
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Period -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>ช่วงเวลา</mat-card-title></mat-card-header>
+      <mat-card-content class="grid">
+        <mat-form-field appearance="outline">
+          <mat-label>วันที่เริ่ม</mat-label>
+          <input matInput [matDatepicker]="startPicker" formControlName="startDate" />
+          <mat-datepicker-toggle matIconSuffix [for]="startPicker" />
+          <mat-datepicker #startPicker />
+          @if (form.controls.startDate.invalid) {
+            <mat-error>กรุณาเลือกวันที่เริ่ม</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>วันที่สิ้นสุด</mat-label>
+          <input
+            matInput
+            [matDatepicker]="endPicker"
+            [min]="form.controls.startDate.value"
+            formControlName="endDate"
+          />
+          @if (form.controls.endDate.value && !locked()) {
+            <button
+              mat-icon-button
+              matIconSuffix
+              type="button"
+              aria-label="ล้างวันที่สิ้นสุด"
+              (click)="form.controls.endDate.setValue(null)"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+          <mat-datepicker-toggle matIconSuffix [for]="endPicker" />
+          <mat-datepicker #endPicker />
+          <mat-hint>เว้นว่าง = ไม่กำหนดวันสิ้นสุด</mat-hint>
+        </mat-form-field>
+
+        <div class="readonly">
+          <div class="text-muted">สถานะตามวันที่</div>
+          <strong>{{ statusText() }}</strong>
+        </div>
+      </mat-card-content>
+      @if (form.hasError('endBeforeStart')) {
+        <mat-card-content
+          ><p class="problem">วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม</p></mat-card-content
+        >
+      }
+    </mat-card>
+
+    <!-- Condition -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>เงื่อนไข</mat-card-title></mat-card-header>
+      <mat-card-content>
+        @if (type() === 'bill_discount') {
+          <div class="grid">
+            <mat-form-field appearance="outline">
+              <mat-label>ยอดบิลขั้นต่ำ (รวม VAT)</mat-label>
+              <input matInput type="number" min="0" formControlName="minAmount" />
+              <span matTextSuffix>฿</span>
+              <mat-hint>คิดจากยอดหลังหักส่วนลดสินค้า</mat-hint>
+            </mat-form-field>
+          </div>
+        } @else {
+          <mat-slide-toggle formControlName="scopeAll">สินค้าทุกรายการร่วมโปร</mat-slide-toggle>
+
+          @if (!raw().scopeAll) {
+            <h3 class="section-title">สินค้าที่ร่วมรายการ</h3>
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>เพิ่ม SKU (ค้นหารหัส / ชื่อ / บาร์โค้ด)</mat-label>
+              <mat-chip-grid #chipGrid [disabled]="locked()">
+                @for (p of selectedProducts(); track p.id) {
+                  <mat-chip-row (removed)="removeProduct(p.id)">
+                    <span class="mono">{{ p.sku }}</span
+                    >&nbsp;{{ p.shortName || p.name }}
+                    <button matChipRemove [attr.aria-label]="'ลบ ' + p.sku">
+                      <mat-icon>cancel</mat-icon>
+                    </button>
+                  </mat-chip-row>
+                }
+                <input
+                  #productInput
+                  [matChipInputFor]="chipGrid"
+                  [matAutocomplete]="productAuto"
+                  [disabled]="locked()"
+                  (input)="productSearch.set(productInput.value)"
+                />
+              </mat-chip-grid>
+              <mat-autocomplete
+                #productAuto="matAutocomplete"
+                (optionSelected)="addProduct($event.option.value, productInput)"
+              >
+                @for (p of productOptions(); track p.id) {
+                  <mat-option [value]="p.id">
+                    <span class="mono">{{ p.sku }}</span> {{ p.name }}
+                  </mat-option>
+                }
+              </mat-autocomplete>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="w-full">
+              <mat-label>หมวดหมู่ที่ร่วมรายการ</mat-label>
+              <mat-select formControlName="categoryIds" multiple>
+                @for (c of store.categoryOptions(); track c.id) {
+                  <mat-option [value]="c.id" [disabled]="!c.active">{{ c.label }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>เลือกหมวดแม่ = รวมทุกหมวดย่อยและ SKU ด้านใต้</mat-hint>
+            </mat-form-field>
+          }
+
+          <div class="grid">
+            @if (type() === 'item_discount') {
+              <mat-form-field appearance="outline">
+                <mat-label>จำนวนขั้นต่ำต่อรายการ</mat-label>
+                <input matInput type="number" min="1" formControlName="minQty" />
+                <span matTextSuffix>ชิ้น</span>
+                <mat-hint>1 = ลดทุกชิ้น</mat-hint>
+              </mat-form-field>
+            } @else {
+              <mat-form-field appearance="outline">
+                <mat-label>เงื่อนไขการได้ของแถม</mat-label>
+                <mat-select formControlName="freeCondition">
+                  <mat-option value="qty">ซื้อครบจำนวนชิ้น</mat-option>
+                  <mat-option value="amount">ซื้อครบยอดเงิน</mat-option>
+                </mat-select>
+              </mat-form-field>
+              @if (raw().freeCondition === 'amount') {
+                <mat-form-field appearance="outline">
+                  <mat-label>ยอดซื้อสินค้าในรายการ (รวม VAT)</mat-label>
+                  <input matInput type="number" min="0" formControlName="minAmount" />
+                  <span matTextSuffix>฿ / ชุด</span>
+                </mat-form-field>
+              } @else {
+                <mat-form-field appearance="outline">
+                  <mat-label>ซื้อสินค้าในรายการ</mat-label>
+                  <input matInput type="number" min="1" formControlName="minQty" />
+                  <span matTextSuffix>ชิ้น / ชุด</span>
+                </mat-form-field>
+              }
+            }
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Reward -->
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>{{ type() === 'free_goods' ? 'ของแถม' : 'ส่วนลด' }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        @if (type() === 'free_goods') {
+          <div formArrayName="freeItems" class="rows">
+            @for (row of freeItems.controls; track row; let i = $index) {
+              <div class="row" [formGroupName]="i">
+                <mat-form-field appearance="outline" class="grow">
+                  <mat-label>สินค้าแถม</mat-label>
+                  <mat-select formControlName="productId">
+                    @for (p of store.freeOptions(); track p.id) {
+                      <mat-option [value]="p.id">
+                        <span class="mono">{{ p.sku }}</span> {{ p.name }}
+                      </mat-option>
+                    }
+                  </mat-select>
+                  @if (row.controls.productId.hasError('required')) {
+                    <mat-error>กรุณาเลือก</mat-error>
+                  }
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="narrow">
+                  <mat-label>จำนวน</mat-label>
+                  <input matInput type="number" min="1" formControlName="qty" />
+                </mat-form-field>
+                @if (!locked()) {
+                  <button mat-icon-button type="button" matTooltip="ลบ" (click)="removeFreeItem(i)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+          @if (!locked()) {
+            <button mat-stroked-button type="button" (click)="addFreeItem()">
+              <mat-icon>add</mat-icon>
+              เพิ่มสินค้าแถม
+            </button>
+          }
+          <p class="text-muted small">
+            สินค้าแถมขายที่ราคา 0 แต่ยังตัดสต็อกและคิดต้นทุนตามปกติ (สินค้าบริการแถมได้)
+          </p>
+          <div class="grid">
+            <div class="toggles">
+              <mat-slide-toggle formControlName="repeat"
+                >ทวีคูณ (ซื้อ 2 ชุดได้ 2 ชุด)</mat-slide-toggle
+              >
+            </div>
+            <mat-form-field appearance="outline">
+              <mat-label>จำนวนชุดสูงสุดต่อบิล</mat-label>
+              <input matInput type="number" min="1" formControlName="maxSets" />
+              <mat-hint>เว้นว่าง = ไม่จำกัด</mat-hint>
+            </mat-form-field>
+          </div>
+        } @else {
+          <div class="grid">
+            <mat-form-field appearance="outline">
+              <mat-label>รูปแบบส่วนลด</mat-label>
+              <mat-select formControlName="discountKind">
+                <mat-option value="percent">เปอร์เซ็นต์ (%)</mat-option>
+                <mat-option value="amount">จำนวนเงิน (฿)</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>ส่วนลด</mat-label>
+              <input matInput type="number" min="0" formControlName="discountValue" />
+              <span matTextSuffix>
+                {{ discountKind() === 'percent' ? '%' : '฿' }}
+                {{ type() === 'item_discount' ? '/ ชิ้น' : '/ บิล' }}
+              </span>
+            </mat-form-field>
+
+            @if (discountKind() === 'percent') {
+              <mat-form-field appearance="outline">
+                <mat-label>ลดสูงสุด</mat-label>
+                <input matInput type="number" min="0" formControlName="maxDiscount" />
+                <span matTextSuffix>฿</span>
+                <mat-hint>เว้นว่าง = ไม่จำกัด</mat-hint>
+              </mat-form-field>
+            }
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Preview -->
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>ตัวอย่างผลของโปร (ราคาวันนี้)</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <app-promotion-preview [promotion]="payload()" />
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Actions -->
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        @if (problem(); as message) {
+          <p class="problem">
+            <mat-icon inline>error</mat-icon>
+            {{ message }}
+          </p>
+        }
+        <div class="footer">
+          <span class="spacer"></span>
+          <a mat-button [routerLink]="isEdit() ? ['/promotions', id()] : ['/promotions']">ยกเลิก</a>
+          <button mat-flat-button type="submit" [disabled]="saving() || !!problem()">
+            <mat-icon>save</mat-icon>
+            บันทึก
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </form>
+}
