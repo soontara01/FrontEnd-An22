@@ -2,9 +2,13 @@
 
 Angular 22 SPA (standalone, zoneless, signals) + Angular Material 3. Backend is mocked for now.
 
+POS (sales screen) plan: `docs/pos-plan.md`.
+
 Domain: front end of a **retail system for an IT / electrical-appliance store** (serial numbers, warranty, VAT-inclusive prices). SKU-master roadmap: round 1 done (VAT, categories, packs/barcodes, short name + image, sale status); round 2 done (suppliers + reorder); round 3 done (Excel import/export, label printing).
 
 ## Commands
+
+Node.js 24 (`.nvmrc`, `engines` in package.json) — `nvm use` before running anything.
 
 - `npm start` — dev server on http://localhost:4200 (login `admin` / `admin`)
 - `npm run build` — production build → `dist/frontend-an22/browser`; check the "Lazy chunk files" table
