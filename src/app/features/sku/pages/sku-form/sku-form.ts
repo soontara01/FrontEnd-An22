@@ -23,6 +23,9 @@ import { CurrencyPipe } from '@angular/common';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { Router, RouterLink } from '@angular/router';
 import {
+  ITEM_TYPE_HINT,
+  ITEM_TYPE_LABEL,
+  ItemType,
   PackUnit,
   SkuSupplier,
   ProductPayload,
@@ -32,6 +35,7 @@ import {
   SkuStatus,
   VAT_TYPE_LABEL,
   VatType,
+  withServiceRules,
 } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -103,6 +107,9 @@ export default class SkuForm implements OnInit {
   protected readonly statusHint = SKU_STATUS_HINT;
   protected readonly vatTypes = Object.keys(VAT_TYPE_LABEL) as VatType[];
   protected readonly vatLabel = VAT_TYPE_LABEL;
+  protected readonly itemTypes = Object.keys(ITEM_TYPE_LABEL) as ItemType[];
+  protected readonly itemTypeLabel = ITEM_TYPE_LABEL;
+  protected readonly itemTypeHint = ITEM_TYPE_HINT;
 
   protected readonly form = this.fb.group({
     sku: [
@@ -122,6 +129,7 @@ export default class SkuForm implements OnInit {
     ]),
     brand: [''],
     model: [''],
+    itemType: ['stock' as ItemType],
     saleStatus: ['active' as SkuStatus],
     vatType: ['vat7' as VatType],
     cost: [0, [Validators.required, Validators.min(0)]],
@@ -149,6 +157,7 @@ export default class SkuForm implements OnInit {
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
 
   protected readonly serialControl = computed(() => !!this.value().serialControl);
+  protected readonly isService = computed(() => this.value().itemType === 'service');
   protected readonly baseUnit = computed(() => this.value().unit || 'หน่วย');
   protected readonly imageUrl = computed(() => this.value().imageUrl ?? '');
   protected readonly shortNameLength = computed(() => (this.value().shortName ?? '').length);
@@ -203,6 +212,20 @@ export default class SkuForm implements OnInit {
           this.notify.info('สินค้าคุม Serial มีหน่วยเดียว — ลบหน่วยแพ็ค/ลังออกแล้ว');
         }
       });
+    // Service SKUs have no stock: clear serial control, packs and reorder levels.
+    this.form.controls.itemType.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((type) => {
+        if (type !== 'service') return;
+        const dropped = this.packs.length > 0 || this.form.controls.serialControl.value;
+        this.packs.clear();
+        this.form.patchValue({ serialControl: false, minStock: 0, maxStock: 0 });
+        if (!this.isEdit() && this.form.controls.unit.value === 'ชิ้น') {
+          this.form.controls.unit.setValue('ครั้ง');
+        }
+        if (dropped)
+          this.notify.info('สินค้าบริการไม่มีสต็อก — ยกเลิกการคุม Serial และหน่วยแพ็คแล้ว');
+      });
   }
 
   ngOnInit(): void {
@@ -221,7 +244,10 @@ export default class SkuForm implements OnInit {
         this.currentPrice.set(sku.currentPrice);
         this.avgCost.set(sku.avgCost);
         // Server rejects switching serial control while stock exists (getRawValue keeps the value).
-        if (sku.stock > 0) this.form.controls.serialControl.disable({ emitEvent: false });
+        if (sku.stock > 0) {
+          this.form.controls.serialControl.disable({ emitEvent: false });
+          this.form.controls.itemType.disable({ emitEvent: false });
+        }
         this.form.markAllAsTouched(); // surface issues on older data (e.g. no category yet)
         this.loading.set(false);
       },
@@ -303,7 +329,7 @@ export default class SkuForm implements OnInit {
       return;
     }
     const raw = this.form.getRawValue();
-    const payload: ProductPayload = {
+    const payload: ProductPayload = withServiceRules({
       ...raw,
       sku: raw.sku.trim(),
       name: raw.name.trim(),
@@ -320,7 +346,7 @@ export default class SkuForm implements OnInit {
       // Serial format only matters when the SKU is serial-controlled.
       serialPrefix: raw.serialControl ? raw.serialPrefix : '',
       serialLength: raw.serialControl ? raw.serialLength : null,
-    };
+    });
 
     this.saving.set(true);
     const request$ = this.isEdit()

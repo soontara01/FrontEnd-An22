@@ -10,6 +10,15 @@ export type VatType = 'vat7' | 'exempt';
  */
 export type SkuStatus = 'active' | 'no_sale' | 'no_purchase' | 'discontinued';
 
+/**
+ * What a SKU is:
+ * - stock: a physical item with stock (optionally serial-controlled)
+ * - service: sold but never stocked (installation, repair labour, eSIM activated at the
+ *   operator on sale). No stock / movements / serials / packs / reorder levels; its
+ *   standard `cost` is the cost of each sale.
+ */
+export type ItemType = 'stock' | 'service';
+
 /** A larger selling/purchasing unit, e.g. 1 ลัง = 24 ชิ้น, with its own barcode. */
 export interface PackUnit {
   unit: string;
@@ -54,12 +63,15 @@ export interface Product {
   packUnits: PackUnit[];
   brand: string;
   model: string;
+  /** stock (default) or service — a service never has stock; see `ItemType` */
+  itemType: ItemType;
   /** Data URL thumbnail ('' = no image) */
   imageUrl: string;
   vatType: VatType;
   /**
    * Standard cost per base unit, excluding VAT: default when receiving and the estimate
    * when there is no stock. Never use it for inventory value — see `avgCost`.
+   * Service SKUs: the cost of each sale (COGS).
    */
   cost: number;
   /**
@@ -106,6 +118,7 @@ export const PRODUCT_DEFAULTS: Omit<Product, 'id' | 'sku' | 'name'> = {
   packUnits: [],
   brand: '',
   model: '',
+  itemType: 'stock',
   imageUrl: '',
   vatType: 'vat7',
   cost: 0,
@@ -129,6 +142,47 @@ export const VAT_TYPE_LABEL: Record<VatType, string> = {
   vat7: 'VAT 7%',
   exempt: 'ยกเว้น VAT',
 };
+
+export const ITEM_TYPE_LABEL: Record<ItemType, string> = {
+  stock: 'สินค้า',
+  service: 'บริการ',
+};
+
+export const ITEM_TYPE_HINT: Record<ItemType, string> = {
+  stock: 'มีสต็อก รับเข้า/ตัดออกที่เมนูคลังสินค้า',
+  service: 'ไม่มีสต็อก เช่น ค่าติดตั้ง ค่าบริการ eSIM — ไม่แสดงในเมนูคลังสินค้า',
+};
+
+export const isService = (p: Pick<Product, 'itemType'>): boolean => p.itemType === 'service';
+
+type StockFields = Pick<
+  Product,
+  | 'itemType'
+  | 'serialControl'
+  | 'serialPrefix'
+  | 'serialLength'
+  | 'packUnits'
+  | 'minStock'
+  | 'maxStock'
+>;
+
+/**
+ * Clears the stock-only fields of a service SKU (no serials, single unit, no reorder levels).
+ * Stock SKUs are returned unchanged. Shared by the SKU form, Excel import and the mock.
+ */
+export function withServiceRules<T extends StockFields>(p: T): T {
+  return isService(p)
+    ? {
+        ...p,
+        serialControl: false,
+        serialPrefix: '',
+        serialLength: null,
+        packUnits: [],
+        minStock: 0,
+        maxStock: 0,
+      }
+    : p;
+}
 
 export const SKU_STATUS_LABEL: Record<SkuStatus, string> = {
   active: 'ขายได้',

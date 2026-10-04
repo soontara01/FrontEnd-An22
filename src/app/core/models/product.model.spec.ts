@@ -3,15 +3,42 @@ import {
   allBarcodes,
   canPurchase,
   canSell,
+  isService,
   marginPercent,
   stockInPacks,
   suggestReorderQty,
   vatBreakdown,
+  withServiceRules,
 } from './product.model';
 import { branchLabel, creditLabel, isValidThaiTaxId } from './supplier.model';
 import { buildTree, categoryPath, isLeaf } from './category.model';
 
 describe('product model helpers', () => {
+  it('clears stock-only fields of service SKUs and leaves stock SKUs alone', () => {
+    const stocked = {
+      ...PRODUCT_DEFAULTS,
+      serialControl: true,
+      serialPrefix: 'NB',
+      serialLength: 10,
+      minStock: 5,
+      maxStock: 10,
+      packUnits: [{ unit: 'กล่อง', factor: 10, barcode: '' }],
+    };
+    expect(isService(stocked)).toBe(false);
+    expect(withServiceRules(stocked)).toBe(stocked);
+    const service = withServiceRules({ ...stocked, itemType: 'service' as const });
+    expect(isService(service)).toBe(true);
+    expect(service).toMatchObject({
+      serialControl: false,
+      serialPrefix: '',
+      serialLength: null,
+      packUnits: [],
+      minStock: 0,
+      maxStock: 0,
+    });
+    expect(suggestReorderQty({ ...service, stock: 0 })).toBe(0);
+  });
+
   it('splits a VAT-inclusive price into net + VAT (rounded to satang)', () => {
     expect(vatBreakdown(24900, 'vat7')).toEqual({ net: 23271.03, vat: 1628.97 });
     expect(vatBreakdown(107, 'vat7')).toEqual({ net: 100, vat: 7 });

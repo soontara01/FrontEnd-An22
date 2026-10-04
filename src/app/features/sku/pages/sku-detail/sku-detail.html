@@ -19,7 +19,9 @@
       <span class="badge" [class]="st.badge" [matTooltip]="st.hint">{{ st.label }}</span>
     }
     <span class="badge">{{ vatLabel[s.vatType] }}</span>
-    @if (s.serialControl) {
+    @if (service()) {
+      <span class="badge badge-warn">สินค้าบริการ (ไม่มีสต็อก)</span>
+    } @else if (s.serialControl) {
       <span class="badge badge-success">คุม Serial</span>
     } @else {
       <span class="badge">ไม่คุม Serial</span>
@@ -61,18 +63,25 @@
     </mat-card>
 
     <mat-card appearance="outlined">
-      <mat-card-header><mat-card-title>ราคาและสต็อก</mat-card-title></mat-card-header>
+      <mat-card-header>
+        <mat-card-title>{{ service() ? 'ราคาและต้นทุน' : 'ราคาและสต็อก' }}</mat-card-title>
+      </mat-card-header>
       <mat-card-content>
         <dl>
-          <dt>ต้นทุนเฉลี่ย</dt>
-          <dd>
-            {{ s.avgCost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
-            <span class="text-muted small">{{
-              s.serialControl ? '(เฉพาะเจาะจงตาม Serial)' : '(ถัวเฉลี่ยเคลื่อนที่)'
-            }}</span>
-          </dd>
-          <dt>ต้นทุนมาตรฐาน</dt>
-          <dd>{{ s.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</dd>
+          @if (service()) {
+            <dt>ต้นทุนต่อครั้ง</dt>
+            <dd>{{ s.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }} / {{ s.unit }}</dd>
+          } @else {
+            <dt>ต้นทุนเฉลี่ย</dt>
+            <dd>
+              {{ s.avgCost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+              <span class="text-muted small">{{
+                s.serialControl ? '(เฉพาะเจาะจงตาม Serial)' : '(ถัวเฉลี่ยเคลื่อนที่)'
+              }}</span>
+            </dd>
+            <dt>ต้นทุนมาตรฐาน</dt>
+            <dd>{{ s.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</dd>
+          }
           <dt>ราคาขายวันนี้</dt>
           <dd>
             @if (s.currentPrice !== null) {
@@ -96,33 +105,37 @@
               -
             }
           </dd>
-          <dt>สต็อกคงเหลือ</dt>
-          <dd>
-            <strong>{{ s.stock }} {{ s.unit }}</strong>
-            @if (s.packUnits.length && s.stock) {
-              <span class="text-muted small">= {{ stockText() }}</span>
-            }
-            @if (level(); as l) {
-              <span class="badge" [class]="l.badge">{{ l.label }}</span>
-            }
-          </dd>
-          <dt>จุดสั่งซื้อ</dt>
-          <dd>{{ s.minStock }} {{ s.unit }}</dd>
-          <dt>สต็อกสูงสุด</dt>
-          <dd>{{ s.maxStock ? s.maxStock + ' ' + s.unit : 'ไม่กำหนด (2 เท่าจุดสั่งซื้อ)' }}</dd>
-          @if (reorderQty()) {
-            <dt>ควรสั่งซื้อ</dt>
+          @if (!service()) {
+            <dt>สต็อกคงเหลือ</dt>
             <dd>
-              <span class="badge badge-warn">{{ reorderQty() }} {{ s.unit }}</span>
+              <strong>{{ s.stock }} {{ s.unit }}</strong>
+              @if (s.packUnits.length && s.stock) {
+                <span class="text-muted small">= {{ stockText() }}</span>
+              }
+              @if (level(); as l) {
+                <span class="badge" [class]="l.badge">{{ l.label }}</span>
+              }
             </dd>
+            <dt>จุดสั่งซื้อ</dt>
+            <dd>{{ s.minStock }} {{ s.unit }}</dd>
+            <dt>สต็อกสูงสุด</dt>
+            <dd>{{ s.maxStock ? s.maxStock + ' ' + s.unit : 'ไม่กำหนด (2 เท่าจุดสั่งซื้อ)' }}</dd>
+            @if (reorderQty()) {
+              <dt>ควรสั่งซื้อ</dt>
+              <dd>
+                <span class="badge badge-warn">{{ reorderQty() }} {{ s.unit }}</span>
+              </dd>
+            }
           }
         </dl>
       </mat-card-content>
       <mat-card-actions>
-        <a mat-button href="/inventory">
-          <mat-icon>inventory</mat-icon>
-          ดูในคลังสินค้า
-        </a>
+        @if (!service()) {
+          <a mat-button href="/inventory">
+            <mat-icon>inventory</mat-icon>
+            ดูในคลังสินค้า
+          </a>
+        }
         <a mat-button [href]="'/pricing/' + s.id">
           <mat-icon>sell</mat-icon>
           จัดการราคา
@@ -203,12 +216,16 @@
 
     <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>Serial Number และการรับประกัน</mat-card-title>
+        <mat-card-title>{{
+          service() ? 'การรับประกัน' : 'Serial Number และการรับประกัน'
+        }}</mat-card-title>
       </mat-card-header>
       <mat-card-content>
         <dl>
-          <dt>ควบคุม Serial</dt>
-          <dd>{{ s.serialControl ? 'ใช่' : 'ไม่ใช่' }}</dd>
+          @if (!service()) {
+            <dt>ควบคุม Serial</dt>
+            <dd>{{ s.serialControl ? 'ใช่' : 'ไม่ใช่' }}</dd>
+          }
           @if (serialFormat(); as format) {
             <dt>รูปแบบ Serial</dt>
             <dd class="mono">{{ format }}</dd>

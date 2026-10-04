@@ -8,6 +8,7 @@ import {
   allBarcodes,
   categoryPath,
   isLeaf,
+  isService,
 } from '@core/models';
 import { SkuApi } from './sku-api.service';
 
@@ -40,6 +41,7 @@ export class SkuStore {
 
   readonly count = computed(() => this._skus().length);
   readonly serialCount = computed(() => this._skus().filter((s) => s.serialControl).length);
+  readonly serviceCount = computed(() => this._skus().filter((s) => isService(s)).length);
   /** SKUs that cannot be sold right now (ห้ามขาย / เลิกจำหน่าย). */
   readonly notSellableCount = computed(
     () =>
@@ -72,6 +74,7 @@ export class SkuStore {
       'กล่อง',
       'แพ็ค',
       'ลัง',
+      'ครั้ง',
       ...this._skus().flatMap((s) => [s.unit, ...s.packUnits.map((u) => u.unit)]),
     ]),
   );

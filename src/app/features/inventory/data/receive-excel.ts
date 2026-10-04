@@ -3,6 +3,7 @@ import {
   canPurchase,
   effectiveCost,
   isDiscontinued,
+  isService,
   mainSupplier,
   serialFormatError,
 } from '@core/models';
@@ -66,7 +67,7 @@ export const defaultBaseCost = (p: Product): number => mainSupplier(p)?.cost ?? 
 export async function buildReceiveTemplate(products: Product[]): Promise<Blob> {
   const ExcelJS = await loadExcel();
   const workbook = new ExcelJS.Workbook();
-  const receivable = products.filter((p) => !isDiscontinued(p) && canPurchase(p));
+  const receivable = products.filter((p) => !isDiscontinued(p) && !isService(p) && canPurchase(p));
 
   const sheet = workbook.addWorksheet('รับเข้า');
   sheet.columns = RECEIVE_COLUMNS.map((c) => ({
@@ -217,6 +218,10 @@ export function validateReceiveRows(
     }
     if (!product) {
       errors.push(`ไม่พบ SKU ${sku}`);
+      return line;
+    }
+    if (isService(product)) {
+      errors.push('สินค้าบริการไม่มีสต็อก รับเข้าไม่ได้');
       return line;
     }
     if (isDiscontinued(product) || !canPurchase(product)) {

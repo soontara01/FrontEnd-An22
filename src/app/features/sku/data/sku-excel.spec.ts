@@ -95,6 +95,28 @@ describe('SKU Excel import/export', () => {
     expect(results[6].errors.join()).toContain('Serial');
   });
 
+  it('imports service SKUs (stock fields cleared) and rejects stock-only values', () => {
+    const base = { name: 'eSIM', categoryCode: 'IT-NB', unit: 'ครั้ง', itemType: 'service' };
+    const [ok, serial, packs, levels, bad, changed] = validateImportRows(
+      [
+        row(2, { sku: 'SV-1', ...base }),
+        row(3, { sku: 'SV-2', ...base, serialControl: 'Y' }),
+        row(4, { sku: 'SV-3', ...base, packs: 'กล่อง:10:' }),
+        row(5, { sku: 'SV-4', ...base, minStock: '5' }),
+        row(6, { sku: 'SV-5', ...base, itemType: 'X' }),
+        row(7, { sku: 'NB-001', itemType: 'SERVICE' }), // stock > 0
+      ],
+      ctx,
+    );
+    expect(ok.action).toBe('create');
+    expect(ok.payload).toMatchObject({ itemType: 'service', serialControl: false, minStock: 0 });
+    expect(serial.errors.join()).toContain('Serial');
+    expect(packs.errors.join()).toContain('หน่วยแพ็ค');
+    expect(levels.errors.join()).toContain('จุดสั่งซื้อ');
+    expect(bad.errors.join()).toContain('STOCK หรือ SERVICE');
+    expect(changed.errors.join()).toContain('เปลี่ยนประเภท');
+  });
+
   it('round-trips an export through readSkuRows', async () => {
     const blob = await exportSkusToExcel(
       [

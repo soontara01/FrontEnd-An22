@@ -18,6 +18,7 @@ import {
   SKU_STATUS_LABEL,
   VAT_TYPE_LABEL,
   effectiveCost,
+  isService,
   marginPercent,
   creditLabel,
   stockInPacks,
@@ -56,6 +57,10 @@ export default class SkuDetail implements OnInit {
   readonly id = input.required<string>();
 
   protected readonly sku = signal<Product | null>(null);
+  protected readonly service = computed(() => {
+    const sku = this.sku();
+    return !!sku && isService(sku);
+  });
 
   protected readonly level = computed(() => {
     const sku = this.sku();
