@@ -1,0 +1,93 @@
+<h2 mat-dialog-title>{{ isEdit ? 'แก้ไขช่วงราคา' : 'เพิ่มช่วงราคา' }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="product">
+      <span class="mono">{{ data.product.sku }}</span> — {{ data.product.name }}
+      <div class="text-muted small">
+        ต้นทุน {{ cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }} ({{
+          data.product.stock > 0 && data.product.avgCost > 0 ? 'เฉลี่ยจริง' : 'มาตรฐาน'
+        }})
+      </div>
+    </div>
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>ราคาขาย{{ isVat ? ' (รวม VAT)' : '' }}</mat-label>
+      <input matInput appAutofocus type="number" min="0" formControlName="price" />
+      <span matTextSuffix>฿</span>
+      <mat-hint>
+        @if (isVat) {
+          ก่อน VAT {{ breakdown().net | number: '1.2-2' }} + VAT
+          {{ breakdown().vat | number: '1.2-2' }}
+        } @else {
+          ยกเว้น VAT
+        }
+        @if (margin(); as m) {
+          · <span [class.negative]="m < 0">กำไร {{ m | number: '1.1-1' }}%</span>
+        }
+      </mat-hint>
+      @if (form.controls.price.invalid) {
+        <mat-error>กรุณากรอกราคา (ไม่ติดลบ)</mat-error>
+      }
+    </mat-form-field>
+
+    <div class="dates">
+      <mat-form-field appearance="outline">
+        <mat-label>วันที่เริ่ม</mat-label>
+        <input matInput [matDatepicker]="startPicker" formControlName="startDate" />
+        <mat-datepicker-toggle matIconSuffix [for]="startPicker" />
+        <mat-datepicker #startPicker />
+        @if (form.controls.startDate.invalid) {
+          <mat-error>กรุณาเลือกวันที่เริ่ม</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>วันที่สิ้นสุด</mat-label>
+        <input
+          matInput
+          [matDatepicker]="endPicker"
+          [min]="form.controls.startDate.value"
+          formControlName="endDate"
+        />
+        @if (form.controls.endDate.value) {
+          <button
+            mat-icon-button
+            matIconSuffix
+            type="button"
+            aria-label="ล้างวันที่สิ้นสุด"
+            (click)="form.controls.endDate.setValue(null)"
+          >
+            <mat-icon>close</mat-icon>
+          </button>
+        }
+        <mat-datepicker-toggle matIconSuffix [for]="endPicker" />
+        <mat-datepicker #endPicker />
+        <mat-hint>เว้นว่าง = ไม่กำหนดวันสิ้นสุด</mat-hint>
+      </mat-form-field>
+    </div>
+
+    @if (form.hasError('endBeforeStart')) {
+      <p class="problem">วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม</p>
+    }
+    @if (overlap()) {
+      <p class="problem">
+        <mat-icon inline>error</mat-icon>
+        ช่วงวันที่ทับกับราคา {{ overlapText() }} — แก้ไขช่วงเดิมหรือเลือกวันที่ใหม่
+      </p>
+    }
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>หมายเหตุ</mat-label>
+      <input matInput formControlName="note" placeholder="เช่น โปรโมชัน / ปรับราคาตามต้นทุน" />
+    </mat-form-field>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>ยกเลิก</button>
+    <button mat-flat-button type="submit" [disabled]="saving() || !!overlap()">
+      <mat-icon>save</mat-icon>
+      บันทึก
+    </button>
+  </mat-dialog-actions>
+</form>

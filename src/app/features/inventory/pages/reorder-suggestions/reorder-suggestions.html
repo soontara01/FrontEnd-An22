@@ -1,0 +1,127 @@
+<app-page-header
+  title="แนะนำสั่งซื้อ"
+  subtitle="สินค้าที่ถึงจุดสั่งซื้อ แยกตามผู้จำหน่ายหลัก (ราคาไม่รวม VAT)"
+>
+  <a mat-button routerLink="/inventory" class="no-print">
+    <mat-icon>arrow_back</mat-icon>
+    คลังสินค้า
+  </a>
+  <button mat-icon-button matTooltip="โหลดใหม่" class="no-print" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <button mat-stroked-button class="no-print" [disabled]="!store.reorderCount()" (click)="print()">
+    <mat-icon>print</mat-icon>
+    พิมพ์
+  </button>
+</app-page-header>
+
+<section class="stat-grid">
+  <app-stat-card
+    label="รายการที่ควรสั่ง"
+    [value]="store.reorderCount()"
+    icon="shopping_cart"
+    tone="warn"
+  />
+  <app-stat-card label="ผู้จำหน่าย" [value]="supplierCount()" icon="local_shipping" />
+  <app-stat-card
+    label="มูลค่าโดยประมาณ (ก่อน VAT)"
+    [value]="(grandTotal() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="payments"
+  />
+</section>
+
+@if (store.loading() && !store.reorderCount()) {
+  <app-loading-spinner />
+} @else {
+  @for (group of store.reorderGroups(); track group.supplier?.id ?? 0) {
+    <mat-card appearance="outlined" class="group">
+      <mat-card-header>
+        <mat-card-title>{{ group.supplier?.name ?? 'ยังไม่ระบุผู้จำหน่าย' }}</mat-card-title>
+        <mat-card-subtitle>
+          @if (group.supplier; as s) {
+            <span class="mono">{{ s.code }}</span> · {{ branch(s) }} · {{ credit(s.creditDays) }}
+            @if (s.contactName || s.phone) {
+              · {{ s.contactName }} {{ s.phone }}
+            }
+            · ส่งของประมาณ {{ group.maxLeadTime }} วัน
+            @if (!s.active) {
+              <span class="badge badge-error">ผู้จำหน่ายปิดใช้งาน</span>
+            }
+          } @else {
+            ผูกผู้จำหน่ายได้ที่เมนูจัดการ SKU
+          }
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="table-wrap">
+          <table class="lines">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>สินค้า</th>
+                <th class="num">คงเหลือ</th>
+                <th class="num">จุดสั่งซื้อ / สูงสุด</th>
+                <th class="num">แนะนำสั่ง</th>
+                <th class="num">ราคาซื้อ</th>
+                <th class="num">จำนวนเงิน</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of group.lines; track line.product.id) {
+                <tr>
+                  <td class="mono">
+                    {{ line.product.sku }}
+                    @if (line.link?.supplierSku) {
+                      <div class="text-muted small">{{ line.link?.supplierSku }}</div>
+                    }
+                  </td>
+                  <td>{{ line.product.name }}</td>
+                  <td class="num" [class.out]="line.product.stock === 0">
+                    {{ line.product.stock }} {{ line.product.unit }}
+                  </td>
+                  <td class="num text-muted">
+                    {{ line.product.minStock }} /
+                    {{ line.product.maxStock || line.product.minStock * 2 }}
+                  </td>
+                  <td class="num">
+                    <strong>{{ line.qty }} {{ line.product.unit }}</strong>
+                    @if (line.packHint) {
+                      <div class="text-muted small">= {{ line.packHint }}</div>
+                    }
+                    @if (line.link?.moq && line.qty === line.link?.moq) {
+                      <div class="text-muted small">(ขั้นต่ำ MOQ)</div>
+                    }
+                  </td>
+                  <td class="num">
+                    {{ line.unitCost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+                  </td>
+                  <td class="num">
+                    {{ line.amount | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="6" class="num">รวม (ก่อน VAT)</td>
+                <td class="num">
+                  <strong>{{ group.total | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  } @empty {
+    <mat-card appearance="outlined">
+      <app-empty-state icon="task_alt" message="ยังไม่มีสินค้าที่ถึงจุดสั่งซื้อ" />
+    </mat-card>
+  }
+
+  <p class="text-muted small note">
+    วิธีคำนวณ: แนะนำเมื่อคงเหลือ ≤ จุดสั่งซื้อ และสถานะยังสั่งซื้อได้ · สั่งเติมให้ถึงสต็อกสูงสุด
+    (ไม่กำหนด = 2 เท่าจุดสั่งซื้อ) · ไม่น้อยกว่า MOQ ของผู้จำหน่ายหลัก ·
+    ปัดขึ้นเป็นแพ็ค/กล่องที่เล็กที่สุด
+  </p>
+}

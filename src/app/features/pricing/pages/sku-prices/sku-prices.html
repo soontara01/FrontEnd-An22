@@ -1,0 +1,124 @@
+@if (row(); as r) {
+  <app-page-header [title]="r.product.sku" [subtitle]="r.product.name">
+    <a mat-button routerLink="/pricing">
+      <mat-icon>arrow_back</mat-icon>
+      กลับ
+    </a>
+    <button mat-flat-button (click)="openForm()">
+      <mat-icon>add</mat-icon>
+      เพิ่มช่วงราคา
+    </button>
+  </app-page-header>
+
+  <section class="summary">
+    <div>
+      <div class="text-muted">ราคาวันนี้</div>
+      @if (r.current) {
+        <div class="value">{{ r.current.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</div>
+      } @else {
+        <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
+      }
+    </div>
+    <div>
+      <div class="text-muted">ต้นทุนเฉลี่ย (ไม่รวม VAT)</div>
+      <div class="value">
+        {{ effectiveCost(r.product) | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+      </div>
+      <div class="text-muted small">
+        มาตรฐาน {{ r.product.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+      </div>
+    </div>
+    <div>
+      <div class="text-muted">กำไรขั้นต้นวันนี้</div>
+      <div class="value">{{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}</div>
+    </div>
+    <div>
+      <div class="text-muted">ราคาถัดไป</div>
+      @if (r.next) {
+        <div class="value">{{ r.next.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</div>
+        <div class="text-muted small">เริ่ม {{ r.next.startDate | thaiDate }}</div>
+      } @else {
+        <div class="value">-</div>
+      }
+    </div>
+  </section>
+
+  <mat-card appearance="outlined">
+    @if (periods().length) {
+      <div class="table-wrap">
+        <table mat-table [dataSource]="periods()">
+          <ng-container matColumnDef="price">
+            <th mat-header-cell *matHeaderCellDef class="num">ราคาขาย</th>
+            <td mat-cell *matCellDef="let p" class="num">
+              <strong>{{ p.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="startDate">
+            <th mat-header-cell *matHeaderCellDef>วันที่เริ่ม</th>
+            <td mat-cell *matCellDef="let p">{{ p.startDate | thaiDate }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="endDate">
+            <th mat-header-cell *matHeaderCellDef>วันที่สิ้นสุด</th>
+            <td mat-cell *matCellDef="let p">
+              @if (p.endDate) {
+                {{ p.endDate | thaiDate }}
+              } @else {
+                <span class="text-muted">ไม่กำหนด</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+            <td mat-cell *matCellDef="let p">
+              <span class="badge" [class]="statusBadge(p)">{{ statusText(p) }}</span>
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="margin">
+            <th mat-header-cell *matHeaderCellDef class="num">กำไร</th>
+            <td mat-cell *matCellDef="let p" class="num">
+              @if (margin(p); as m) {
+                <span [class.negative]="m < 0">{{ m | number: '1.1-1' }}%</span>
+              } @else {
+                -
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="note">
+            <th mat-header-cell *matHeaderCellDef>หมายเหตุ</th>
+            <td mat-cell *matCellDef="let p">{{ p.note || '-' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let p" class="actions">
+              <button mat-icon-button matTooltip="แก้ไข" (click)="openForm(p)">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบ" (click)="remove(p)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="columns"></tr>
+          <tr
+            mat-row
+            *matRowDef="let row; columns: columns"
+            [class.current]="status(row) === 'active'"
+          ></tr>
+        </table>
+      </div>
+    } @else {
+      <app-empty-state icon="sell" message="SKU นี้ยังไม่มีช่วงราคา">
+        <button mat-flat-button (click)="openForm()">เพิ่มช่วงราคาแรก</button>
+      </app-empty-state>
+    }
+  </mat-card>
+} @else {
+  <app-loading-spinner />
+}

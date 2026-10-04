@@ -1,0 +1,183 @@
+<app-page-header title="คลังสินค้า" subtitle="รายการสินค้าและจำนวนคงเหลือ">
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <a mat-flat-button routerLink="reorder">
+    <mat-icon>shopping_cart</mat-icon>
+    แนะนำสั่งซื้อ
+    @if (store.reorderCount()) {
+      <span class="count">{{ store.reorderCount() }}</span>
+    }
+  </a>
+</app-page-header>
+
+<section class="stat-grid">
+  <app-stat-card label="สินค้าทั้งหมด" [value]="store.totalItems()" icon="inventory_2" />
+  <app-stat-card label="ใกล้หมด" [value]="store.lowStockCount()" icon="warning" tone="warn" />
+  <app-stat-card
+    label="หมดสต็อก"
+    [value]="store.outOfStockCount()"
+    icon="remove_shopping_cart"
+    tone="error"
+  />
+  <app-stat-card
+    label="มูลค่าคงคลัง (ราคาทุน)"
+    [value]="(store.costValue() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="account_balance_wallet"
+  />
+  <app-stat-card
+    label="มูลค่าตามราคาขาย"
+    [value]="(store.saleValue() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="payments"
+  />
+</section>
+
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>ค้นหา SKU / ชื่อ / หมวดหมู่</mat-label>
+    <input matInput [value]="filterText()" (input)="filterText.set($any($event.target).value)" />
+    <mat-icon matPrefix>search</mat-icon>
+  </mat-form-field>
+  <mat-slide-toggle [checked]="lowOnly()" (change)="lowOnly.set($event.checked)">
+    เฉพาะสินค้าใกล้หมด/หมด
+  </mat-slide-toggle>
+</div>
+
+<mat-card appearance="outlined">
+  @if (store.loading() && store.totalItems() === 0) {
+    <app-loading-spinner />
+  }
+
+  <div class="table-wrap" [hidden]="store.totalItems() === 0">
+    <table mat-table matSort [dataSource]="dataSource">
+      <ng-container matColumnDef="sku">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>SKU</th>
+        <td mat-cell *matCellDef="let p" class="mono">{{ p.sku }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>ชื่อสินค้า</th>
+        <td mat-cell *matCellDef="let p">
+          {{ p.name }}
+          @if (p.saleStatus !== 'active') {
+            <span class="badge serial" [class]="statusClass(p)">{{ statusText(p) }}</span>
+          }
+          @if (p.serialControl) {
+            <span class="badge badge-success serial">Serial</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="category">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>หมวดหมู่</th>
+        <td mat-cell *matCellDef="let p" class="small">{{ p.categoryPath || '-' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="currentPrice">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">ราคา</th>
+        <td mat-cell *matCellDef="let p" class="num">
+          @if (p.currentPrice !== null) {
+            {{ p.currentPrice | currency: 'THB' : 'symbol-narrow' : '1.0-0' }}
+          } @else {
+            <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="stock">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">คงเหลือ</th>
+        <td mat-cell *matCellDef="let p" class="num">
+          <strong>{{ p.stock }}</strong> {{ p.unit }}
+          @if (p.packUnits.length && p.stock) {
+            <div class="text-muted small">= {{ inPacks(p) }}</div>
+          }
+          <span class="text-muted"> / ขั้นต่ำ {{ p.minStock }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="avgCost">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">
+          ต้นทุนเฉลี่ย / มูลค่าทุน
+        </th>
+        <td mat-cell *matCellDef="let p" class="num">
+          {{ p.avgCost | number: '1.2-2' }}
+          <div class="text-muted small">{{ value(p) | number: '1.0-0' }} ฿</div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="level">
+        <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+        <td mat-cell *matCellDef="let p">
+          <span class="badge" [class]="levelClass[level(p)]">{{ levelLabel[level(p)] }}</span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef class="actions">ปรับสต็อก</th>
+        <td mat-cell *matCellDef="let p" class="actions">
+          @if (p.serialControl) {
+            <!-- Serial SKU: stock moves only by serial number -->
+            <button
+              mat-icon-button
+              matTooltip="ตัดออก Serial"
+              [disabled]="p.stock === 0"
+              (click)="openRemove(p)"
+            >
+              <mat-icon>remove_circle</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              matTooltip="รับเข้า Serial"
+              [disabled]="!canPurchase(p)"
+              (click)="openReceive(p)"
+            >
+              <mat-icon>qr_code_scanner</mat-icon>
+            </button>
+            <button mat-icon-button matTooltip="ประวัติ Serial" (click)="openHistory(p)">
+              <mat-icon>history</mat-icon>
+            </button>
+            <a
+              mat-icon-button
+              matTooltip="พิมพ์ป้าย Serial"
+              [routerLink]="['serial-labels', p.id]"
+              [disabled]="p.stock === 0"
+            >
+              <mat-icon>print</mat-icon>
+            </a>
+          } @else {
+            <button
+              mat-icon-button
+              matTooltip="ตัดออก (ระบุจำนวน)"
+              [disabled]="p.stock === 0"
+              (click)="openStockIssue(p)"
+            >
+              <mat-icon>remove_circle_outline</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              matTooltip="รับเข้า (ระบุต้นทุน)"
+              [disabled]="!canPurchase(p)"
+              (click)="openStockReceive(p)"
+            >
+              <mat-icon>add_box</mat-icon>
+            </button>
+          }
+          <a mat-icon-button matTooltip="บัตรสต็อก" [routerLink]="['stock-card', p.id]">
+            <mat-icon>receipt_long</mat-icon>
+          </a>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      <tr class="mat-row" *matNoDataRow>
+        <td class="mat-cell no-data" [attr.colspan]="columns.length">ไม่พบสินค้าที่ตรงเงื่อนไข</td>
+      </tr>
+    </table>
+    <mat-paginator [pageSizeOptions]="[5, 10, 25]" [pageSize]="10" showFirstLastButtons />
+  </div>
+
+  @if (!store.loading() && store.totalItems() === 0) {
+    <app-empty-state icon="inventory_2" message="ยังไม่มีสินค้า" />
+  }
+</mat-card>

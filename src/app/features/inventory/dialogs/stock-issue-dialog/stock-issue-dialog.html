@@ -1,0 +1,71 @@
+<h2 mat-dialog-title>ตัดสินค้าออก</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="product">
+      <span class="mono">{{ product.sku }}</span> — {{ product.name }}
+      <div class="text-muted small">
+        คงเหลือ {{ product.stock }} {{ product.unit }} · ต้นทุนเฉลี่ย
+        {{ product.avgCost | number: '1.2-2' }} ฿
+      </div>
+    </div>
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>จำนวน</mat-label>
+        <input matInput appAutofocus type="number" min="1" step="1" formControlName="qty" />
+        @if (form.controls.qty.invalid) {
+          <mat-error>จำนวนเต็มตั้งแต่ 1</mat-error>
+        }
+      </mat-form-field>
+      @if (units.length > 1) {
+        <mat-form-field appearance="outline">
+          <mat-label>หน่วย</mat-label>
+          <mat-select formControlName="unit">
+            @for (u of units; track u.name) {
+              <mat-option [value]="u.name">{{ u.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+      <button mat-stroked-button type="button" (click)="issueAll()">ทั้งหมด</button>
+    </div>
+    @if (overStock()) {
+      <p class="scan-error">เกินสต็อกคงเหลือ ({{ product.stock }} {{ product.unit }})</p>
+    }
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>เหตุผล</mat-label>
+        <mat-select formControlName="reason">
+          @for (r of reasons; track r) {
+            <mat-option [value]="r">{{ reasonLabel[r] }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>หมายเหตุ{{ noteRequired() ? ' (จำเป็น)' : '' }}</mat-label>
+        <input matInput formControlName="note" placeholder="เช่น เลขที่ใบขาย / อาการเสีย" />
+      </mat-form-field>
+    </div>
+
+    <div class="summary-box">
+      <div>
+        ตัดออก <strong>{{ baseQty() }} {{ product.unit }}</strong> · ต้นทุน
+        <strong>{{ issueCost() | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</strong>
+      </div>
+      <div class="text-muted small">
+        คงเหลือหลังตัด {{ remaining() }} {{ product.unit }} · ตัดที่ต้นทุนเฉลี่ย
+        (ต้นทุนเฉลี่ยไม่เปลี่ยน)
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>ยกเลิก</button>
+    <button mat-flat-button type="submit" [disabled]="!canSave()">
+      <mat-icon>remove_circle_outline</mat-icon>
+      ตัดออก {{ baseQty() }} {{ product.unit }}
+    </button>
+  </mat-dialog-actions>
+</form>

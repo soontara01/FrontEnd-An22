@@ -1,0 +1,13 @@
+.card {
+  max-width: 640px;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  padding-top: 16px;
+}
+
+mat-slide-toggle {
+  margin-bottom: 16px;
+}

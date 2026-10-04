@@ -1,0 +1,85 @@
+.pick {
+  padding-top: 16px;
+}
+
+.steps {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  line-height: 1.8;
+}
+
+.actions,
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.file {
+  font: var(--mat-sys-title-small);
+}
+
+.problem {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.rows {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  th {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-medium);
+  }
+
+  .num {
+    text-align: right;
+  }
+
+  tr.error td {
+    background: color-mix(in srgb, var(--mat-sys-error-container) 35%, transparent);
+  }
+
+  .empty {
+    text-align: center;
+    padding: 24px;
+  }
+}
+
+.errors {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+}
+
+.ok {
+  color: var(--mat-sys-primary);
+}
+
+.fail {
+  color: var(--mat-sys-error);
+}

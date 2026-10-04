@@ -1,0 +1,56 @@
+<div class="label-sheet">
+  @for (page of pages(); track $index) {
+    <section
+      class="page"
+      [style.padding-top.mm]="layout().marginTop"
+      [style.padding-left.mm]="layout().marginLeft"
+    >
+      <div
+        class="grid"
+        [style.grid-template-columns]="'repeat(' + layout().cols + ', ' + layout().width + 'mm)'"
+        [style.grid-auto-rows.mm]="layout().height"
+      >
+        @for (label of page; track $index) {
+          <div class="label" [class.shelf]="layout().kind === 'shelf'" [class.empty]="!label">
+            @if (label) {
+              @if (layout().kind === 'shelf') {
+                <div class="title">{{ label.title }}</div>
+                @if (label.subtitle) {
+                  <div class="subtitle">{{ label.subtitle }}</div>
+                }
+                <div class="price-row">
+                  @if (label.price !== null && label.price !== undefined) {
+                    <span class="price">{{
+                      label.price | currency: 'THB' : 'symbol-narrow' : '1.0-2'
+                    }}</span>
+                  } @else {
+                    <span class="no-price">สอบถามราคา</span>
+                  }
+                </div>
+                @if (label.priceNote) {
+                  <div class="note">{{ label.priceNote }}</div>
+                }
+                @if (label.barcode) {
+                  <app-barcode class="code" [value]="label.barcode" />
+                }
+              } @else {
+                <div class="title">{{ label.title }}</div>
+                @if (label.subtitle) {
+                  <div class="subtitle">{{ label.subtitle }}</div>
+                }
+                @if (label.barcode) {
+                  <app-barcode class="code" [value]="label.barcode" />
+                }
+                @if (label.price !== null && label.price !== undefined) {
+                  <div class="sticker-price">
+                    {{ label.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+                  </div>
+                }
+              }
+            }
+          </div>
+        }
+      </div>
+    </section>
+  }
+</div>

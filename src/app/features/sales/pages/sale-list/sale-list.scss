@@ -1,0 +1,30 @@
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+}
+
+.num {
+  text-align: right;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.status-filter {
+  max-width: 180px;
+}
+
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.no-data {
+  padding: 16px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}

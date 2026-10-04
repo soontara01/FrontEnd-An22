@@ -1,0 +1,439 @@
+<app-page-header [title]="isEdit() ? 'แก้ไข SKU' : 'เพิ่ม SKU'">
+  <a mat-button [routerLink]="isEdit() ? ['/sku', id()] : ['/sku']">
+    <mat-icon>arrow_back</mat-icon>
+    กลับ
+  </a>
+</app-page-header>
+
+@if (loading()) {
+  <app-loading-spinner />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="save()" class="layout">
+    <!-- General -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>ข้อมูลทั่วไป</mat-card-title></mat-card-header>
+      <mat-card-content class="grid">
+        <mat-form-field appearance="outline">
+          <mat-label>รหัส SKU</mat-label>
+          <input
+            matInput
+            appAutofocus
+            formControlName="sku"
+            class="mono"
+            (input)="toUpper('sku')"
+          />
+          <mat-hint>A-Z, 0-9 และ -</mat-hint>
+          @if (form.controls.sku.hasError('required')) {
+            <mat-error>กรุณากรอกรหัส SKU</mat-error>
+          } @else if (form.controls.sku.hasError('pattern')) {
+            <mat-error>ใช้ได้เฉพาะ A-Z, 0-9 และ -</mat-error>
+          } @else if (form.controls.sku.hasError('duplicate')) {
+            <mat-error>รหัส SKU นี้มีอยู่แล้ว</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>ชื่อสินค้า</mat-label>
+          <input matInput formControlName="name" (blur)="suggestShortName()" />
+          @if (form.controls.name.hasError('required')) {
+            <mat-error>กรุณากรอกชื่อสินค้า</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ชื่อย่อบนใบเสร็จ</mat-label>
+          <input matInput formControlName="shortName" [maxlength]="shortNameMax" />
+          <mat-hint align="end">{{ shortNameLength() }} / {{ shortNameMax }}</mat-hint>
+          @if (form.controls.shortName.hasError('required')) {
+            <mat-error>กรุณากรอกชื่อย่อ</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>หมวดหมู่</mat-label>
+          <mat-select formControlName="categoryId">
+            @for (group of store.leafGroups(); track group.label) {
+              <mat-optgroup [label]="group.label">
+                @for (c of group.options; track c.id) {
+                  <mat-option [value]="c.id" [disabled]="!c.active">
+                    {{ c.name }}
+                    <span class="text-muted mono small">{{ c.code }}</span>
+                  </mat-option>
+                }
+              </mat-optgroup>
+            }
+          </mat-select>
+          <mat-hint>เลือกหมวดหมู่ย่อยสุด · จัดการได้ที่เมนูข้อมูลหลัก</mat-hint>
+          @if (form.controls.categoryId.hasError('required')) {
+            <mat-error>กรุณาเลือกหมวดหมู่</mat-error>
+          } @else if (form.controls.categoryId.hasError('notSelectable')) {
+            <mat-error>หมวดหมู่นี้ปิดใช้งานหรือไม่ใช่หมวดย่อยสุด</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ยี่ห้อ</mat-label>
+          <input matInput formControlName="brand" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>รุ่น</mat-label>
+          <input matInput formControlName="model" />
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Sale status, VAT, cost, stock -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>การขาย ภาษี และต้นทุน</mat-card-title></mat-card-header>
+      <mat-card-content class="grid">
+        <mat-form-field appearance="outline">
+          <mat-label>สถานะการขาย</mat-label>
+          <mat-select formControlName="saleStatus">
+            @for (s of statuses; track s) {
+              <mat-option [value]="s">{{ statusLabel[s] }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint>{{ selectedStatusHint() }}</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ภาษีมูลค่าเพิ่ม</mat-label>
+          <mat-select formControlName="vatType">
+            @for (v of vatTypes; track v) {
+              <mat-option [value]="v">{{ vatLabel[v] }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint>ราคาขายในเมนูจัดการราคาเป็นราคารวม VAT</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ต้นทุนมาตรฐาน (ไม่รวม VAT)</mat-label>
+          <input matInput type="number" min="0" formControlName="cost" />
+          <span matTextSuffix>฿ / {{ baseUnit() }}</span>
+          <mat-hint>ใช้ตั้งต้นตอนรับเข้า และประมาณกำไรเมื่อยังไม่มีสต็อก</mat-hint>
+          @if (form.controls.cost.invalid) {
+            <mat-error>ต้องไม่ติดลบ</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>จุดสั่งซื้อ (สต็อกขั้นต่ำ)</mat-label>
+          <input matInput type="number" min="0" formControlName="minStock" />
+          <span matTextSuffix>{{ baseUnit() }}</span>
+          <mat-hint>ถึงค่านี้ = "ใกล้หมด" และควรสั่งซื้อ</mat-hint>
+          @if (form.controls.minStock.invalid) {
+            <mat-error>ต้องไม่ติดลบ</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>สต็อกสูงสุด</mat-label>
+          <input matInput type="number" min="0" formControlName="maxStock" />
+          <span matTextSuffix>{{ baseUnit() }}</span>
+          <mat-hint>สั่งเติมให้ถึงค่านี้ (0 = 2 เท่าของจุดสั่งซื้อ)</mat-hint>
+          @if (form.controls.maxStock.invalid) {
+            <mat-error>ต้องไม่ติดลบ</mat-error>
+          }
+        </mat-form-field>
+
+        <div class="readonly">
+          <div class="text-muted">ราคาขายวันนี้</div>
+          @if (currentPrice() !== null) {
+            <strong>{{ currentPrice() | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+          } @else {
+            <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
+          }
+          <div class="text-muted small">กำหนดที่เมนูจัดการราคา</div>
+        </div>
+
+        <div class="readonly">
+          <div class="text-muted">ต้นทุนเฉลี่ยจริง</div>
+          <strong>{{ avgCost() | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+          <div class="text-muted small">คำนวณจากการรับเข้า (ดูบัตรสต็อกที่เมนูคลังสินค้า)</div>
+        </div>
+
+        <div class="readonly">
+          <div class="text-muted">สต็อกคงเหลือ</div>
+          <strong>{{ currentStock() ?? 0 }} {{ baseUnit() }}</strong>
+          <div class="text-muted small">ปรับจำนวนได้ที่เมนูคลังสินค้า</div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Units & barcodes -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>หน่วยนับและบาร์โค้ด</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <div class="grid">
+          <mat-form-field appearance="outline">
+            <mat-label>หน่วยฐาน (นับสต็อก)</mat-label>
+            <input matInput formControlName="unit" [matAutocomplete]="unitAuto" />
+            <mat-autocomplete #unitAuto="matAutocomplete">
+              @for (u of unitOptions(); track u) {
+                <mat-option [value]="u">{{ u }}</mat-option>
+              }
+            </mat-autocomplete>
+            @if (form.controls.unit.hasError('required')) {
+              <mat-error>กรุณาระบุหน่วยนับ</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>บาร์โค้ด ({{ baseUnit() }})</mat-label>
+            <input matInput formControlName="barcode" inputmode="numeric" class="mono" />
+            <mat-icon matSuffix>barcode</mat-icon>
+            @if (form.controls.barcode.hasError('pattern')) {
+              <mat-error>ตัวเลขไม่เกิน 14 หลัก</mat-error>
+            } @else if (form.controls.barcode.hasError('barcodeTaken')) {
+              <mat-error>ใช้แล้วกับ {{ form.controls.barcode.getError('barcodeTaken') }}</mat-error>
+            }
+          </mat-form-field>
+        </div>
+
+        @if (serialControl()) {
+          <p class="text-muted small">
+            <mat-icon inline>info</mat-icon>
+            สินค้าคุม Serial มีหน่วยเดียว (1 Serial = 1 {{ baseUnit() }})
+            จึงเพิ่มหน่วยแพ็ค/ลังไม่ได้
+          </p>
+        } @else {
+          <h3 class="section-title">หน่วยใหญ่ (แพ็ค / กล่อง / ลัง)</h3>
+          <div formArrayName="packUnits" class="packs">
+            @for (pack of packs.controls; track pack; let i = $index) {
+              <div class="pack-row" [formGroupName]="i">
+                <mat-form-field appearance="outline">
+                  <mat-label>หน่วย</mat-label>
+                  <input matInput formControlName="unit" [matAutocomplete]="unitAuto" />
+                  @if (pack.controls.unit.hasError('required')) {
+                    <mat-error>กรุณาระบุ</mat-error>
+                  }
+                </mat-form-field>
+                <mat-form-field appearance="outline" class="factor">
+                  <mat-label>บรรจุ</mat-label>
+                  <input matInput type="number" min="2" step="1" formControlName="factor" />
+                  <span matTextSuffix>{{ baseUnit() }}</span>
+                  @if (pack.controls.factor.invalid) {
+                    <mat-error>จำนวนเต็ม ≥ 2</mat-error>
+                  }
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>บาร์โค้ด</mat-label>
+                  <input matInput formControlName="barcode" inputmode="numeric" class="mono" />
+                  @if (pack.controls.barcode.hasError('pattern')) {
+                    <mat-error>ตัวเลขไม่เกิน 14 หลัก</mat-error>
+                  } @else if (pack.controls.barcode.hasError('barcodeTaken')) {
+                    <mat-error
+                      >ใช้แล้วกับ {{ pack.controls.barcode.getError('barcodeTaken') }}</mat-error
+                    >
+                  }
+                </mat-form-field>
+                <span class="text-muted small conversion">
+                  1 {{ pack.controls.unit.value || '?' }} = {{ pack.controls.factor.value }}
+                  {{ baseUnit() }}
+                </span>
+                <button
+                  mat-icon-button
+                  type="button"
+                  matTooltip="ลบหน่วยนี้"
+                  (click)="removePack(i)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            }
+          </div>
+          @for (problem of packProblems(); track problem) {
+            <p class="problem">{{ problem }}</p>
+          }
+          <button mat-stroked-button type="button" (click)="addPack()">
+            <mat-icon>add</mat-icon>
+            เพิ่มหน่วย
+          </button>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Suppliers & reorder -->
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>ผู้จำหน่ายและการสั่งซื้อ</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div formArrayName="suppliers" class="suppliers">
+          @for (row of supplierLinks.controls; track row; let i = $index) {
+            <div class="supplier-row" [class.main]="row.controls.isMain.value" [formGroupName]="i">
+              <mat-form-field appearance="outline" class="supplier-select">
+                <mat-label>ผู้จำหน่าย</mat-label>
+                <mat-select formControlName="supplierId">
+                  @for (s of supplierOptions(row); track s.id) {
+                    <mat-option [value]="s.id">
+                      {{ s.name }} <span class="text-muted mono small">{{ s.code }}</span>
+                    </mat-option>
+                  }
+                </mat-select>
+                @if (row.controls.supplierId.hasError('required')) {
+                  <mat-error>กรุณาเลือก</mat-error>
+                }
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>รหัสสินค้าของผู้จำหน่าย</mat-label>
+                <input matInput formControlName="supplierSku" class="mono" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="narrow">
+                <mat-label>ราคาซื้อ (ไม่รวม VAT)</mat-label>
+                <input matInput type="number" min="0" formControlName="cost" />
+                <span matTextSuffix>฿</span>
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="narrow">
+                <mat-label>Lead time</mat-label>
+                <input matInput type="number" min="0" formControlName="leadTimeDays" />
+                <span matTextSuffix>วัน</span>
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="narrow">
+                <mat-label>สั่งขั้นต่ำ (MOQ)</mat-label>
+                <input matInput type="number" min="0" formControlName="moq" />
+                <span matTextSuffix>{{ baseUnit() }}</span>
+              </mat-form-field>
+              <button
+                mat-icon-button
+                type="button"
+                [matTooltip]="
+                  row.controls.isMain.value ? 'ผู้จำหน่ายหลัก' : 'ตั้งเป็นผู้จำหน่ายหลัก'
+                "
+                [attr.aria-pressed]="row.controls.isMain.value"
+                (click)="setMainSupplier(i)"
+              >
+                <mat-icon [class.star]="row.controls.isMain.value">{{
+                  row.controls.isMain.value ? 'star' : 'star_outline'
+                }}</mat-icon>
+              </button>
+              <button mat-icon-button type="button" matTooltip="ลบ" (click)="removeSupplier(i)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </div>
+          } @empty {
+            <p class="text-muted small">
+              ยังไม่ได้ผูกผู้จำหน่าย (จะไม่แสดงในหน้าแนะนำสั่งซื้อแยกตามผู้จำหน่าย)
+            </p>
+          }
+        </div>
+        @for (problem of supplierProblems(); track problem) {
+          <p class="problem">{{ problem }}</p>
+        }
+        <button mat-stroked-button type="button" (click)="addSupplier()">
+          <mat-icon>add</mat-icon>
+          เพิ่มผู้จำหน่าย
+        </button>
+        <p class="text-muted small">
+          <mat-icon inline>star</mat-icon> = ผู้จำหน่ายหลัก
+          ใช้คำนวณจำนวนสั่งขั้นต่ำและจัดกลุ่มในหน้าแนะนำสั่งซื้อ (เมนูคลังสินค้า)
+        </p>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Image -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>รูปสินค้า</mat-card-title></mat-card-header>
+      <mat-card-content class="image-row">
+        <div class="image-box">
+          @if (imageUrl()) {
+            <img [src]="imageUrl()" alt="รูปสินค้า" />
+          } @else {
+            <mat-icon>image</mat-icon>
+          }
+        </div>
+        <div>
+          <input
+            #fileInput
+            type="file"
+            accept="image/*"
+            hidden
+            (change)="onImageSelected($event)"
+          />
+          <button mat-stroked-button type="button" (click)="fileInput.click()">
+            <mat-icon>upload</mat-icon>
+            {{ imageUrl() ? 'เปลี่ยนรูป' : 'อัปโหลดรูป' }}
+          </button>
+          @if (imageUrl()) {
+            <button mat-button type="button" (click)="removeImage()">ลบรูป</button>
+          }
+          <p class="text-muted small">ระบบย่อรูปให้ไม่เกิน 400×400 px อัตโนมัติ</p>
+          @if (imageError()) {
+            <p class="problem">{{ imageError() }}</p>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Serial & warranty -->
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Serial Number และการรับประกัน</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <mat-slide-toggle formControlName="serialControl">ควบคุม Serial Number</mat-slide-toggle>
+        <p class="text-muted small">
+          @if (serialControl()) {
+            สินค้าแต่ละชิ้นของ SKU นี้ต้องมี Serial Number ประจำตัว
+          } @else {
+            ไม่ต้องบันทึก Serial Number นับเป็นจำนวนอย่างเดียว
+          }
+          @if (form.controls.serialControl.disabled) {
+            <br />
+            <mat-icon inline>lock</mat-icon>
+            ยังมีสต็อกคงเหลือ ต้องตัดสต็อกเป็น 0 ก่อนจึงเปลี่ยนการคุม Serial ได้
+          }
+        </p>
+
+        <div class="grid">
+          @if (serialControl()) {
+            <mat-form-field appearance="outline">
+              <mat-label>Prefix ของ Serial (ถ้ามี)</mat-label>
+              <input
+                matInput
+                formControlName="serialPrefix"
+                class="mono"
+                (input)="toUpper('serialPrefix')"
+              />
+              @if (form.controls.serialPrefix.invalid) {
+                <mat-error>A-Z, 0-9, - ไม่เกิน 10 ตัว</mat-error>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>ความยาว Serial (ถ้ากำหนด)</mat-label>
+              <input matInput type="number" min="1" max="50" formControlName="serialLength" />
+              <mat-hint class="mono">ตัวอย่าง: {{ serialPreview() }}</mat-hint>
+              @if (form.controls.serialLength.invalid) {
+                <mat-error>1 - 50 ตัวอักษร</mat-error>
+              }
+            </mat-form-field>
+          }
+
+          <mat-form-field appearance="outline">
+            <mat-label>ระยะรับประกัน</mat-label>
+            <input matInput type="number" min="0" max="120" formControlName="warrantyMonths" />
+            <span matTextSuffix>เดือน</span>
+            <mat-hint>0 = ไม่มีรับประกัน</mat-hint>
+            @if (form.controls.warrantyMonths.invalid) {
+              <mat-error>0 - 120 เดือน</mat-error>
+            }
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Actions -->
+    <mat-card appearance="outlined">
+      <mat-card-content class="footer">
+        <span class="spacer"></span>
+        <a mat-button [routerLink]="isEdit() ? ['/sku', id()] : ['/sku']">ยกเลิก</a>
+        <button mat-flat-button type="submit" [disabled]="saving()">
+          <mat-icon>save</mat-icon>
+          บันทึก
+        </button>
+      </mat-card-content>
+    </mat-card>
+  </form>
+}

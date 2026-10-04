@@ -1,0 +1,43 @@
+.container {
+  height: 100vh;
+}
+
+.sidenav {
+  width: 240px;
+  border-right: 1px solid var(--mat-sys-outline-variant);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 64px;
+  padding: 0 16px;
+  font: var(--mat-sys-title-medium);
+  color: var(--mat-sys-primary);
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  gap: 4px;
+  background: var(--mat-sys-surface-container);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.progress {
+  height: 4px;
+}
+
+// Full width (no max-width) so hiding the menu actually gives more room to tables.
+.content {
+  padding: 24px;
+
+  @media (max-width: 599px) {
+    padding: 16px;
+  }
+}

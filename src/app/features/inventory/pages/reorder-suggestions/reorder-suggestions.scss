@@ -1,0 +1,52 @@
+.group {
+  margin-bottom: 16px;
+}
+
+mat-card-content {
+  padding-top: 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.lines {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    vertical-align: top;
+  }
+
+  th {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-medium);
+  }
+
+  tfoot td {
+    border-bottom: none;
+  }
+
+  .num {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .out {
+    color: var(--mat-sys-error);
+  }
+}
+
+.note {
+  margin-top: 8px;
+}
+
+@media print {
+  .group {
+    break-inside: avoid;
+  }
+}

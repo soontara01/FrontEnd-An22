@@ -1,0 +1,186 @@
+<div class="title-row">
+  <a mat-button routerLink="/master-data/suppliers">
+    <mat-icon>arrow_back</mat-icon>
+    กลับ
+  </a>
+  <h2>{{ isEdit() ? 'แก้ไขผู้จำหน่าย' : 'เพิ่มผู้จำหน่าย' }}</h2>
+  @if (productCount()) {
+    <span class="badge">ผูกกับ SKU {{ productCount() }} รายการ</span>
+  }
+</div>
+
+@if (loading()) {
+  <app-loading-spinner />
+} @else {
+  <form [formGroup]="form" (ngSubmit)="save()" class="layout">
+    <!-- Company / tax -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>ข้อมูลบริษัทและภาษี</mat-card-title></mat-card-header>
+      <mat-card-content class="grid">
+        <mat-form-field appearance="outline">
+          <mat-label>รหัสผู้จำหน่าย</mat-label>
+          <input
+            matInput
+            appAutofocus
+            formControlName="code"
+            class="mono"
+            (input)="toUpperCode()"
+          />
+          <mat-hint>เช่น SUP-ITD</mat-hint>
+          @if (form.controls.code.hasError('required')) {
+            <mat-error>กรุณากรอกรหัส</mat-error>
+          } @else if (form.controls.code.hasError('pattern')) {
+            <mat-error>ใช้ได้เฉพาะ A-Z, 0-9 และ -</mat-error>
+          } @else if (form.controls.code.hasError('duplicate')) {
+            <mat-error>รหัสนี้มีอยู่แล้ว</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>ชื่อผู้จำหน่าย</mat-label>
+          <input matInput formControlName="name" />
+          @if (form.controls.name.hasError('required')) {
+            <mat-error>กรุณากรอกชื่อ</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>เลขประจำตัวผู้เสียภาษี</mat-label>
+          <input
+            matInput
+            formControlName="taxId"
+            class="mono"
+            inputmode="numeric"
+            maxlength="13"
+            (input)="digitsOnly('taxId')"
+          />
+          <mat-hint align="end">{{ form.controls.taxId.value.length }} / 13</mat-hint>
+          @if (form.controls.taxId.hasError('required')) {
+            <mat-error>กรุณากรอกเลขผู้เสียภาษี</mat-error>
+          } @else if (form.controls.taxId.hasError('pattern')) {
+            <mat-error>ต้องเป็นตัวเลข 13 หลัก</mat-error>
+          } @else if (form.controls.taxId.hasError('taxId')) {
+            <mat-error>เลขผู้เสียภาษีไม่ถูกต้อง (checksum)</mat-error>
+          }
+        </mat-form-field>
+
+        <div class="branch">
+          <mat-button-toggle-group formControlName="branchType" aria-label="สาขา">
+            <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
+            <mat-button-toggle value="branch">สาขา</mat-button-toggle>
+          </mat-button-toggle-group>
+          @if (isBranch()) {
+            <mat-form-field appearance="outline" class="branch-no">
+              <mat-label>เลขสาขา</mat-label>
+              <input
+                matInput
+                formControlName="branchNo"
+                class="mono"
+                inputmode="numeric"
+                maxlength="5"
+                placeholder="00001"
+                (input)="digitsOnly('branchNo')"
+              />
+              @if (form.controls.branchNo.invalid) {
+                <mat-error>ตัวเลข 5 หลัก</mat-error>
+              }
+            </mat-form-field>
+          }
+        </div>
+
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>ที่อยู่ (ตามใบกำกับภาษี)</mat-label>
+          <textarea matInput rows="2" formControlName="address"></textarea>
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Contact -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>ผู้ติดต่อ</mat-card-title></mat-card-header>
+      <mat-card-content class="grid">
+        <mat-form-field appearance="outline">
+          <mat-label>ชื่อผู้ติดต่อ</mat-label>
+          <input matInput formControlName="contactName" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>โทรศัพท์</mat-label>
+          <input matInput formControlName="phone" inputmode="tel" />
+          <mat-icon matSuffix>call</mat-icon>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>อีเมล</mat-label>
+          <input matInput type="email" formControlName="email" />
+          <mat-icon matSuffix>mail</mat-icon>
+          @if (form.controls.email.invalid) {
+            <mat-error>อีเมลไม่ถูกต้อง</mat-error>
+          }
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Payment -->
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>การชำระเงิน</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <div class="grid">
+          <mat-form-field appearance="outline">
+            <mat-label>เครดิตเทอม</mat-label>
+            <input matInput type="number" min="0" max="365" formControlName="creditDays" />
+            <span matTextSuffix>วัน</span>
+            <mat-hint>0 = เงินสด</mat-hint>
+            @if (form.controls.creditDays.invalid) {
+              <mat-error>0 - 365 วัน</mat-error>
+            }
+          </mat-form-field>
+          <div class="presets">
+            @for (days of creditPresets; track days) {
+              <button
+                mat-stroked-button
+                type="button"
+                [class.selected]="form.controls.creditDays.value === days"
+                (click)="form.controls.creditDays.setValue(days)"
+              >
+                {{ credit(days) }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="grid">
+          <mat-form-field appearance="outline">
+            <mat-label>ธนาคาร</mat-label>
+            <input matInput formControlName="bankName" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>เลขที่บัญชี</mat-label>
+            <input matInput formControlName="bankAccountNo" class="mono" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>ชื่อบัญชี</mat-label>
+            <input matInput formControlName="bankAccountName" />
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Note + status -->
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>หมายเหตุ</mat-label>
+          <textarea matInput rows="2" formControlName="note"></textarea>
+        </mat-form-field>
+        <div class="footer">
+          <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
+          <span class="spacer"></span>
+          <a mat-button routerLink="/master-data/suppliers">ยกเลิก</a>
+          <button mat-flat-button type="submit" [disabled]="saving()">
+            <mat-icon>save</mat-icon>
+            บันทึก
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </form>
+}

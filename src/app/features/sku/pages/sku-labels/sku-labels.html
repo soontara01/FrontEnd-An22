@@ -1,0 +1,140 @@
+<div class="no-print">
+  <app-page-header
+    title="พิมพ์ป้าย"
+    subtitle="สติกเกอร์บาร์โค้ด / ป้ายราคาหน้าชั้นวาง บนกระดาษสติกเกอร์ A4"
+  >
+    <a mat-button routerLink="/sku">
+      <mat-icon>arrow_back</mat-icon>
+      กลับ
+    </a>
+    <button mat-flat-button [disabled]="!labels().length" (click)="print()">
+      <mat-icon>print</mat-icon>
+      พิมพ์ {{ labels().length }} ป้าย
+    </button>
+  </app-page-header>
+
+  <div class="setup">
+    <mat-card appearance="outlined" class="options">
+      <mat-card-header><mat-card-title>รูปแบบ</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <mat-button-toggle-group
+          [value]="kind()"
+          (change)="setKind($event.value)"
+          aria-label="ชนิดป้าย"
+          class="kind"
+        >
+          <mat-button-toggle value="sticker">สติกเกอร์บาร์โค้ด</mat-button-toggle>
+          <mat-button-toggle value="shelf">ป้ายราคาชั้นวาง</mat-button-toggle>
+        </mat-button-toggle-group>
+
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>กระดาษ</mat-label>
+          <mat-select [value]="layout().id" (selectionChange)="layoutId.set($event.value)">
+            @for (l of layouts(); track l.id) {
+              <mat-option [value]="l.id">{{ l.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>เริ่มพิมพ์ที่ดวงที่</mat-label>
+          <input
+            matInput
+            type="number"
+            min="1"
+            [max]="layout().cols * layout().rows"
+            [value]="skip() + 1"
+            (input)="setStart($any($event.target).value)"
+          />
+          <mat-hint>ใช้กระดาษที่เหลือจากครั้งก่อน (ข้ามดวงที่ใช้แล้ว)</mat-hint>
+        </mat-form-field>
+
+        @if (kind() === 'sticker') {
+          <mat-slide-toggle [checked]="showPrice()" (change)="showPrice.set($event.checked)">
+            แสดงราคาบนสติกเกอร์
+          </mat-slide-toggle>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined" class="picker">
+      <mat-card-header>
+        <mat-card-title>เลือกสินค้า ({{ selectedCount() }})</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="picker-tools">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>ค้นหา SKU / ชื่อ / บาร์โค้ด</mat-label>
+            <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
+            <mat-icon matPrefix>search</mat-icon>
+          </mat-form-field>
+          <button mat-button [disabled]="!selectedCount()" (click)="qtyFromStock()">
+            จำนวน = สต็อก
+          </button>
+          <button mat-button [disabled]="!selectedCount()" (click)="clear()">ล้าง</button>
+        </div>
+
+        <div class="picker-list">
+          @for (sku of candidates(); track sku.id) {
+            <div class="pick-row" [class.selected]="selection(sku).qty > 0">
+              <mat-checkbox
+                [checked]="selection(sku).qty > 0"
+                (change)="toggle(sku, $event.checked)"
+                [aria-label]="'เลือก ' + sku.name"
+              />
+              <div class="info">
+                <div>{{ sku.shortName || sku.name }}</div>
+                <div class="text-muted small">
+                  <span class="mono">{{ sku.sku }}</span> · คงเหลือ {{ sku.stock }} {{ sku.unit }}
+                  @if (!sku.barcode) {
+                    · <span class="warn">ไม่มีบาร์โค้ด (ใช้รหัส SKU)</span>
+                  }
+                  @if (sku.currentPrice === null) {
+                    · <span class="warn">ยังไม่กำหนดราคา</span>
+                  }
+                </div>
+              </div>
+              @if (unitOptions(sku).length) {
+                <mat-select
+                  class="unit"
+                  [value]="selection(sku).unit"
+                  (selectionChange)="setUnit(sku, $event.value)"
+                  aria-label="หน่วย"
+                >
+                  <mat-option value="">{{ sku.unit }}</mat-option>
+                  @for (u of unitOptions(sku); track u) {
+                    <mat-option [value]="u">{{ u }}</mat-option>
+                  }
+                </mat-select>
+              }
+              <input
+                class="qty"
+                type="number"
+                min="0"
+                max="500"
+                aria-label="จำนวนป้าย"
+                [value]="selection(sku).qty"
+                (input)="setQty(sku, $any($event.target).value)"
+              />
+            </div>
+          } @empty {
+            <p class="text-muted">ไม่พบสินค้า</p>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <h3 class="preview-title">
+    ตัวอย่างก่อนพิมพ์
+    <span class="text-muted small">
+      (ตั้งค่าเครื่องพิมพ์: A4, ขนาดจริง 100%, ไม่มีขอบ/margin none)
+    </span>
+  </h3>
+</div>
+
+@if (labels().length) {
+  <app-label-sheet [labels]="labels()" [layout]="layout()" [skip]="skip()" />
+} @else {
+  <p class="text-muted no-print">เลือกสินค้าและจำนวนป้ายด้านบน</p>
+}

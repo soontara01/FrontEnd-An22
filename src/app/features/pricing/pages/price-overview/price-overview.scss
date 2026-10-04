@@ -1,0 +1,45 @@
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+}
+
+.num {
+  text-align: right;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.negative {
+  color: var(--mat-sys-error);
+}
+
+.badge {
+  margin-left: 6px;
+}
+
+.select-filter {
+  max-width: 220px;
+}
+
+.clickable {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-low);
+  }
+}
+
+.no-data {
+  padding: 16px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}

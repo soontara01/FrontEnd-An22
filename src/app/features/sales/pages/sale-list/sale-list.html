@@ -1,0 +1,117 @@
+<app-page-header title="การขาย" subtitle="คำสั่งขายและสรุปยอดขาย">
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+</app-page-header>
+
+<section class="stat-grid">
+  <app-stat-card
+    label="ยอดขาย (ชำระแล้ว)"
+    [value]="(store.revenue() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="payments"
+  />
+  <app-stat-card label="คำสั่งขายทั้งหมด" [value]="store.orderCount()" icon="receipt_long" />
+  <app-stat-card label="รอชำระ" [value]="store.pendingCount()" icon="pending_actions" tone="warn" />
+  <app-stat-card
+    label="เฉลี่ยต่อออเดอร์"
+    [value]="(store.averageOrder() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="trending_up"
+  />
+</section>
+
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>ค้นหาเลขที่ / ลูกค้า</mat-label>
+    <input matInput [value]="filterText()" (input)="filterText.set($any($event.target).value)" />
+    <mat-icon matPrefix>search</mat-icon>
+  </mat-form-field>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="status-filter">
+    <mat-label>สถานะ</mat-label>
+    <mat-select [value]="statusFilter()" (selectionChange)="statusFilter.set($event.value)">
+      <mat-option value="all">ทั้งหมด</mat-option>
+      @for (s of statuses; track s) {
+        <mat-option [value]="s">{{ statusLabel[s] }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+</div>
+
+<mat-card appearance="outlined">
+  @if (store.loading() && store.orderCount() === 0) {
+    <app-loading-spinner />
+  }
+
+  <div class="table-wrap" [hidden]="store.orderCount() === 0">
+    <table mat-table matSort matSortActive="date" matSortDirection="desc" [dataSource]="dataSource">
+      <ng-container matColumnDef="orderNo">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>เลขที่</th>
+        <td mat-cell *matCellDef="let s" class="mono">{{ s.orderNo }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="date">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>วันที่</th>
+        <td mat-cell *matCellDef="let s">{{ s.date | thaiDate }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="customer">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>ลูกค้า</th>
+        <td mat-cell *matCellDef="let s">{{ s.customer }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="itemCount">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">จำนวนชิ้น</th>
+        <td mat-cell *matCellDef="let s" class="num">{{ s.itemCount }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="total">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">ยอดรวม</th>
+        <td mat-cell *matCellDef="let s" class="num">
+          {{ s.total | currency: 'THB' : 'symbol-narrow' : '1.0-0' }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>สถานะ</th>
+        <td mat-cell *matCellDef="let s">
+          <span class="badge" [class]="statusBadge(s)">
+            {{ statusText(s) }}
+          </span>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let s" class="actions">
+          @if (s.status === 'pending') {
+            <button mat-icon-button matTooltip="จัดการ" [matMenuTriggerFor]="rowMenu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #rowMenu="matMenu" xPosition="before">
+              <button mat-menu-item (click)="markPaid(s)">
+                <mat-icon>check_circle</mat-icon>
+                <span>บันทึกชำระเงิน</span>
+              </button>
+              <button mat-menu-item (click)="cancel(s)">
+                <mat-icon>cancel</mat-icon>
+                <span>ยกเลิกคำสั่งขาย</span>
+              </button>
+            </mat-menu>
+          }
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      <tr class="mat-row" *matNoDataRow>
+        <td class="mat-cell no-data" [attr.colspan]="columns.length">
+          ไม่พบคำสั่งขายที่ตรงเงื่อนไข
+        </td>
+      </tr>
+    </table>
+    <mat-paginator [pageSizeOptions]="[5, 10, 25]" [pageSize]="10" showFirstLastButtons />
+  </div>
+
+  @if (!store.loading() && store.orderCount() === 0) {
+    <app-empty-state icon="receipt_long" message="ยังไม่มีคำสั่งขาย" />
+  }
+</mat-card>

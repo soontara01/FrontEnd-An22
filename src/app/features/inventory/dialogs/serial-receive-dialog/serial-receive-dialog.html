@@ -1,0 +1,87 @@
+<h2 mat-dialog-title>รับเข้า Serial</h2>
+
+<mat-dialog-content>
+  <div class="product">
+    <span class="mono">{{ product.sku }}</span> — {{ product.name }}
+    <div class="text-muted small">
+      คงเหลือ {{ product.stock }} {{ product.unit }} · รูปแบบ:
+      <span class="mono">{{ formatHint }}</span>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <app-loading-spinner [diameter]="32" />
+  } @else {
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>ต้นทุนต่อเครื่อง (ไม่รวม VAT)</mat-label>
+        <input
+          matInput
+          type="number"
+          min="0"
+          step="0.01"
+          [value]="unitCost()"
+          (input)="unitCost.set(+$any($event.target).value)"
+        />
+        <span matTextSuffix>฿</span>
+        @if (!costValid()) {
+          <mat-error>ต้องไม่ติดลบ</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>อ้างอิง / หมายเหตุ</mat-label>
+        <input
+          matInput
+          [value]="note()"
+          (input)="note.set($any($event.target).value)"
+          placeholder="เลขที่ใบกำกับภาษี"
+        />
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>Serial Number (1 บรรทัดต่อ 1 ชิ้น)</mat-label>
+      <textarea
+        matInput
+        appAutofocus
+        rows="6"
+        class="mono"
+        placeholder="พิมพ์ วาง หรือยิงบาร์โค้ดทีละบรรทัด"
+        [value]="text()"
+        (input)="text.set($any($event.target).value)"
+      ></textarea>
+    </mat-form-field>
+
+    @if (lines().length) {
+      <div class="summary">
+        <span class="badge badge-success">ผ่าน {{ validCount() }}</span>
+        <span class="small"
+          >มูลค่า {{ total() | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</span
+        >
+        @if (errorCount()) {
+          <span class="badge badge-error">ผิดพลาด {{ errorCount() }}</span>
+        }
+      </div>
+      <ol class="preview">
+        @for (line of lines(); track $index) {
+          <li [class.error]="line.error">
+            <span class="mono">{{ line.serial }}</span>
+            @if (line.error) {
+              <span class="message">{{ line.message }}</span>
+            } @else {
+              <mat-icon class="ok">check</mat-icon>
+            }
+          </li>
+        }
+      </ol>
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>ยกเลิก</button>
+  <button mat-flat-button [disabled]="!canSave()" (click)="save()">
+    <mat-icon>qr_code_scanner</mat-icon>
+    รับเข้า {{ validCount() }} รายการ
+  </button>
+</mat-dialog-actions>

@@ -1,0 +1,127 @@
+// Labels are sized in mm and always printed black on white, regardless of theme.
+.label-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #000;
+}
+
+.page {
+  width: 210mm;
+  height: 297mm;
+  box-sizing: border-box;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.25);
+}
+
+.grid {
+  display: grid;
+}
+
+.label {
+  box-sizing: border-box;
+  padding: 1.5mm 2mm;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  outline: 0.2mm dashed #ccc; // guide on screen only (removed in print)
+  font-family: Sarabun, Roboto, sans-serif;
+
+  &.empty {
+    outline-color: #eee;
+  }
+}
+
+.title {
+  font-size: 2.6mm;
+  font-weight: 600;
+  line-height: 1.15;
+  max-height: 6.2mm;
+  overflow: hidden;
+}
+
+.subtitle {
+  font-size: 2.1mm;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.code {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 0.6mm;
+}
+
+.sticker-price {
+  font-size: 3.2mm;
+  font-weight: 700;
+}
+
+// Shelf price label: big price, product info, small barcode.
+.label.shelf {
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
+  padding: 4mm 5mm;
+
+  .title {
+    font-size: 4.6mm;
+    max-height: 11mm;
+  }
+
+  .subtitle {
+    font-size: 3mm;
+  }
+
+  .price-row {
+    margin-top: 2mm;
+    text-align: right;
+  }
+
+  .price {
+    font-size: 11mm;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .no-price {
+    font-size: 6mm;
+    font-weight: 600;
+  }
+
+  .note {
+    text-align: right;
+    font-size: 2.6mm;
+    color: #333;
+  }
+
+  .code {
+    flex: 0 0 11mm;
+    width: 45mm;
+    margin-top: auto;
+  }
+}
+
+@media print {
+  .label-sheet {
+    gap: 0;
+  }
+
+  .page {
+    box-shadow: none;
+    break-after: page;
+  }
+
+  .label,
+  .label.empty {
+    outline: none;
+  }
+}

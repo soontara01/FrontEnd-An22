@@ -1,0 +1,47 @@
+<h2 mat-dialog-title>{{ data.category ? 'แก้ไข' : 'เพิ่ม' }}{{ levelLabel }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    @if (parentName) {
+      <p class="text-muted">
+        อยู่ภายใต้: <strong>{{ parentName }}</strong>
+      </p>
+    }
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>รหัส</mat-label>
+      <input matInput appAutofocus formControlName="code" class="mono" (input)="toUpper()" />
+      <mat-hint>A-Z, 0-9 และ - เช่น IT-COM-NB</mat-hint>
+      @if (form.controls.code.hasError('required')) {
+        <mat-error>กรุณากรอกรหัส</mat-error>
+      } @else if (form.controls.code.hasError('pattern')) {
+        <mat-error>ใช้ได้เฉพาะ A-Z, 0-9 และ -</mat-error>
+      } @else if (form.controls.code.hasError('duplicate')) {
+        <mat-error>รหัสนี้มีอยู่แล้ว</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>ชื่อ{{ levelLabel }}</mat-label>
+      <input matInput formControlName="name" />
+      @if (form.controls.name.hasError('required')) {
+        <mat-error>กรุณากรอกชื่อ</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
+    @if (!form.controls.active.value) {
+      <p class="text-muted small">
+        หมวดหมู่ที่ปิดใช้งานจะเลือกให้ SKU ใหม่ไม่ได้ (SKU เดิมยังอยู่)
+      </p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>ยกเลิก</button>
+    <button mat-flat-button type="submit" [disabled]="saving()">
+      <mat-icon>save</mat-icon>
+      บันทึก
+    </button>
+  </mat-dialog-actions>
+</form>

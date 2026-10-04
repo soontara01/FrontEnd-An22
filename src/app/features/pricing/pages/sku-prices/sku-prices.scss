@@ -1,0 +1,39 @@
+.summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+
+  .value {
+    font: var(--mat-sys-title-large);
+  }
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+}
+
+.num {
+  text-align: right;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.negative {
+  color: var(--mat-sys-error);
+}
+
+.current {
+  background: var(--mat-sys-surface-container-low);
+}
+
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}

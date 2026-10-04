@@ -1,0 +1,80 @@
+# CLAUDE.md
+
+Angular 22 SPA (standalone, zoneless, signals) + Angular Material 3. Backend is mocked for now.
+
+Domain: front end of a **retail system for an IT / electrical-appliance store** (serial numbers, warranty, VAT-inclusive prices). SKU-master roadmap: round 1 done (VAT, categories, packs/barcodes, short name + image, sale status); round 2 done (suppliers + reorder); round 3 done (Excel import/export, label printing).
+
+## Commands
+
+- `npm start` — dev server on http://localhost:4200 (login `admin` / `admin`)
+- `npm run build` — production build → `dist/frontend-an22/browser`; check the "Lazy chunk files" table
+- `npm test` — Vitest (`npx ng test --watch=false` for a single run)
+- `npx ng lint` — ESLint (angular-eslint)
+- `npx prettier --write <paths>` — formatting (printWidth 100, single quotes)
+
+Run build + test + lint before calling a change done.
+
+## Architecture
+
+- `src/app/core/` — app-wide singletons (`providedIn: 'root'`): auth, `ApiService`, interceptors, shared services, models, `menu.config.ts`.
+- `src/app/shared/` — stateless reusable UI (components incl. `StatCard` summary tile, pipes, directives) and `MATERIAL` (common Material modules array).
+- `src/app/layout/` — `MainLayout` (toolbar + sidenav + outlet) and `AuthLayout`; both lazy via `loadComponent`.
+- `src/app/features/<name>/` — one folder = one lazy module = one menu item.
+
+### Rule: SPA per menu — 1 menu = 1 lazy module = 1 chunk
+
+- **Switching menus is a full page reload.** Cross-menu links (sidenav, links to another feature, login/logout, 404 → home) use plain `href` or `document.location.assign(...)` — never `routerLink` / `router.navigate`. The fresh page boots and downloads only that menu's chunk.
+- **Navigation inside one feature is SPA**: use `routerLink` / `router.navigate` (e.g. `/users` ↔ `/users/new` ↔ `/users/:id/edit`).
+- Because of the reload, in-memory state (feature stores, signals) lives only for the current menu's page load. Anything that must survive a menu switch goes in `StorageService` (localStorage) — e.g. auth token, theme, mock DB.
+- The sidenav highlights the active menu via `MainLayout.activeMenu` (first URL segment), not `routerLinkActive`.
+- Sidenav always starts **hidden** on every page load (all screen sizes); ☰ toggles it. Below 960px (`COMPACT_QUERY`) it overlays content, on desktop it pushes content. Not persisted. Content area has no max-width so tables use the full width.
+- `core/navigation/menu.config.ts` (`MENU`) is the single source of truth: `app.routes.ts` builds MainLayout children from it, and the sidenav renders from it. Adding a menu = add a `MENU` entry + a `features/<name>/` folder. Do not hand-add feature routes to `app.routes.ts`.
+- Each feature exposes `<name>.routes.ts` with a **default export** (`export default [...] satisfies Routes`).
+- Inside a feature, pages use `component:` with **static imports**, not `loadComponent`, so the whole feature stays one chunk.
+- Page components use `export default class`.
+- Feature-scoped services (e.g. `UsersApi`, `UsersStore`) are `@Injectable()` without `providedIn` and are listed in the feature route's `providers` — created once per page load and shared by that feature's pages. Use `providedIn: 'root'` only for things in `core/`.
+
+### Data flow
+
+- Components → feature store (signals) → feature API service → `ApiService` (prefixes `environment.apiUrl`) → `HttpClient`.
+- Interceptor order in `app.config.ts`: loading → auth → error → mockBackend. The mock must stay **last**; it is only registered when `environment.useMock` is true.
+- `errorInterceptor` already shows a snackbar for HTTP errors and logs out on 401 — don't duplicate error toasts in components; just reset local UI state in `error:` callbacks.
+- **SKU master = the `products` collection** (`Product` in `core/models/product.model.ts`), shared by the SKU menu (master data CRUD incl. cost, `features/sku`), the Inventory menu (stock) and the Pricing menu (sale prices, `features/pricing`). Stock changes only via Inventory (`PUT /products/:id/stock`); the SKU form never writes `stock`. Inventory shows only `active` SKUs. `serialControl` is a flag + optional format (`serialPrefix`, `serialLength`).
+- **Inventory costing** (`core/models/costing.model.ts`, decided 2026-10-04): **serial SKUs = specific identification** (each `SerialNumber.cost`; issue cost = the removed serials' own costs), **non-serial = moving weighted average** (`movingAverage()` on every receipt; issues go out at the current avg, which stays unchanged). `Product.avgCost` is server-derived (serial: mean of in-stock serial costs). `Product.cost` is only the **standard cost** (default when receiving, estimate when no stock) — never compute inventory value or COGS from it; use `costValue()` / `effectiveCost()` (margins). Every stock change writes a `StockMovement` (stock card, `/inventory/stock-card/:productId`, running balance qty / avg / value; old data gets an `opening` line). Receiving requires a cost: non-serial via `StockReceiveDialog` (qty per base or pack unit), serial via the receive dialog's cost-per-unit. A future POS sale line must take COGS from the serial's cost or the current `avgCost` at sale time.
+- **Serial SKUs: stock = count of `in_stock` serials** (`SerialNumber` in `core/models/serial.model.ts`). Stock moves only via receive/remove serial endpoints (Inventory dialogs in `features/inventory/dialogs/`); `PUT /products/:id/stock` is rejected for them, and `serialControl` cannot change while stock > 0. Removing never deletes: status becomes sold/damaged/other with `removedAt` + note (history); re-receiving a removed serial puts it back in stock. `serialFormatError()` is the single format rule for UI and mock. The mock auto-generates sample serials when a serial SKU has more stock than serials.
+- Dialogs that need a route-scoped service (e.g. `InventoryStore`) must be opened with `injector: this.injector` — `MatDialog` otherwise uses the root injector. Shared helpers `stockLevel()` / `PRODUCT_DEFAULTS` live in the model file — don't import between features.
+- **SKU retail fields** (`product.model.ts`): `categoryId` must be an **active leaf** category (3 levels: แผนก > หมวด > หมวดย่อย, `category.model.ts`); `categoryPath` is server-derived/read-only. `vatType` (`vat7` | `exempt`): prices are VAT-inclusive, cost excludes VAT, and **margin is computed on the net price** — always use `vatBreakdown()` / `marginPercent()`. `shortName` ≤ 20 chars (receipt). `imageUrl` is a resized data URL (`shared/utils/image-resize.ts`, max 400px). `packUnits` (unit, factor > 1, barcode) — **serial SKUs have exactly one unit**; stock is always counted in the base unit (`stockInPacks()` for display). **Every barcode (base + packs) is unique across all SKUs.** `saleStatus` (`SkuStatus`): active / no_sale (purchase only) / no_purchase (sell remaining, receiving blocked) / discontinued (hidden from Inventory & Pricing) — use `canSell()` / `canPurchase()` / `isDiscontinued()`, never compare strings ad hoc. Note `SaleStatus` is the *sales order* status (`sale.model.ts`); the SKU one is `SkuStatus`.
+- **ข้อมูลหลัก menu** (`features/master-data`): tab shell (`MasterDataShell`) + child route per master (หมวดหมู่, ผู้จำหน่าย). `Supplier` (`supplier.model.ts`): Thai tax ID must pass `isValidThaiTaxId()`, head office or 5-digit branch, `creditDays` (0 = cash); unique by code and by taxId+branch; cannot be deleted while linked to SKUs (deactivate instead).
+- **SKU ↔ supplier**: `Product.suppliers: SkuSupplier[]` (supplierSku, purchase cost excl. VAT, leadTimeDays, moq in base units); when not empty exactly one `isMain`. Reorder: `minStock` = reorder point, `maxStock` = target (0 → 2 × reorder point, must be ≥ reorder point). `suggestReorderQty()` is the only reorder rule (purchasable + stock ≤ reorder point → fill to max, ≥ main MOQ, rounded up to the smallest pack). The reorder page is `/inventory/reorder` (grouped by main supplier, printable). Categories are deletable only without children/SKUs; a category with SKUs cannot get children.
+- **Excel** (`features/sku/data/sku-excel.ts`, ExcelJS): always `await import('exceljs')` (never a static import — it is ~1 MB and must stay in its own lazy chunk); `import type` is fine. Columns are defined once in `SKU_COLUMNS` (Thai headers; `info` = reference-only, ignored on import). Import matches by SKU code (exists → update, blank cells keep the old value; new → create with defaults), validates everything client-side in `validateImportRows()` (mirrors server rules) before saving, and saves valid rows one by one. Codes/barcodes are written as text (`numFmt '@'`). Pages: `/sku/import`, export from the SKU list menu.
+- **Labels**: shared `LabelSheet` (A4 sticker layouts in `LABEL_LAYOUTS`, sizes in mm, `skip` = start position) + `Barcode` (JsBarcode SVG; EAN-13 only when the check digit is valid, else CODE128). Pages: `/sku/labels` (barcode stickers / shelf price labels, per-unit barcode + price × pack factor) and `/inventory/serial-labels/:productId`. Printing: global `@page` A4 margin 0; wrap on-screen controls in `.no-print`; `LabelSheet` adds `html.print-labels` so the layout padding is dropped. The sidenav content is a scroll container — global print CSS un-clips it so all pages print.
+- **Sale prices live only in `SkuPrice` periods** (`core/models/price.model.ts`, endpoints `/prices`). `Product.currentPrice` is read-only, derived by the server from today's period (`null` = "ยังไม่กำหนดราคา", counts as 0 in stock value); the SKU form has no price field. Periods of one SKU never overlap; dates are local `YYYY-MM-DD`, both ends inclusive, `endDate: null` = open-ended. Use the helpers `todayIso/toIsoDate/fromIsoDate/priceStatus/effectivePrice/findOverlap` (shared by UI and mock) — never `new Date('YYYY-MM-DD')` (UTC shift). Datepickers need `provideNativeDateAdapter()`, provided only in the pricing routes.
+- When adding an endpoint while mocking, add a handler in `core/interceptors/mock-backend.interceptor.ts`. Mock data is persisted in localStorage (`an22.mock.db`); clear that key to reset to seed data. When adding fields to a stored model, fill defaults on read (see `PRODUCT_DEFAULTS` merge in the interceptor) so older stored data keeps working.
+
+## Conventions
+
+- Standalone components, `ChangeDetectionStrategy.OnPush`, `inject()` (no constructor injection), `input()`/`output()`/`viewChild()` signal APIs, `@if`/`@for` control flow.
+- State: `signal` / `computed` in services; expose read-only via `.asReadonly()`. No NgRx.
+- Forms: Reactive forms via `NonNullableFormBuilder`.
+- Route params bind to component inputs (`withComponentInputBinding()`), e.g. `readonly id = input<string>()`.
+- Imports use aliases `@core/*`, `@shared/*`, `@layout/*`, `@features/*`, `@env/*`; relative imports only within the same feature/folder.
+- Styling: use Material system tokens (`var(--mat-sys-*)`), not hard-coded colors, so dark mode (`html.dark-theme`, toggled by `ThemeService`) works.
+- Global helper classes in `styles.scss`: `.stat-grid` (layout for `<app-stat-card>`), `.filter-row` (search/filter controls above a table), `.badge` + `.badge-success|warn|error` (status pills). Reuse them instead of per-component copies.
+- Money: `currency: 'THB' : 'symbol-narrow' : '1.0-0'`; dates: `thaiDate` pipe.
+- mat-table rows are untyped (`let x` is `any`), so strict templates cannot index a `Record` with them — use a typed helper method (e.g. `statusText(sale: Sale)`).
+- Icons: Material Symbols Outlined (set as default font set in `app.config.ts`).
+- UI text is Thai; code, identifiers and comments are English.
+- Selector prefix `app-` (components) / `app` camelCase (directives).
+
+## Gotchas
+
+- TypeScript 6: don't add `baseUrl` to tsconfig (deprecated); `paths` are relative to `tsconfig.json`.
+- `CanMatchFn` in Angular 22 takes 3 args (`route, segments, currentSnapshot`) — tests must pass a third.
+- No `@angular/animations` package; Material 22 doesn't need it — don't add `provideAnimationsAsync()`.
+- Initial bundle budget is 600 kB warning / 1 MB error (`angular.json`). Keep heavy Material modules out of eagerly loaded code (`core` services, `app.ts`).
+- `AuthService.logout()` and login success call `document.location.assign` (inject `DOCUMENT`); in tests provide a stub `DOCUMENT` with `location.assign = vi.fn()`.
+- Tests use Vitest globals (`vi`, `describe`, …); HTTP tests use `provideHttpClientTesting()` and `HttpTestingController`.
+
+## Switching to a real backend
+
+Set `useMock: false` in `src/environments/environment*.ts`; dev proxy `proxy.conf.json` forwards `/api` → `http://localhost:8080`. Expected API: `POST /auth/login → { token, user }`, `GET/POST /users`, `GET/PUT/DELETE /users/:id`, `GET/POST /products`, `GET/PUT/DELETE /products/:id` (duplicate SKU code → 400, delete with stock > 0 → 400), `PUT /products/:id/stock { delta, unitCost?, note? }` (non-serial only; receipts re-average cost), `GET /products/:id/movements`, `GET /products/:id/serials`, `POST /products/:id/serials { serials, unitCost, note? }`, `POST /products/:id/serials/remove { ids, status, note }`, `GET/POST /categories`, `PUT/DELETE /categories/:id`, `GET/POST /suppliers`, `GET/PUT/DELETE /suppliers/:id`, `GET /prices[?productId=]`, `POST /prices`, `PUT/DELETE /prices/:id` (overlap → 400), `GET /sales`, `PUT /sales/:id/status { status }`. SPA deploy configs are in `deploy/`.

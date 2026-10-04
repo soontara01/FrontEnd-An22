@@ -1,1 +1,156 @@
-/* You can add global styles to this file, and also import other style files */
+// Angular Material 3 theme. Light by default; `html.dark-theme` (toggled by ThemeService) switches to dark.
+// Learn more: https://material.angular.dev/guide/theming
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  color-scheme: light;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: (
+        plain-family: 'Sarabun, Roboto, sans-serif',
+        brand-family: 'Sarabun, Roboto, sans-serif',
+      ),
+      density: 0,
+    )
+  );
+
+  &.dark-theme {
+    color-scheme: dark;
+  }
+}
+
+body {
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+  margin: 0;
+  height: 100%;
+}
+
+// Snackbar variants used by NotificationService
+.snack-success {
+  @include mat.snack-bar-overrides(
+    (
+      container-color: var(--mat-sys-primary-container),
+      supporting-text-color: var(--mat-sys-on-primary-container),
+      button-color: var(--mat-sys-on-primary-container),
+    )
+  );
+}
+
+.snack-error {
+  @include mat.snack-bar-overrides(
+    (
+      container-color: var(--mat-sys-error-container),
+      supporting-text-color: var(--mat-sys-on-error-container),
+      button-color: var(--mat-sys-on-error-container),
+    )
+  );
+}
+
+// Grid for <app-stat-card> tiles
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+// Row of filter controls above a table
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+
+  mat-form-field {
+    width: 100%;
+    max-width: 320px;
+  }
+}
+
+// Status badge: <span class="badge badge-success">…</span>
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font: var(--mat-sys-label-medium);
+  white-space: nowrap;
+  background: var(--mat-sys-surface-container-high);
+  color: var(--mat-sys-on-surface-variant);
+}
+.badge-success {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+}
+.badge-warn {
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}
+.badge-error {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+// Small utility classes
+.w-full {
+  width: 100%;
+}
+.mt-16 {
+  margin-top: 16px;
+}
+.mb-16 {
+  margin-bottom: 16px;
+}
+.text-muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+.small {
+  font: var(--mat-sys-body-small);
+}
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+// Printing (reorder suggestions, labels): content only, all pages (no scroll container).
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    height: auto !important;
+    background: #fff !important;
+  }
+
+  .no-print,
+  app-main-layout mat-sidenav,
+  app-main-layout mat-toolbar,
+  app-main-layout .progress {
+    display: none !important;
+  }
+
+  app-main-layout mat-sidenav-container,
+  app-main-layout mat-sidenav-content {
+    height: auto !important;
+    overflow: visible !important;
+    margin-left: 0 !important;
+  }
+
+  app-main-layout .content {
+    padding: 10mm !important;
+  }
+
+  // Label sheets carry their own mm margins (set by LabelSheet via html.print-labels).
+  html.print-labels app-main-layout .content {
+    padding: 0 !important;
+  }
+}

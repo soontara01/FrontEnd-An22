@@ -1,0 +1,117 @@
+<section class="stat-grid">
+  <app-stat-card label="ผู้จำหน่ายที่ใช้งาน" [value]="store.activeCount()" icon="local_shipping" />
+  <app-stat-card label="ให้เครดิต" [value]="store.creditCount()" icon="credit_score" />
+  <app-stat-card label="SKU ที่ผูกแล้ว" [value]="store.linkedSkuCount()" icon="link" />
+</section>
+
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>ค้นหา รหัส / ชื่อ / เลขภาษี / ผู้ติดต่อ</mat-label>
+    <input matInput [value]="filterText()" (input)="filterText.set($any($event.target).value)" />
+    <mat-icon matPrefix>search</mat-icon>
+  </mat-form-field>
+  <mat-slide-toggle [checked]="includeInactive()" (change)="includeInactive.set($event.checked)">
+    รวมที่ปิดใช้งาน
+  </mat-slide-toggle>
+  <span class="spacer"></span>
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <a mat-flat-button routerLink="new">
+    <mat-icon>add</mat-icon>
+    เพิ่มผู้จำหน่าย
+  </a>
+</div>
+
+<mat-card appearance="outlined">
+  @if (store.loading() && store.count() === 0) {
+    <app-loading-spinner />
+  }
+
+  <div class="table-wrap" [hidden]="store.count() === 0">
+    <table mat-table matSort [dataSource]="dataSource">
+      <ng-container matColumnDef="code">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>รหัส</th>
+        <td mat-cell *matCellDef="let s" class="mono">{{ s.code }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>ชื่อผู้จำหน่าย</th>
+        <td mat-cell *matCellDef="let s">
+          {{ s.name }}
+          <div class="text-muted small">{{ branch(s) }}</div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="taxId">
+        <th mat-header-cell *matHeaderCellDef>เลขผู้เสียภาษี</th>
+        <td mat-cell *matCellDef="let s" class="mono">{{ s.taxId }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="contact">
+        <th mat-header-cell *matHeaderCellDef>ผู้ติดต่อ</th>
+        <td mat-cell *matCellDef="let s">
+          {{ s.contactName || '-' }}
+          <div class="text-muted small">{{ s.phone }}</div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="creditDays">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>เงื่อนไขชำระ</th>
+        <td mat-cell *matCellDef="let s">{{ credit(s.creditDays) }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="productCount">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header class="num">SKU</th>
+        <td mat-cell *matCellDef="let s" class="num">{{ s.productCount }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="active">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>สถานะ</th>
+        <td mat-cell *matCellDef="let s">
+          @if (s.active) {
+            <span class="badge badge-success">ใช้งาน</span>
+          } @else {
+            <span class="badge badge-error">ปิดใช้งาน</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let s" class="actions">
+          <span [matTooltip]="s.productCount ? 'ยังผูกกับ SKU อยู่ (ปิดใช้งานแทนได้)' : ''">
+            <button
+              mat-icon-button
+              aria-label="ลบ"
+              [disabled]="s.productCount > 0"
+              (click)="remove(s, $event)"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </span>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr
+        mat-row
+        *matRowDef="let row; columns: columns"
+        class="clickable"
+        tabindex="0"
+        (click)="open(row)"
+        (keydown.enter)="open(row)"
+      ></tr>
+      <tr class="mat-row" *matNoDataRow>
+        <td class="mat-cell no-data" [attr.colspan]="columns.length">ไม่พบผู้จำหน่าย</td>
+      </tr>
+    </table>
+    <mat-paginator [pageSizeOptions]="[10, 25, 50]" [pageSize]="10" showFirstLastButtons />
+  </div>
+
+  @if (!store.loading() && store.count() === 0) {
+    <app-empty-state icon="local_shipping" message="ยังไม่มีผู้จำหน่าย">
+      <a mat-flat-button routerLink="new">เพิ่มผู้จำหน่ายรายแรก</a>
+    </app-empty-state>
+  }
+</mat-card>

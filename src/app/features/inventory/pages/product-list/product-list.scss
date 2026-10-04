@@ -1,0 +1,43 @@
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+}
+
+.num {
+  text-align: right;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.serial {
+  margin-left: 6px;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.no-data {
+  padding: 16px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.count {
+  margin-left: 6px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--mat-sys-on-primary);
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-medium);
+}

@@ -1,0 +1,83 @@
+<div class="no-print">
+  <app-page-header
+    title="พิมพ์ป้าย Serial"
+    [subtitle]="product() ? product()!.sku + ' — ' + product()!.name : ''"
+  >
+    <a mat-button routerLink="/inventory">
+      <mat-icon>arrow_back</mat-icon>
+      คลังสินค้า
+    </a>
+    <button mat-flat-button [disabled]="!labels().length" (click)="print()">
+      <mat-icon>print</mat-icon>
+      พิมพ์ {{ labels().length }} ป้าย
+    </button>
+  </app-page-header>
+
+  @if (loading()) {
+    <app-loading-spinner />
+  } @else {
+    <div class="setup">
+      <mat-card appearance="outlined">
+        <mat-card-content class="options">
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>กระดาษ</mat-label>
+            <mat-select [value]="layout().id" (selectionChange)="layoutId.set($event.value)">
+              @for (l of layouts; track l.id) {
+                <mat-option [value]="l.id">{{ l.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>เริ่มพิมพ์ที่ดวงที่</mat-label>
+            <input
+              matInput
+              type="number"
+              min="1"
+              [value]="skip() + 1"
+              (input)="setStart($any($event.target).value)"
+            />
+          </mat-form-field>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-card-title
+            >Serial คงคลัง ({{ selected().size }} / {{ visible().length }})</mat-card-title
+          >
+        </mat-card-header>
+        <mat-card-content>
+          <div class="tools">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>ค้นหา Serial</mat-label>
+              <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
+              <mat-icon matPrefix>search</mat-icon>
+            </mat-form-field>
+            <button mat-button (click)="selectAll(true)">เลือกทั้งหมดที่แสดง</button>
+            <button mat-button (click)="selectAll(false)">ไม่เลือก</button>
+          </div>
+          <div class="list">
+            @for (s of visible(); track s.id) {
+              <mat-checkbox
+                [checked]="selected().has(s.id)"
+                (change)="toggle(s.id, $event.checked)"
+              >
+                <span class="mono">{{ s.serial }}</span>
+              </mat-checkbox>
+            } @empty {
+              <p class="text-muted">ไม่มี Serial คงคลัง</p>
+            }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+    <h3 class="preview-title">
+      ตัวอย่างก่อนพิมพ์
+      <span class="text-muted small">(ตั้งค่าเครื่องพิมพ์: A4, ขนาดจริง 100%, margin none)</span>
+    </h3>
+  }
+</div>
+
+@if (labels().length) {
+  <app-label-sheet [labels]="labels()" [layout]="layout()" [skip]="skip()" />
+}

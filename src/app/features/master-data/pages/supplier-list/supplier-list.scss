@@ -1,0 +1,34 @@
+.spacer {
+  flex: 1;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+}
+
+.num {
+  text-align: right;
+}
+
+.clickable {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-low);
+  }
+}
+
+.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.no-data {
+  padding: 16px;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}

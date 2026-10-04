@@ -1,0 +1,67 @@
+<h2 mat-dialog-title>รับสินค้าเข้า</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="product">
+      <span class="mono">{{ product.sku }}</span> — {{ product.name }}
+      <div class="text-muted small">
+        คงเหลือ {{ product.stock }} {{ product.unit }} · ต้นทุนเฉลี่ย
+        {{ product.avgCost | number: '1.2-2' }} ฿
+      </div>
+    </div>
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>จำนวน</mat-label>
+        <input matInput appAutofocus type="number" min="1" step="1" formControlName="qty" />
+        @if (form.controls.qty.invalid) {
+          <mat-error>จำนวนเต็มตั้งแต่ 1</mat-error>
+        }
+      </mat-form-field>
+      @if (units.length > 1) {
+        <mat-form-field appearance="outline">
+          <mat-label>หน่วย</mat-label>
+          <mat-select formControlName="unit">
+            @for (u of units; track u.name) {
+              <mat-option [value]="u.name">{{ u.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+      <mat-form-field appearance="outline">
+        <mat-label>ต้นทุนต่อ{{ unitLabel() }} (ไม่รวม VAT)</mat-label>
+        <input matInput type="number" min="0" step="0.01" formControlName="unitCost" />
+        <span matTextSuffix>฿</span>
+        @if (form.controls.unitCost.invalid) {
+          <mat-error>ต้องไม่ติดลบ</mat-error>
+        }
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>อ้างอิง / หมายเหตุ</mat-label>
+      <input matInput formControlName="note" placeholder="เช่น เลขที่ใบกำกับภาษีของผู้จำหน่าย" />
+    </mat-form-field>
+
+    <div class="summary-box">
+      <div>
+        รับเข้า <strong>{{ baseQty() }} {{ product.unit }}</strong> · มูลค่า
+        <strong>{{ total() | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</strong>
+      </div>
+      <div class="text-muted small">
+        ต้นทุนเฉลี่ยใหม่ (ถัวเฉลี่ยเคลื่อนที่):
+        {{ product.avgCost | number: '1.2-2' }} →
+        <strong>{{ newAvg() | number: '1.2-2' }}</strong> ฿ /
+        {{ product.unit }}
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>ยกเลิก</button>
+    <button mat-flat-button type="submit" [disabled]="saving()">
+      <mat-icon>add_box</mat-icon>
+      รับเข้า
+    </button>
+  </mat-dialog-actions>
+</form>

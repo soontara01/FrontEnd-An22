@@ -1,0 +1,69 @@
+<mat-sidenav-container class="container">
+  <mat-sidenav
+    class="sidenav"
+    [mode]="isCompact() ? 'over' : 'side'"
+    [opened]="menuOpen()"
+    (openedChange)="onOpenedChange($event)"
+  >
+    <div class="brand">
+      <mat-icon>apps</mat-icon>
+      <span>FrontEnd An22</span>
+    </div>
+    <mat-nav-list>
+      @for (item of menu; track item.path) {
+        <a mat-list-item [href]="'/' + item.path" [activated]="activeMenu() === item.path">
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.label }}</span>
+        </a>
+      }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    <mat-toolbar class="toolbar">
+      <button
+        mat-icon-button
+        [matTooltip]="menuOpen() ? 'ซ่อนเมนู' : 'แสดงเมนู'"
+        [attr.aria-label]="menuOpen() ? 'ซ่อนเมนู' : 'แสดงเมนู'"
+        [attr.aria-expanded]="menuOpen()"
+        (click)="toggleMenu()"
+      >
+        <mat-icon>{{ menuOpen() && !isCompact() ? 'menu_open' : 'menu' }}</mat-icon>
+      </button>
+      <span class="spacer"></span>
+
+      <button
+        mat-icon-button
+        [matTooltip]="theme.theme() === 'dark' ? 'โหมดสว่าง' : 'โหมดมืด'"
+        (click)="theme.toggle()"
+      >
+        <mat-icon>{{ theme.theme() === 'dark' ? 'light_mode' : 'dark_mode' }}</mat-icon>
+      </button>
+
+      <button mat-button [matMenuTriggerFor]="userMenu">
+        <mat-icon>account_circle</mat-icon>
+        {{ auth.user()?.name }}
+      </button>
+      <mat-menu #userMenu="matMenu" xPosition="before">
+        <a mat-menu-item href="/settings">
+          <mat-icon>settings</mat-icon>
+          <span>ตั้งค่า</span>
+        </a>
+        <button mat-menu-item (click)="auth.logout()">
+          <mat-icon>logout</mat-icon>
+          <span>ออกจากระบบ</span>
+        </button>
+      </mat-menu>
+    </mat-toolbar>
+
+    <div class="progress">
+      @if (loading.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+    </div>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

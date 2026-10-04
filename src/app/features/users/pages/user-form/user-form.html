@@ -1,0 +1,53 @@
+<app-page-header [title]="isEdit() ? 'แก้ไขผู้ใช้' : 'เพิ่มผู้ใช้'">
+  <a mat-button routerLink="/users">
+    <mat-icon>arrow_back</mat-icon>
+    กลับ
+  </a>
+</app-page-header>
+
+<mat-card appearance="outlined" class="card">
+  @if (loading()) {
+    <app-loading-spinner />
+  } @else {
+    <form [formGroup]="form" (ngSubmit)="save()">
+      <mat-card-content class="fields">
+        <mat-form-field appearance="outline">
+          <mat-label>ชื่อ</mat-label>
+          <input matInput appAutofocus formControlName="name" />
+          @if (form.controls.name.hasError('required')) {
+            <mat-error>กรุณากรอกชื่อ</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>อีเมล</mat-label>
+          <input matInput type="email" formControlName="email" />
+          @if (form.controls.email.hasError('required')) {
+            <mat-error>กรุณากรอกอีเมล</mat-error>
+          } @else if (form.controls.email.hasError('email')) {
+            <mat-error>รูปแบบอีเมลไม่ถูกต้อง</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>สิทธิ์</mat-label>
+          <mat-select formControlName="role">
+            @for (role of roles; track role) {
+              <mat-option [value]="role">{{ role }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
+      </mat-card-content>
+
+      <mat-card-actions align="end">
+        <a mat-button routerLink="/users">ยกเลิก</a>
+        <button mat-flat-button type="submit" [disabled]="saving()">
+          <mat-icon>save</mat-icon>
+          บันทึก
+        </button>
+      </mat-card-actions>
+    </form>
+  }
+</mat-card>

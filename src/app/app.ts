@@ -1,12 +1,14 @@
-import { Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+import { ThemeService } from '@core/services/theme.service';
 
 @Component({
-  imports: [RouterOutlet],
   selector: 'app-root',
-  styleUrl: './app.scss',
-  templateUrl: './app.html',
+  imports: [RouterOutlet],
+  template: '<router-outlet />',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {
-  protected readonly title = signal('frontend-an22');
+  // Instantiate early so the saved theme is applied on startup.
+  protected readonly theme = inject(ThemeService);
 }

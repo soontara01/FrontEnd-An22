@@ -1,0 +1,82 @@
+<h2 mat-dialog-title>ตัดออก Serial</h2>
+
+<mat-dialog-content>
+  <div class="product">
+    <span class="mono">{{ product.sku }}</span> — {{ product.name }}
+    <div class="text-muted small">คงเหลือ {{ product.stock }} {{ product.unit }}</div>
+  </div>
+
+  @if (loading()) {
+    <app-loading-spinner [diameter]="32" />
+  } @else {
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>สแกน / พิมพ์ Serial แล้วกด Enter</mat-label>
+        <input
+          #scanInput
+          matInput
+          appAutofocus
+          class="mono"
+          (keydown.enter)="$event.preventDefault(); scan(scanInput)"
+        />
+        <mat-icon matPrefix>qr_code_scanner</mat-icon>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>ค้นหาในรายการ</mat-label>
+        <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
+        <mat-icon matPrefix>search</mat-icon>
+      </mat-form-field>
+    </div>
+    @if (scanError()) {
+      <div class="scan-error">{{ scanError() }}</div>
+    }
+
+    <div class="row summary">
+      <span class="badge badge-warn">เลือก {{ selected().size }} / {{ product.stock }}</span>
+      <button mat-button type="button" (click)="selectVisible()">เลือกทั้งหมดที่แสดง</button>
+      <button mat-button type="button" [disabled]="!selected().size" (click)="clearSelection()">
+        ล้างที่เลือก
+      </button>
+    </div>
+
+    <div class="list">
+      <mat-selection-list (selectionChange)="onSelectionChange($event)">
+        @for (s of visible(); track s.id) {
+          <mat-list-option [value]="s.id" [selected]="selected().has(s.id)" togglePosition="before">
+            <span class="mono">{{ s.serial }}</span>
+          </mat-list-option>
+        } @empty {
+          <mat-list-item><span class="text-muted">ไม่พบ Serial</span></mat-list-item>
+        }
+      </mat-selection-list>
+    </div>
+
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>เหตุผล</mat-label>
+        <mat-select [value]="reason()" (selectionChange)="reason.set($event.value)">
+          @for (r of reasons; track r) {
+            <mat-option [value]="r">{{ reasonLabel[r] }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>หมายเหตุ{{ noteRequired() ? ' (จำเป็น)' : '' }}</mat-label>
+        <input
+          matInput
+          [value]="note()"
+          (input)="note.set($any($event.target).value)"
+          placeholder="เช่น เลขที่ใบขาย / อาการเสีย"
+        />
+      </mat-form-field>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>ยกเลิก</button>
+  <button mat-flat-button [disabled]="!canSave()" (click)="save()">
+    <mat-icon>remove_circle</mat-icon>
+    ตัดออก {{ selected().size }} รายการ
+  </button>
+</mat-dialog-actions>

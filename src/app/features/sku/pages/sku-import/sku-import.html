@@ -1,0 +1,144 @@
+<app-page-header
+  title="นำเข้า SKU จาก Excel"
+  subtitle="เพิ่มใหม่และแก้ไขหลายรายการพร้อมกัน (.xlsx)"
+>
+  <a mat-button routerLink="/sku">
+    <mat-icon>arrow_back</mat-icon>
+    กลับ
+  </a>
+</app-page-header>
+
+@if (step() === 'pick') {
+  <mat-card appearance="outlined">
+    <mat-card-content class="pick">
+      <ol class="steps">
+        <li>
+          ดาวน์โหลดแม่แบบ หรือใช้ไฟล์จากปุ่ม <strong>ส่งออก Excel</strong> ในหน้ารายการ SKU
+          (แก้ไขแล้วนำกลับเข้ามาได้)
+        </li>
+        <li>
+          กรอก/แก้ข้อมูลในชีต <strong>SKU</strong> — รหัส SKU ที่มีอยู่แล้วจะเป็นการแก้ไข
+          ช่องว่างจะคงค่าเดิม
+        </li>
+        <li>อัปโหลด ระบบจะตรวจทุกแถวให้ดูก่อน แล้วค่อยกดยืนยันนำเข้า</li>
+      </ol>
+
+      <div class="actions">
+        <button mat-stroked-button [disabled]="busy()" (click)="downloadTemplate()">
+          <mat-icon>download</mat-icon>
+          ดาวน์โหลดแม่แบบ
+        </button>
+        <input
+          #fileInput
+          type="file"
+          hidden
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          (change)="onFileSelected($event)"
+        />
+        <button mat-flat-button [disabled]="busy()" (click)="fileInput.click()">
+          <mat-icon>upload_file</mat-icon>
+          เลือกไฟล์ .xlsx
+        </button>
+      </div>
+      @if (busy()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+      @if (fileError()) {
+        <p class="problem">{{ fileError() }}</p>
+      }
+    </mat-card-content>
+  </mat-card>
+} @else {
+  <section class="stat-grid">
+    <app-stat-card label="เพิ่มใหม่" [value]="createCount()" icon="add_circle" />
+    <app-stat-card label="แก้ไข" [value]="updateCount()" icon="edit" />
+    <app-stat-card label="ผิดพลาด (จะข้าม)" [value]="errorCount()" icon="error" tone="error" />
+  </section>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      <div class="toolbar">
+        <span class="file"><mat-icon inline>description</mat-icon> {{ fileName() }}</span>
+        <mat-slide-toggle [checked]="onlyErrors()" (change)="onlyErrors.set($event.checked)">
+          แสดงเฉพาะแถวที่ผิด
+        </mat-slide-toggle>
+        <span class="spacer"></span>
+        @if (step() === 'preview') {
+          <button mat-button (click)="reset()">เลือกไฟล์ใหม่</button>
+          <button mat-flat-button [disabled]="!validRows().length" (click)="import()">
+            <mat-icon>publish</mat-icon>
+            นำเข้า {{ validRows().length }} รายการ
+          </button>
+        } @else if (step() === 'done') {
+          <span class="badge badge-success">สำเร็จ {{ savedCount() }}</span>
+          @if (failedCount()) {
+            <span class="badge badge-error">ไม่สำเร็จ {{ failedCount() }}</span>
+          }
+          <button mat-button (click)="reset()">นำเข้าไฟล์อื่น</button>
+          <a mat-flat-button routerLink="/sku">ไปหน้ารายการ SKU</a>
+        }
+      </div>
+
+      @if (step() === 'saving') {
+        <mat-progress-bar mode="determinate" [value]="progress()" />
+      }
+
+      <div class="table-wrap">
+        <table class="rows">
+          <thead>
+            <tr>
+              <th class="num">แถว</th>
+              <th>รายการ</th>
+              <th>SKU</th>
+              <th>ชื่อสินค้า</th>
+              <th>ผลตรวจ / ผลนำเข้า</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of visibleRows(); track row.rowNo) {
+              <tr [class.error]="row.action === 'error'">
+                <td class="num text-muted">{{ row.rowNo }}</td>
+                <td>
+                  @switch (row.action) {
+                    @case ('create') {
+                      <span class="badge badge-success">เพิ่มใหม่</span>
+                    }
+                    @case ('update') {
+                      <span class="badge">แก้ไข</span>
+                    }
+                    @default {
+                      <span class="badge badge-error">ผิดพลาด</span>
+                    }
+                  }
+                </td>
+                <td class="mono">{{ row.sku || '-' }}</td>
+                <td>{{ row.name || '-' }}</td>
+                <td>
+                  @if (row.errors.length) {
+                    <ul class="errors">
+                      @for (e of row.errors; track e) {
+                        <li>{{ e }}</li>
+                      }
+                    </ul>
+                  } @else if (resultOf(row); as r) {
+                    @if (r.ok) {
+                      <span class="ok"><mat-icon inline>check_circle</mat-icon> บันทึกแล้ว</span>
+                    } @else {
+                      <span class="fail"><mat-icon inline>error</mat-icon> {{ r.message }}</span>
+                    }
+                  } @else {
+                    <span class="text-muted">พร้อมนำเข้า</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5" class="text-muted empty">ไม่มีแถวที่ผิด 🎉</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+}

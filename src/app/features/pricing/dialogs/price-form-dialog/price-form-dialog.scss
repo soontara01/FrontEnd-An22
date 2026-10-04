@@ -1,0 +1,30 @@
+.product {
+  margin-bottom: 16px;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  column-gap: 16px;
+}
+
+.negative {
+  color: var(--mat-sys-error);
+}
+
+.problem {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+  font: var(--mat-sys-body-small);
+}

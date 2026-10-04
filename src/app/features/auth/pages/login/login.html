@@ -1,0 +1,53 @@
+<mat-card class="card" appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>เข้าสู่ระบบ</mat-card-title>
+    <mat-card-subtitle>ทดลองใช้: admin / admin</mat-card-subtitle>
+  </mat-card-header>
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <mat-card-content>
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อผู้ใช้</mat-label>
+        <input matInput formControlName="username" autocomplete="username" />
+        <mat-icon matPrefix>person</mat-icon>
+        @if (form.controls.username.hasError('required')) {
+          <mat-error>กรุณากรอกชื่อผู้ใช้</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>รหัสผ่าน</mat-label>
+        <input
+          matInput
+          appAutofocus
+          formControlName="password"
+          autocomplete="current-password"
+          [type]="hidePassword() ? 'password' : 'text'"
+        />
+        <mat-icon matPrefix>lock</mat-icon>
+        <button
+          mat-icon-button
+          matSuffix
+          type="button"
+          [attr.aria-label]="hidePassword() ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'"
+          (click)="hidePassword.set(!hidePassword())"
+        >
+          <mat-icon>{{ hidePassword() ? 'visibility' : 'visibility_off' }}</mat-icon>
+        </button>
+        @if (form.controls.password.hasError('required')) {
+          <mat-error>กรุณากรอกรหัสผ่าน</mat-error>
+        }
+      </mat-form-field>
+    </mat-card-content>
+
+    <mat-card-actions>
+      <button mat-flat-button type="submit" [disabled]="submitting()">
+        @if (submitting()) {
+          <mat-spinner diameter="20" />
+        } @else {
+          เข้าสู่ระบบ
+        }
+      </button>
+    </mat-card-actions>
+  </form>
+</mat-card>

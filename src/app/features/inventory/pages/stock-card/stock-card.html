@@ -1,0 +1,109 @@
+<app-page-header
+  title="บัตรสต็อก"
+  [subtitle]="product() ? product()!.sku + ' — ' + product()!.name : ''"
+>
+  <a mat-button routerLink="/inventory" class="no-print">
+    <mat-icon>arrow_back</mat-icon>
+    คลังสินค้า
+  </a>
+  <button mat-stroked-button class="no-print" (click)="print()">
+    <mat-icon>print</mat-icon>
+    พิมพ์
+  </button>
+</app-page-header>
+
+@if (product(); as p) {
+  <section class="stat-grid">
+    <app-stat-card label="คงเหลือ" [value]="p.stock + ' ' + p.unit" icon="inventory_2" />
+    <app-stat-card
+      [label]="p.serialControl ? 'ต้นทุนเฉลี่ย (จาก Serial คงคลัง)' : 'ต้นทุนถัวเฉลี่ย'"
+      [value]="(p.avgCost | number: '1.2-2') + ' ฿'"
+      icon="calculate"
+    />
+    <app-stat-card
+      label="มูลค่าคงคลัง (ทุน)"
+      [value]="(value() | number: '1.2-2') + ' ฿'"
+      icon="payments"
+    />
+    <app-stat-card
+      label="ต้นทุนสินค้าที่ตัดออก"
+      [value]="(totals().outCost | number: '1.2-2') + ' ฿'"
+      icon="trending_down"
+    />
+  </section>
+  <p class="text-muted small method">
+    วิธีคิดต้นทุน:
+    @if (p.serialControl) {
+      <strong>ราคาทุนเฉพาะเจาะจง</strong> — แต่ละ Serial มีต้นทุนของตัวเอง
+      ตัดออกตามต้นทุนจริงของเครื่องนั้น
+    } @else {
+      <strong>ถัวเฉลี่ยเคลื่อนที่</strong> — คำนวณต้นทุนเฉลี่ยใหม่ทุกครั้งที่รับเข้า
+      ตัดออกด้วยต้นทุนเฉลี่ย ณ ขณะนั้น
+    }
+  </p>
+}
+
+<mat-card appearance="outlined">
+  @if (loading()) {
+    <app-loading-spinner />
+  } @else {
+    <div class="table-wrap">
+      <table class="ledger">
+        <thead>
+          <tr>
+            <th rowspan="2">วันที่</th>
+            <th rowspan="2">รายการ</th>
+            <th colspan="3" class="group">เคลื่อนไหว</th>
+            <th colspan="3" class="group">คงเหลือ</th>
+            <th rowspan="2">หมายเหตุ</th>
+          </tr>
+          <tr>
+            <th class="num">จำนวน</th>
+            <th class="num">ทุน/หน่วย</th>
+            <th class="num">มูลค่า</th>
+            <th class="num">จำนวน</th>
+            <th class="num">ทุนเฉลี่ย</th>
+            <th class="num">มูลค่า</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (m of movements(); track m.id) {
+            <tr>
+              <td class="nowrap">{{ m.date | thaiDate: 'long' }}</td>
+              <td>
+                <span class="badge" [class]="typeBadge(m)">{{ typeText(m) }}</span>
+              </td>
+              <td class="num" [class.out]="m.qty < 0">{{ m.qty > 0 ? '+' : '' }}{{ m.qty }}</td>
+              <td class="num">{{ m.unitCost | number: '1.2-2' }}</td>
+              <td class="num" [class.out]="m.qty < 0">{{ m.totalCost | number: '1.2-2' }}</td>
+              <td class="num strong">{{ m.balanceQty }}</td>
+              <td class="num">{{ m.balanceAvgCost | number: '1.2-2' }}</td>
+              <td class="num">{{ m.balanceValue | number: '1.2-2' }}</td>
+              <td class="small">
+                {{ m.note || '-' }}
+                @if (m.serials.length) {
+                  <div class="serials mono">{{ m.serials.join(', ') }}</div>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="9" class="text-muted empty">ยังไม่มีการเคลื่อนไหว</td>
+            </tr>
+          }
+        </tbody>
+        @if (movements().length) {
+          <tfoot>
+            <tr>
+              <td colspan="2">รวม</td>
+              <td class="num" colspan="3">
+                รับ +{{ totals().inQty }} / ตัด −{{ totals().outQty }}
+              </td>
+              <td colspan="4"></td>
+            </tr>
+          </tfoot>
+        }
+      </table>
+    </div>
+  }
+</mat-card>

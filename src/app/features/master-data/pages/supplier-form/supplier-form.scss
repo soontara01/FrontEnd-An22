@@ -1,0 +1,84 @@
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+
+  h2 {
+    margin: 0;
+    font: var(--mat-sys-title-large);
+  }
+}
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 960px;
+}
+
+mat-card-content {
+  padding-top: 16px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  column-gap: 16px;
+  row-gap: 8px;
+}
+
+.span-2 {
+  grid-column: span 2;
+
+  @media (max-width: 599px) {
+    grid-column: auto;
+  }
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.branch {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  mat-button-toggle-group {
+    margin-top: 4px;
+  }
+
+  .branch-no {
+    width: 120px;
+  }
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+  grid-column: span 2;
+
+  .selected {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  @media (max-width: 599px) {
+    grid-column: auto;
+  }
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.spacer {
+  flex: 1;
+}

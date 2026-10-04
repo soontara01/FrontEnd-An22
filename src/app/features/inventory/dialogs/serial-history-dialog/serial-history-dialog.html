@@ -1,0 +1,72 @@
+<h2 mat-dialog-title>ประวัติ Serial</h2>
+
+<mat-dialog-content>
+  <div class="product">
+    <span class="mono">{{ product.sku }}</span> — {{ product.name }}
+    <div class="text-muted small">
+      รูปแบบ: <span class="mono">{{ formatHint }}</span>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <app-loading-spinner [diameter]="32" />
+  } @else {
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>ค้นหา Serial</mat-label>
+        <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
+        <mat-icon matPrefix>search</mat-icon>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>สถานะ</mat-label>
+        <mat-select [value]="filter()" (selectionChange)="filter.set($event.value)">
+          <mat-option value="all">ทั้งหมด ({{ inStockCount() + removedCount() }})</mat-option>
+          <mat-option value="in_stock">คงคลัง ({{ inStockCount() }})</mat-option>
+          <mat-option value="removed">ตัดออกแล้ว ({{ removedCount() }})</mat-option>
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    @if (rows().length) {
+      <div class="table-wrap">
+        <table mat-table [dataSource]="rows()">
+          <ng-container matColumnDef="serial">
+            <th mat-header-cell *matHeaderCellDef>Serial</th>
+            <td mat-cell *matCellDef="let s" class="mono">{{ s.serial }}</td>
+          </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+            <td mat-cell *matCellDef="let s">
+              <span class="badge" [class]="statusBadge(s)">{{ statusText(s) }}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="cost">
+            <th mat-header-cell *matHeaderCellDef class="num">ต้นทุน</th>
+            <td mat-cell *matCellDef="let s" class="num">{{ s.cost | number: '1.2-2' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="receivedAt">
+            <th mat-header-cell *matHeaderCellDef>รับเข้า</th>
+            <td mat-cell *matCellDef="let s">{{ s.receivedAt | thaiDate: 'long' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="removedAt">
+            <th mat-header-cell *matHeaderCellDef>ตัดออก</th>
+            <td mat-cell *matCellDef="let s">{{ (s.removedAt | thaiDate: 'long') || '-' }}</td>
+          </ng-container>
+          <ng-container matColumnDef="note">
+            <th mat-header-cell *matHeaderCellDef>หมายเหตุ</th>
+            <td mat-cell *matCellDef="let s">{{ s.note || '-' }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="columns; sticky: true"></tr>
+          <tr mat-row *matRowDef="let row; columns: columns"></tr>
+        </table>
+      </div>
+    } @else {
+      <app-empty-state icon="qr_code_2" message="ไม่มี Serial" />
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>ปิด</button>
+</mat-dialog-actions>

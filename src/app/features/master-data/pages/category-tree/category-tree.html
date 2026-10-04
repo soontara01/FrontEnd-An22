@@ -1,0 +1,91 @@
+<section class="stat-grid">
+  <app-stat-card label="แผนก" [value]="store.departmentCount()" icon="store" />
+  <app-stat-card
+    label="หมวดหมู่ย่อย (ใช้กับ SKU)"
+    [value]="store.leafCount()"
+    icon="account_tree"
+  />
+  <app-stat-card label="ปิดใช้งาน" [value]="store.inactiveCount()" icon="block" tone="warn" />
+</section>
+
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>ค้นหา รหัส / ชื่อหมวดหมู่</mat-label>
+    <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
+    <mat-icon matPrefix>search</mat-icon>
+  </mat-form-field>
+  <span class="spacer"></span>
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <button mat-flat-button (click)="openForm({})">
+    <mat-icon>add</mat-icon>
+    เพิ่มแผนก
+  </button>
+</div>
+
+<mat-card appearance="outlined">
+  @if (store.loading() && !store.categories().length) {
+    <app-loading-spinner />
+  } @else if (rows().length) {
+    <ul class="tree">
+      @for (row of rows(); track row.node.id) {
+        <li [class.inactive]="!row.node.active" [style.padding-left.px]="8 + row.depth * 28">
+          @if (row.node.children.length) {
+            <button
+              mat-icon-button
+              class="toggle"
+              [attr.aria-label]="(row.expanded ? 'ย่อ ' : 'ขยาย ') + row.node.name"
+              [attr.aria-expanded]="row.expanded"
+              (click)="toggle(row.node)"
+            >
+              <mat-icon>{{ row.expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            </button>
+          } @else {
+            <span class="toggle-space"></span>
+          }
+
+          <span class="code">{{ row.node.code }}</span>
+          <span class="name">{{ row.node.name }}</span>
+          <span class="badge level">{{ levelLabel[row.node.level] }}</span>
+          @if (!row.node.active) {
+            <span class="badge badge-error">ปิดใช้งาน</span>
+          }
+          @if (row.node.productCount) {
+            <span class="badge badge-success">{{ row.node.productCount }} SKU</span>
+          }
+
+          <span class="spacer"></span>
+
+          @if (canAddChild(row.node)) {
+            <button
+              mat-icon-button
+              [matTooltip]="'เพิ่ม' + childLabel(row.node)"
+              (click)="openForm({ parent: row.node })"
+            >
+              <mat-icon>add</mat-icon>
+            </button>
+          }
+          <button mat-icon-button matTooltip="แก้ไข" (click)="openForm({ category: row.node })">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <span [matTooltip]="deleteBlocker(row.node)">
+            <button
+              mat-icon-button
+              aria-label="ลบ"
+              [disabled]="!!deleteBlocker(row.node)"
+              (click)="remove(row.node)"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </span>
+        </li>
+      }
+    </ul>
+  } @else {
+    <app-empty-state
+      icon="account_tree"
+      [message]="search() ? 'ไม่พบหมวดหมู่ที่ค้นหา' : 'ยังไม่มีหมวดหมู่'"
+    />
+  }
+</mat-card>

@@ -1,0 +1,13 @@
+.card {
+  width: min(400px, 100%);
+}
+
+mat-card-content {
+  display: flex;
+  flex-direction: column;
+  padding-top: 16px;
+}
+
+mat-card-actions button {
+  width: 100%;
+}
