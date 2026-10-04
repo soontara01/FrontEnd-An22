@@ -73,6 +73,7 @@ import {
   hasStarted,
   serialFormatError,
   todayIso,
+  toIsoDate,
   cartError,
   paymentError,
   paymentSummary,
@@ -85,6 +86,7 @@ import {
   toRefunds,
   normalizeBuyer,
   taxInvoiceError,
+  checkoutBuyerError,
   storeInfoError,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -746,6 +748,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.sales = db.sales.map(withSaleDefaults);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.creditNotes = db.creditNotes.map((n) => ({ ...n, taxInvoiceNo: n.taxInvoiceNo ?? null }));
+  db.taxInvoices = db.taxInvoices.map((t) => ({ ...t, atSale: t.atSale ?? false }));
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
@@ -1812,6 +1815,9 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   const paymentProblem = paymentError(cart.total, payments, db.paymentMethods);
   if (paymentProblem) return error(400, paymentProblem);
   const paid = paymentSummary(cart.total, payments, db.paymentMethods);
+  const buyer = body.buyer ? normalizeBuyer(body.buyer) : null;
+  const buyerProblem = buyer ? checkoutBuyerError(buyer, db.storeInfo) : null;
+  if (buyerProblem) return error(400, buyerProblem);
 
   const now = new Date();
   const orderNo = nextOrderNo(db, today);
@@ -1847,6 +1853,8 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     taxInvoiceNo: null,
   };
   db.sales.push(sale);
+  // Full tax invoice requested at the POS: issued with the sale, same date.
+  if (buyer) createTaxInvoice(db, sale, buyer, true);
   return ok(sale);
 }
 
@@ -2002,8 +2010,19 @@ function issueTaxInvoice(
 ): Observable<HttpResponse<unknown>> {
   const problem = taxInvoiceError(sale, buyer, db.storeInfo);
   if (problem) return error(400, problem);
-  const now = new Date();
-  const prefix = `INV-${todayIso().replaceAll('-', '')}-`;
+  return ok(createTaxInvoice(db, sale, buyer, false));
+}
+
+/** Numbers and stores a full tax invoice for a bill (checked by the caller). */
+function createTaxInvoice(
+  db: MockDb,
+  sale: Sale,
+  buyer: TaxInvoiceBuyer,
+  atSale: boolean,
+): TaxInvoice {
+  // Issued with the sale → exactly the sale's date (tax point); later → the issue date.
+  const now = atSale ? new Date(sale.date) : new Date();
+  const prefix = `INV-${toIsoDate(now).replaceAll('-', '')}-`;
   const last = db.taxInvoices
     .filter((t) => t.invoiceNo.startsWith(prefix))
     .reduce((max, t) => Math.max(max, Number(t.invoiceNo.slice(prefix.length))), 0);
@@ -2017,10 +2036,11 @@ function issueTaxInvoice(
     buyer,
     issuedBy: db.users[0]?.name ?? '',
     cancelledAt: null,
+    atSale,
   };
   db.taxInvoices.push(invoice);
   sale.taxInvoiceNo = invoice.invoiceNo;
-  return ok(invoice);
+  return invoice;
 }
 
 /**

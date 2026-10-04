@@ -88,6 +88,7 @@ export default class TaxInvoiceForm {
       buyer: this.buyer(),
       issuedBy: s.cashier,
       cancelledAt: null,
+      atSale: false,
     };
   });
 

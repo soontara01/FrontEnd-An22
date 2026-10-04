@@ -7,6 +7,11 @@
       </div>
       <div class="label">เงินทอน</div>
       <div class="change">{{ sale.change | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</div>
+      @if (sale.taxInvoiceNo) {
+        <div>
+          ใบกำกับภาษีเต็มรูป <span class="mono">{{ sale.taxInvoiceNo }}</span>
+        </div>
+      }
       @if (summary().opensDrawer) {
         <div class="badge badge-warn">
           <mat-icon inline>point_of_sale</mat-icon> เปิดลิ้นชักเก็บเงิน
@@ -15,7 +20,7 @@
     </div>
   </mat-dialog-content>
   <mat-dialog-actions align="end">
-    @if (store.storeInfo()?.vatRegistered) {
+    @if (store.storeInfo()?.vatRegistered && !sale.taxInvoiceNo) {
       <!-- Another menu: full page load (the bill is saved, the cart already cleared). -->
       <a mat-button class="full-invoice" [href]="'/sales/' + sale.id + '/tax-invoice'">
         <mat-icon>receipt_long</mat-icon>
@@ -28,7 +33,7 @@
     </button>
     <button mat-flat-button appAutofocus (click)="finish(true)">
       <mat-icon>print</mat-icon>
-      พิมพ์ใบเสร็จ
+      {{ sale.taxInvoiceNo ? 'พิมพ์ใบกำกับภาษี' : 'พิมพ์ใบเสร็จ' }}
     </button>
   </mat-dialog-actions>
 } @else {
@@ -38,6 +43,12 @@
       <span>ยอดที่ต้องชำระ</span>
       <strong>{{ total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</strong>
     </div>
+    @if (store.buyer(); as buyer) {
+      <div class="invoice-note">
+        <mat-icon inline>receipt_long</mat-icon>
+        ออกใบกำกับภาษีเต็มรูปให้ {{ buyer.name }} ({{ buyer.taxId }})
+      </div>
+    }
 
     @if (total > 0) {
       <div class="methods">

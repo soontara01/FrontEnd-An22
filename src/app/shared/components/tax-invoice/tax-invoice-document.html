@@ -34,12 +34,18 @@
       <div>
         <span>วันที่</span><span>{{ inv.date | thaiDate }}</span>
       </div>
-      <div>
-        <span>อ้างอิงใบเสร็จ</span><span>{{ inv.orderNo }}</span>
-      </div>
-      <div>
-        <span>วันที่ขาย</span><span>{{ inv.saleDate | thaiDate }}</span>
-      </div>
+      @if (inv.atSale) {
+        <div>
+          <span>เลขที่บิล</span><span>{{ inv.orderNo }}</span>
+        </div>
+      } @else {
+        <div>
+          <span>อ้างอิงใบเสร็จ</span><span>{{ inv.orderNo }}</span>
+        </div>
+        <div>
+          <span>วันที่ขาย</span><span>{{ inv.saleDate | thaiDate }}</span>
+        </div>
+      }
     </div>
   </section>
 
@@ -121,5 +127,7 @@
       <div>ผู้รับเงิน ({{ inv.issuedBy }})</div>
     </div>
   </footer>
-  <p class="note">ใบกำกับภาษีนี้ออกแทนใบกำกับภาษีอย่างย่อเลขที่ {{ inv.orderNo }}</p>
+  @if (!inv.atSale) {
+    <p class="note">ใบกำกับภาษีนี้ออกแทนใบกำกับภาษีอย่างย่อเลขที่ {{ inv.orderNo }}</p>
+  }
 </div>

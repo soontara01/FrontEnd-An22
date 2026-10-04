@@ -95,6 +95,13 @@ describe('Receipt', () => {
     expect(text).not.toContain('สำเนา');
   });
 
+  it('becomes a plain receipt referring to the full tax invoice once one is issued', () => {
+    const text = render({ sale: { ...sale, taxInvoiceNo: 'INV-20261004-0001' } });
+    expect(text).not.toContain('ใบกำกับภาษีอย่างย่อ');
+    expect(text).toContain('ใบเสร็จรับเงิน');
+    expect(text).toContain('ใบกำกับภาษีเต็มรูปเลขที่INV-20261004-0001');
+  });
+
   it('prints a plain receipt for a non-VAT store and marks copies / voided bills', () => {
     const text = render({
       store: { ...store, vatRegistered: false },

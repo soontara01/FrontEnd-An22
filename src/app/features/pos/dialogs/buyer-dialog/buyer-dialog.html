@@ -1,0 +1,43 @@
+<h2 mat-dialog-title>ขอใบกำกับภาษีเต็มรูป</h2>
+<mat-dialog-content>
+  <p class="text-muted small">ออกพร้อมการขาย ลงวันที่วันนี้ — ไม่ต้องออกใบกำกับภาษีอย่างย่อ</p>
+  <form [formGroup]="form" id="buyer-form" (ngSubmit)="save()">
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน</mat-label>
+      <input matInput appAutofocus formControlName="taxId" inputmode="numeric" maxlength="17" />
+    </mat-form-field>
+    @if (found()) {
+      <div class="found">เติมข้อมูลจากใบกำกับภาษีครั้งก่อนแล้ว</div>
+    }
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>ชื่อผู้ซื้อ / ชื่อบริษัท</mat-label>
+      <input matInput formControlName="name" />
+    </mat-form-field>
+    <div class="row">
+      <mat-button-toggle-group formControlName="branchType" aria-label="ประเภทสาขา">
+        <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
+        <mat-button-toggle value="branch">สาขา</mat-button-toggle>
+      </mat-button-toggle-group>
+      @if (buyer().branchType === 'branch') {
+        <mat-form-field appearance="outline" class="branch-no">
+          <mat-label>เลขที่สาขา</mat-label>
+          <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" />
+        </mat-form-field>
+      }
+    </div>
+    <mat-form-field appearance="outline" class="w-full">
+      <mat-label>ที่อยู่</mat-label>
+      <textarea matInput formControlName="address" rows="3"></textarea>
+    </mat-form-field>
+    @if (problem(); as message) {
+      <div class="problem">{{ message }}</div>
+    }
+  </form>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>ยกเลิก</button>
+  <button mat-flat-button type="submit" form="buyer-form" [disabled]="!!problem()">
+    <mat-icon>check</mat-icon>
+    ใช้ข้อมูลนี้
+  </button>
+</mat-dialog-actions>

@@ -66,6 +66,7 @@ describe('TaxInvoiceDocument', () => {
     },
     issuedBy: 'Admin',
     cancelledAt: null,
+    atSale: false,
   };
   const store = { ...STORE_INFO_DEFAULTS, name: 'ร้าน', taxId: '0105550123451', address: 'กทม.' };
 
@@ -93,6 +94,13 @@ describe('TaxInvoiceDocument', () => {
     expect(text).toContain('ภาษีมูลค่าเพิ่ม7%700.00');
     expect(text).toContain('จำนวนเงินรวมทั้งสิ้น10,950.50');
     expect(text).toContain('(หนึ่งหมื่นเก้าร้อยห้าสิบบาทห้าสิบสตางค์)');
+  });
+
+  it('refers to the abbreviated receipt only when issued after the sale', () => {
+    expect(render()).toContain('ออกแทนใบกำกับภาษีอย่างย่อ');
+    const atSale = render(false, { ...invoice, atSale: true });
+    expect(atSale).not.toContain('ออกแทน');
+    expect(atSale).toContain('เลขที่บิลPOS-20261004-0001');
   });
 
   it('marks copies and cancelled invoices', () => {

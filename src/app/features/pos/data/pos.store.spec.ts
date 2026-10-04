@@ -53,6 +53,8 @@ describe('PosStore', () => {
       serials: vi.fn(() => of([])),
       checkout: vi.fn(() => of(sale)),
       storeInfo: vi.fn(() => of(STORE_INFO_DEFAULTS)),
+      taxInvoiceOf: vi.fn(() => of(null)),
+      buyerByTaxId: vi.fn(() => of(null)),
     };
     TestBed.configureTestingModule({ providers: [PosStore, { provide: PosApi, useValue: api }] });
     store = TestBed.inject(PosStore);
@@ -123,11 +125,38 @@ describe('PosStore', () => {
       payments,
       customer: 'คุณบี',
       expectedTotal: 200,
+      buyer: null,
     });
     expect(result).toBe(sale);
     expect(store.lastSale()).toBe(sale);
     expect(store.items()).toEqual([]);
     expect(api.products).toHaveBeenCalledTimes(2); // stock reloaded
+  });
+
+  it('sends the full-tax-invoice buyer, keeps it when parked and loads the issued invoice', () => {
+    const buyer = {
+      name: 'บริษัท บี จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head' as const,
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    store.add(1);
+    store.setBuyer(buyer);
+    store.hold();
+    expect(store.buyer()).toBeNull();
+    store.resume(store.holds()[0].id);
+    expect(store.buyer()).toEqual(buyer);
+
+    const invoice = { id: 7, invoiceNo: 'INV-1', saleId: 1 };
+    api.checkout.mockReturnValueOnce(of({ ...sale, taxInvoiceNo: 'INV-1' }));
+    api.taxInvoiceOf.mockReturnValueOnce(of(invoice));
+    store.checkout([]).subscribe();
+    expect(api.checkout).toHaveBeenCalledWith(
+      expect.objectContaining({ buyer, customer: 'บริษัท บี จำกัด' }),
+    );
+    expect(store.lastInvoice()).toBe(invoice);
+    expect(store.buyer()).toBeNull();
   });
 
   it('keeps the cart and reloads master data when the server rejects the sale', () => {

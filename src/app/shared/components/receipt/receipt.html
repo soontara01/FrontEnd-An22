@@ -16,7 +16,9 @@
       <div>POS ID {{ shop.posId }}</div>
     }
     <div class="title">{{ title() }}</div>
-    @if (shop.vatRegistered) {
+    @if (s.taxInvoiceNo) {
+      <div>ใบกำกับภาษีเต็มรูปเลขที่ {{ s.taxInvoiceNo }}</div>
+    } @else if (shop.vatRegistered) {
       <div>(VAT Included)</div>
     }
     @if (copy()) {

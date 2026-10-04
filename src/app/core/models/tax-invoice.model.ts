@@ -3,8 +3,9 @@ import { BranchType, isValidThaiTaxId } from './supplier.model';
 import type { Sale } from './sale.model';
 
 /**
- * Full tax invoice (ใบกำกับภาษีเต็มรูป, decided 2026-10-04), issued on request for a paid POS
- * bill of a VAT-registered store, in place of the abbreviated one. The buyer's details are typed
+ * Full tax invoice (ใบกำกับภาษีเต็มรูป, decided 2026-10-04) of a POS bill of a VAT-registered
+ * store: issued together with the sale when the buyer's details are entered at the POS (no
+ * abbreviated invoice involved), or later on request in place of the abbreviated one. The buyer's details are typed
  * on the invoice (no customer master yet); amounts always come from the bill. One per bill;
  * voiding the bill cancels it.
  */
@@ -32,6 +33,8 @@ export interface TaxInvoice {
   issuedBy: string;
   /** Set when the bill is voided */
   cancelledAt: string | null;
+  /** Issued together with the sale (true) or later in place of the abbreviated invoice (false) */
+  atSale: boolean;
 }
 
 export const EMPTY_BUYER: TaxInvoiceBuyer = {
@@ -62,7 +65,16 @@ export function buyerError(b: TaxInvoiceBuyer): string | null {
   return null;
 }
 
-/** The single rule for issuing (form + server). `buyer` must be normalized. */
+/** Buyer entered at the POS for a full tax invoice issued with the sale (POS + server). */
+export function checkoutBuyerError(
+  buyer: TaxInvoiceBuyer,
+  store: Pick<StoreInfo, 'vatRegistered'>,
+): string | null {
+  if (!store.vatRegistered) return 'ร้านไม่ได้จดทะเบียน VAT ออกใบกำกับภาษีไม่ได้';
+  return buyerError(buyer);
+}
+
+/** The single rule for issuing later from the bill (form + server). `buyer` must be normalized. */
 export function taxInvoiceError(
   sale: Pick<Sale, 'status' | 'lines' | 'taxInvoiceNo'>,
   buyer: TaxInvoiceBuyer,

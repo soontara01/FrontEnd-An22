@@ -12,6 +12,8 @@ import {
   Sale,
   SerialNumber,
   StoreInfo,
+  TaxInvoice,
+  TaxInvoiceBuyer,
   cartError,
   priceCart,
   todayIso,
@@ -27,6 +29,8 @@ export interface HeldBill {
   customer: string;
   items: CartItem[];
   freeSerials: FreeSerial[];
+  /** Full tax invoice requested for the bill (missing in bills parked before it existed) */
+  buyer?: TaxInvoiceBuyer | null;
   /** Total when parked (display only; re-priced on resume) */
   total: number;
 }
@@ -35,7 +39,8 @@ const HOLDS_KEY = 'pos.holds';
 
 /**
  * State of the POS screen (provided in pos.routes.ts): master data loaded once per page load,
- * the cart (re-priced by `priceCart()` on every change) and parked bills.
+ * the cart (re-priced by `priceCart()` on every change), the optional full-tax-invoice buyer
+ * and parked bills.
  */
 @Injectable()
 export class PosStore {
@@ -51,8 +56,10 @@ export class PosStore {
   private readonly _items = signal<CartItem[]>([]);
   private readonly _freeSerials = signal<FreeSerial[]>([]);
   private readonly _customer = signal('');
+  private readonly _buyer = signal<TaxInvoiceBuyer | null>(null);
   private readonly _holds = signal<HeldBill[]>(this.storage.get<HeldBill[]>(HOLDS_KEY) ?? []);
   private readonly _lastSale = signal<Sale | null>(null);
+  private readonly _lastInvoice = signal<TaxInvoice | null>(null);
 
   readonly products = this._products.asReadonly();
   readonly promotions = this._promotions.asReadonly();
@@ -60,8 +67,12 @@ export class PosStore {
   readonly items = this._items.asReadonly();
   readonly freeSerials = this._freeSerials.asReadonly();
   readonly customer = this._customer.asReadonly();
+  /** Buyer of a full tax invoice issued with this bill (null = abbreviated receipt only) */
+  readonly buyer = this._buyer.asReadonly();
   readonly holds = this._holds.asReadonly();
   readonly lastSale = this._lastSale.asReadonly();
+  /** Full tax invoice issued with the last sale, if any */
+  readonly lastInvoice = this._lastInvoice.asReadonly();
   /** Receipt header / footer */
   readonly storeInfo = this._storeInfo.asReadonly();
 
@@ -166,10 +177,20 @@ export class PosStore {
     this._customer.set(name);
   }
 
+  /** Requests (or, with null, drops) a full tax invoice issued together with the sale. */
+  setBuyer(buyer: TaxInvoiceBuyer | null): void {
+    this._buyer.set(buyer);
+  }
+
+  buyerByTaxId(taxId: string): Observable<TaxInvoiceBuyer | null> {
+    return this.api.buyerByTaxId(taxId);
+  }
+
   clear(): void {
     this._items.set([]);
     this._freeSerials.set([]);
     this._customer.set('');
+    this._buyer.set(null);
   }
 
   /** Parks the current bill and starts an empty one. */
@@ -182,6 +203,7 @@ export class PosStore {
       customer: this._customer(),
       items: this._items(),
       freeSerials: this._freeSerials(),
+      buyer: this._buyer(),
       total: this.cart().total,
     };
     this.saveHolds([...this._holds(), bill]);
@@ -197,6 +219,7 @@ export class PosStore {
     this._items.set(bill.items);
     this._freeSerials.set(bill.freeSerials);
     this._customer.set(bill.customer);
+    this._buyer.set(bill.buyer ?? null);
   }
 
   discardHold(id: string): void {
@@ -210,13 +233,18 @@ export class PosStore {
         items: this._items(),
         freeSerials: this._freeSerials(),
         payments,
-        customer: this._customer().trim(),
+        customer: this._customer().trim() || (this._buyer()?.name ?? ''),
         expectedTotal: this.cart().total,
+        buyer: this._buyer(),
       })
       .pipe(
         tap({
           next: (sale) => {
             this._lastSale.set(sale);
+            this._lastInvoice.set(null);
+            if (sale.taxInvoiceNo) {
+              this.api.taxInvoiceOf(sale.id).subscribe((inv) => this._lastInvoice.set(inv));
+            }
             this.clear();
             this.api.products().subscribe((products) => this._products.set(products));
           },

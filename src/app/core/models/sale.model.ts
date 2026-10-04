@@ -1,6 +1,7 @@
 import type { PaymentType } from './payment-method.model';
 import { toIsoDate } from './price.model';
 import type { ItemType, VatType } from './product.model';
+import type { TaxInvoiceBuyer } from './tax-invoice.model';
 
 export type SaleStatus = 'pending' | 'paid' | 'cancelled';
 
@@ -173,4 +174,6 @@ export interface SalePayload {
   payments: PaymentInput[];
   customer: string;
   expectedTotal: number;
+  /** Buyer for a full tax invoice issued together with the sale (null = abbreviated only) */
+  buyer: TaxInvoiceBuyer | null;
 }

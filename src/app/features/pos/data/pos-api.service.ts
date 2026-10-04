@@ -10,6 +10,8 @@ import {
   SalePayload,
   SerialNumber,
   StoreInfo,
+  TaxInvoice,
+  TaxInvoiceBuyer,
 } from '@core/models';
 
 /** HTTP calls for the POS feature (provided in pos.routes.ts). */
@@ -39,6 +41,15 @@ export class PosApi {
 
   storeInfo(): Observable<StoreInfo> {
     return this.api.get<StoreInfo>('settings/store');
+  }
+
+  taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {
+    return this.api.get<TaxInvoice | null>(`sales/${saleId}/tax-invoice`);
+  }
+
+  /** Buyer details last used with this tax ID (null = never). */
+  buyerByTaxId(taxId: string): Observable<TaxInvoiceBuyer | null> {
+    return this.api.get<TaxInvoiceBuyer | null>('tax-invoices/buyer', { taxId });
   }
 
   checkout(payload: SalePayload): Observable<Sale> {

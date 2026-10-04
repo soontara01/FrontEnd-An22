@@ -21,7 +21,10 @@ export class Receipt {
   /** Reprint: marks the receipt as a copy */
   readonly copy = input(false);
 
-  protected readonly title = computed(() => receiptTitle(this.store()));
+  /** Once a full tax invoice exists for the bill, this slip is only a receipt referring to it. */
+  protected readonly title = computed(() =>
+    this.sale().taxInvoiceNo ? 'ใบเสร็จรับเงิน' : receiptTitle(this.store()),
+  );
   protected readonly branch = computed(() => branchLabel(this.store()));
   protected readonly vatable = computed(() =>
     round2(this.amountOf(this.sale().lines.filter((l) => l.vatType === 'vat7'))),

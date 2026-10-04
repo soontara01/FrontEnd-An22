@@ -182,3 +182,19 @@
   justify-content: space-between;
   gap: 8px;
 }
+
+.request-invoice {
+  margin: 8px 0 0 -12px;
+}
+
+.buyer {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 12px;
+  padding: 8px 4px 8px 12px;
+  border-radius: 12px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}

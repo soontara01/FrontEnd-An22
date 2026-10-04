@@ -723,6 +723,39 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
   });
 
+  it('issues the full tax invoice together with the sale when a buyer is given', async () => {
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const body = (b: unknown) => ({
+      items: [item(MOUSE)],
+      freeSerials: [],
+      payments: [pay(CASH, 531)],
+      customer: '',
+      expectedTotal: 531,
+      buyer: b,
+    });
+    expect(await errorOf(post('sales', body({ ...buyer, taxId: '123' })))).toBe(
+      'เลขประจำตัวผู้เสียภาษีผู้ซื้อต้องเป็น 13 หลักที่ถูกต้อง',
+    );
+    expect((await product(MOUSE)).stock).toBe(3); // nothing sold
+
+    const sale = await post<Sale>('sales', body(buyer));
+    expect(sale.taxInvoiceNo).toBe('INV-20261004-0001');
+    const invoice = await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`);
+    expect(invoice).toMatchObject({
+      atSale: true,
+      orderNo: sale.orderNo,
+      buyer,
+      cancelledAt: null,
+    });
+    expect(invoice.date).toBe(sale.date);
+  });
+
   it('keeps payment methods and SKUs that sales refer to', async () => {
     await sell([item(ESIM)], 199, [pay(QR, 199)]);
     expect(await errorOf(del(`payment-methods/${QR}`))).toBe(
