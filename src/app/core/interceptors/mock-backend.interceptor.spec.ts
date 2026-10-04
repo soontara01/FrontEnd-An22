@@ -9,9 +9,10 @@ import {
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
   SkuPrice,
-  StockMovement,
+  StockCardResult,
   Supplier,
 } from '../models';
+import { addDaysIso, todayIso } from '../models';
 import { mockBackendInterceptor } from './mock-backend.interceptor';
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
@@ -372,7 +373,7 @@ describe('mockBackendInterceptor – costing', () => {
     const issued = await put<Product>(`products/${MOUSE}/stock`, { delta: -1 });
     expect(issued.avgCost).toBeCloseTo(306.5217, 4); // unchanged by issues
 
-    const card = await get<StockMovement[]>(`products/${MOUSE}/movements`);
+    const card = (await get<StockCardResult>(`products/${MOUSE}/movements`)).movements;
     expect(card.map((m) => m.type)).toEqual(['opening', 'receive', 'issue']);
     expect(card[0]).toMatchObject({ qty: 3, unitCost: 350, balanceValue: 1050 });
     expect(card[1]).toMatchObject({ qty: 20, totalCost: 6000, balanceQty: 23, note: 'INV-001' });
@@ -384,7 +385,7 @@ describe('mockBackendInterceptor – costing', () => {
     // USB cable (id 7): 60 in stock at the standard cost 80
     const issued = await put<Product>('products/7/stock', { delta: -20, note: 'ขายแล้ว' });
     expect(issued.stock).toBe(40);
-    const card = await get<StockMovement[]>('products/7/movements');
+    const card = (await get<StockCardResult>('products/7/movements')).movements;
     expect(card.at(-1)).toMatchObject({ type: 'issue', qty: -20, unitCost: 80, totalCost: -1600 });
 
     const tooMany = await firstValueFrom(http.put('/api/products/7/stock', { delta: -41 })).then(
@@ -412,10 +413,31 @@ describe('mockBackendInterceptor – costing', () => {
     });
     expect(after.avgCost).toBeCloseTo((11 * 19900 + 19000) / 12, 3);
 
-    const card = await get<StockMovement[]>(`products/${NOTEBOOK}/movements`);
+    const card = (await get<StockCardResult>(`products/${NOTEBOOK}/movements`)).movements;
     const issue = card.at(-1)!;
     expect(issue).toMatchObject({ type: 'issue', qty: -2, totalCost: -38900, balanceQty: 12 });
     expect(issue.serials).toEqual([oldOne.serial, 'NB-900000001']);
+  });
+
+  it('slices the stock card by date range with opening / closing balances', async () => {
+    await put<Product>('products/7/stock', { delta: 10, unitCost: 70 });
+    const today = todayIso();
+    const all = await get<StockCardResult>('products/7/movements');
+    expect(all.movements.map((m) => m.type)).toEqual(['opening', 'receive']);
+
+    const future = addDaysIso(today, 1);
+    const empty = await get<StockCardResult>(`products/7/movements?from=${future}&to=${future}`);
+    expect(empty.movements).toEqual([]);
+    expect(empty.opening).toEqual(all.closing); // everything is before the range
+    expect(empty.closing).toEqual(all.closing);
+
+    const bad = await firstValueFrom(
+      http.get(`/api/products/7/movements?from=${future}&to=${today}`),
+    ).then(
+      () => null,
+      (e: { status: number }) => e.status,
+    );
+    expect(bad).toBe(400);
   });
 
   it('migrates stored data without costs (opening balance at standard cost)', async () => {
@@ -428,7 +450,7 @@ describe('mockBackendInterceptor – costing', () => {
     );
     const product = await get<Product>('products/80');
     expect(product.avgCost).toBe(50);
-    const card = await get<StockMovement[]>('products/80/movements');
+    const card = (await get<StockCardResult>('products/80/movements')).movements;
     expect(card).toEqual([
       expect.objectContaining({ type: 'opening', qty: 4, unitCost: 50, balanceValue: 200 }),
     ]);

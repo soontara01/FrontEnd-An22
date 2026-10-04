@@ -62,3 +62,23 @@
     border-bottom: none;
   }
 }
+
+.range {
+  max-width: 300px;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  .selected {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
+
+.ledger .balance-row td {
+  background: var(--mat-sys-surface-container-low);
+  font-weight: 600;
+}

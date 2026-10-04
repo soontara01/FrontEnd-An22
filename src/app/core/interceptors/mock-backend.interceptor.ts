@@ -1,6 +1,7 @@
 import {
   HttpErrorResponse,
   HttpInterceptorFn,
+  HttpParams,
   HttpRequest,
   HttpResponse,
 } from '@angular/common/http';
@@ -38,6 +39,7 @@ import {
   allBarcodes,
   canPurchase,
   categoryPath,
+  buildStockCard,
   costValue,
   movingAverage,
   round2,
@@ -476,9 +478,16 @@ const LATENCY_MS = 300;
  * Fake backend for development without a real API.
  * Registered only when `environment.useMock` is true (see app.config.ts).
  */
-export const mockBackendInterceptor: HttpInterceptorFn = (req, next) => {
+export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const base = environment.apiUrl.replace(/\/$/, '');
-  if (!req.url.startsWith(base + '/')) return next(req);
+  if (!original.url.startsWith(base + '/')) return next(original);
+  // Accept a query string written into the URL as well as HttpParams (like a real server).
+  const [url, query] = original.url.split('?');
+  const fromUrl = new HttpParams({ fromString: query ?? '' });
+  const params = fromUrl
+    .keys()
+    .reduce((acc, key) => acc.set(key, fromUrl.get(key) ?? ''), original.params);
+  const req = original.clone({ url, params });
 
   const storage = inject(StorageService);
   // Merge with seed so collections added later still exist in an older stored db.
@@ -562,7 +571,7 @@ function handleUsers(
 /**
  * SKU master + stock:
  * GET/POST /products, GET/PUT/DELETE /products/:id, PUT /products/:id/stock { delta, unitCost?, note? },
- * GET /products/:id/movements (stock card),
+ * GET /products/:id/movements?from&to (stock card for a date range → StockCardResult),
  * and /products/:id/serials… (see handleSerials)
  */
 function handleProducts(
@@ -593,7 +602,13 @@ function handleProducts(
   if (movementMatch && req.method === 'GET') {
     const productId = Number(movementMatch[1]);
     if (!products.some((p) => p.id === productId)) return error(404, 'ไม่พบ SKU');
-    return ok(db.movements.filter((m) => m.productId === productId));
+    const from = req.params.get('from') || null;
+    const to = req.params.get('to') || null;
+    const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
+    if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
+    if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    const own = db.movements.filter((m) => m.productId === productId);
+    return ok(buildStockCard(own, from, to));
   }
   const serialMatch = /^products\/(\d+)\/serials(?:\/(\w+))?$/.exec(path);
   if (serialMatch) return handleSerials(req, Number(serialMatch[1]), serialMatch[2], db);

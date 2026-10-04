@@ -5,7 +5,7 @@ import {
   SerialNumber,
   SerialRemoveStatus,
   SkuSupplier,
-  StockMovement,
+  StockCardResult,
   Supplier,
   isDiscontinued,
   mainSupplier,
@@ -53,6 +53,8 @@ export class InventoryStore {
 
   /** Everything except discontinued SKUs (those are hidden from stock management). */
   readonly products = computed(() => this._products().filter((p) => !isDiscontinued(p)));
+  /** Every SKU incl. discontinued (for import validation messages). */
+  readonly allProducts = this._products.asReadonly();
   readonly loading = this._loading.asReadonly();
 
   readonly totalItems = computed(() => this.products().length);
@@ -129,8 +131,8 @@ export class InventoryStore {
       .pipe(tap((product) => this.replace(product)));
   }
 
-  movements(productId: number): Observable<StockMovement[]> {
-    return this.api.movements(productId);
+  movements(productId: number, from?: string, to?: string): Observable<StockCardResult> {
+    return this.api.movements(productId, from, to);
   }
 
   serials(productId: number): Observable<SerialNumber[]> {

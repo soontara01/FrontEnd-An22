@@ -1,52 +1,91 @@
 <app-page-header
   title="บัตรสต็อก"
-  [subtitle]="product() ? product()!.sku + ' — ' + product()!.name : ''"
+  [subtitle]="
+    (product() ? product()!.sku + ' — ' + product()!.name + ' · ' : '') +
+    'ช่วงวันที่: ' +
+    rangeText()
+  "
 >
   <a mat-button routerLink="/inventory" class="no-print">
     <mat-icon>arrow_back</mat-icon>
     คลังสินค้า
   </a>
-  <button mat-stroked-button class="no-print" (click)="print()">
+  <button mat-stroked-button class="no-print" [disabled]="!card.hasValue()" (click)="print()">
     <mat-icon>print</mat-icon>
     พิมพ์
   </button>
 </app-page-header>
 
-@if (product(); as p) {
+<div class="filter-row no-print">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="range">
+    <mat-label>ช่วงวันที่</mat-label>
+    <mat-date-range-input [formGroup]="rangeForm" [rangePicker]="picker">
+      <input matStartDate formControlName="start" placeholder="เริ่ม" />
+      <input matEndDate formControlName="end" placeholder="สิ้นสุด" />
+    </mat-date-range-input>
+    <mat-datepicker-toggle matIconSuffix [for]="picker" />
+    <mat-date-range-picker #picker />
+  </mat-form-field>
+  <button mat-flat-button (click)="search()">
+    <mat-icon>search</mat-icon>
+    ค้นหา
+  </button>
+  <div class="presets">
+    @for (p of presets; track p.id) {
+      <button
+        mat-stroked-button
+        type="button"
+        [class.selected]="activePreset() === p.id"
+        (click)="applyPreset(p.id)"
+      >
+        {{ p.label }}
+      </button>
+    }
+  </div>
+</div>
+
+@if (card.hasValue()) {
+  @let c = card.value();
+  @let p = product();
+
   <section class="stat-grid">
-    <app-stat-card label="คงเหลือ" [value]="p.stock + ' ' + p.unit" icon="inventory_2" />
     <app-stat-card
-      [label]="p.serialControl ? 'ต้นทุนเฉลี่ย (จาก Serial คงคลัง)' : 'ต้นทุนถัวเฉลี่ย'"
-      [value]="(p.avgCost | number: '1.2-2') + ' ฿'"
-      icon="calculate"
+      [label]="c.from ? 'ยอดยกมา (มูลค่าทุน)' : 'ยอดยกมา'"
+      [value]="(c.opening.value | number: '1.2-2') + ' ฿'"
+      [icon]="'login'"
     />
     <app-stat-card
-      label="มูลค่าคงคลัง (ทุน)"
-      [value]="(value() | number: '1.2-2') + ' ฿'"
-      icon="payments"
+      [label]="'รับเข้า ' + c.totals.inQty + ' ' + (p?.unit ?? '')"
+      [value]="(c.totals.inCost | number: '1.2-2') + ' ฿'"
+      icon="add_box"
     />
     <app-stat-card
-      label="ต้นทุนสินค้าที่ตัดออก"
-      [value]="(totals().outCost | number: '1.2-2') + ' ฿'"
+      [label]="'ตัดออก (ต้นทุนขาย) ' + c.totals.outQty + ' ' + (p?.unit ?? '')"
+      [value]="(c.totals.outCost | number: '1.2-2') + ' ฿'"
       icon="trending_down"
+      tone="warn"
+    />
+    <app-stat-card
+      [label]="'คงเหลือ ' + c.closing.qty + ' ' + (p?.unit ?? '')"
+      [value]="(c.closing.value | number: '1.2-2') + ' ฿'"
+      icon="inventory_2"
     />
   </section>
-  <p class="text-muted small method">
-    วิธีคิดต้นทุน:
-    @if (p.serialControl) {
-      <strong>ราคาทุนเฉพาะเจาะจง</strong> — แต่ละ Serial มีต้นทุนของตัวเอง
-      ตัดออกตามต้นทุนจริงของเครื่องนั้น
-    } @else {
-      <strong>ถัวเฉลี่ยเคลื่อนที่</strong> — คำนวณต้นทุนเฉลี่ยใหม่ทุกครั้งที่รับเข้า
-      ตัดออกด้วยต้นทุนเฉลี่ย ณ ขณะนั้น
-    }
-  </p>
-}
 
-<mat-card appearance="outlined">
-  @if (loading()) {
-    <app-loading-spinner />
-  } @else {
+  @if (p) {
+    <p class="text-muted small method">
+      วิธีคิดต้นทุน:
+      @if (p.serialControl) {
+        <strong>ราคาทุนเฉพาะเจาะจง</strong> — แต่ละ Serial มีต้นทุนของตัวเอง
+        ตัดออกตามต้นทุนจริงของเครื่องนั้น
+      } @else {
+        <strong>ถัวเฉลี่ยเคลื่อนที่</strong> — คำนวณต้นทุนเฉลี่ยใหม่ทุกครั้งที่รับเข้า
+        ตัดออกด้วยต้นทุนเฉลี่ย ณ ขณะนั้น
+      }
+    </p>
+  }
+
+  <mat-card appearance="outlined">
     <div class="table-wrap">
       <table class="ledger">
         <thead>
@@ -67,7 +106,17 @@
           </tr>
         </thead>
         <tbody>
-          @for (m of movements(); track m.id) {
+          @if (c.from) {
+            <tr class="balance-row">
+              <td class="nowrap">{{ c.from | thaiDate }}</td>
+              <td colspan="4"><strong>ยอดยกมา</strong></td>
+              <td class="num strong">{{ c.opening.qty }}</td>
+              <td class="num">{{ c.opening.avgCost | number: '1.2-2' }}</td>
+              <td class="num">{{ c.opening.value | number: '1.2-2' }}</td>
+              <td></td>
+            </tr>
+          }
+          @for (m of c.movements; track m.id) {
             <tr>
               <td class="nowrap">{{ m.date | thaiDate: 'long' }}</td>
               <td>
@@ -88,22 +137,33 @@
             </tr>
           } @empty {
             <tr>
-              <td colspan="9" class="text-muted empty">ยังไม่มีการเคลื่อนไหว</td>
+              <td colspan="9" class="text-muted empty">ไม่มีการเคลื่อนไหวในช่วงนี้</td>
             </tr>
           }
         </tbody>
-        @if (movements().length) {
-          <tfoot>
-            <tr>
-              <td colspan="2">รวม</td>
-              <td class="num" colspan="3">
-                รับ +{{ totals().inQty }} / ตัด −{{ totals().outQty }}
-              </td>
-              <td colspan="4"></td>
-            </tr>
-          </tfoot>
-        }
+        <tfoot>
+          <tr>
+            <td colspan="2">รวมในช่วง</td>
+            <td class="num" colspan="3">
+              รับ +{{ c.totals.inQty }} ({{ c.totals.inCost | number: '1.2-2' }}) · ตัด −{{
+                c.totals.outQty
+              }}
+              ({{ c.totals.outCost | number: '1.2-2' }})
+            </td>
+            <td colspan="4"></td>
+          </tr>
+          <tr class="balance-row">
+            <td colspan="2">คงเหลือ{{ c.to ? ' ณ ' : '' }}{{ c.to | thaiDate }}</td>
+            <td colspan="3"></td>
+            <td class="num strong">{{ c.closing.qty }}</td>
+            <td class="num">{{ c.closing.avgCost | number: '1.2-2' }}</td>
+            <td class="num">{{ c.closing.value | number: '1.2-2' }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
-  }
-</mat-card>
+  </mat-card>
+} @else if (card.isLoading()) {
+  <app-loading-spinner />
+}

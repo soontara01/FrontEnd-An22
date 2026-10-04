@@ -1,0 +1,160 @@
+<app-page-header
+  title="รับสินค้าเข้าจาก Excel"
+  subtitle="หลาย SKU ในไฟล์เดียว — สินค้าทั่วไประบุจำนวน, สินค้าคุม Serial 1 แถวต่อ 1 เครื่อง"
+>
+  <a mat-button routerLink="/inventory">
+    <mat-icon>arrow_back</mat-icon>
+    คลังสินค้า
+  </a>
+</app-page-header>
+
+@if (step() === 'pick') {
+  <mat-card appearance="outlined">
+    <mat-card-content class="pick">
+      <ol class="steps">
+        <li>ดาวน์โหลดแม่แบบ (มีชีต <strong>รายการ SKU</strong> ให้คัดลอกรหัส และชีตคำอธิบาย)</li>
+        <li>
+          กรอกชีต <strong>รับเข้า</strong>: สินค้าทั่วไปใส่ <em>จำนวน</em> (และหน่วยแพ็คได้) ·
+          สินค้าคุม Serial ใส่ <em>Serial</em> แถวละ 1 เครื่อง (ยิงบาร์โค้ดลงคอลัมน์ได้)
+        </li>
+        <li>ต้นทุนไม่รวม VAT ต่อหน่วยที่ระบุ — เว้นว่างใช้ราคาซื้อผู้จำหน่ายหลัก</li>
+        <li>อัปโหลด ระบบตรวจทุกแถวให้ดูก่อน แล้วค่อยกดยืนยันรับเข้า</li>
+      </ol>
+
+      <div class="actions">
+        <button mat-stroked-button [disabled]="busy()" (click)="downloadTemplate()">
+          <mat-icon>download</mat-icon>
+          ดาวน์โหลดแม่แบบ
+        </button>
+        <input
+          #fileInput
+          type="file"
+          hidden
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          (change)="onFileSelected($event)"
+        />
+        <button mat-flat-button [disabled]="busy()" (click)="fileInput.click()">
+          <mat-icon>upload_file</mat-icon>
+          เลือกไฟล์ .xlsx
+        </button>
+      </div>
+      @if (busy()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+      @if (fileError()) {
+        <p class="problem">{{ fileError() }}</p>
+      }
+    </mat-card-content>
+  </mat-card>
+} @else {
+  <section class="stat-grid">
+    <app-stat-card label="SKU" [value]="skuCount()" icon="inventory_2" />
+    <app-stat-card label="จำนวน (สินค้าทั่วไป)" [value]="qtyTotal()" icon="add_box" />
+    <app-stat-card label="Serial" [value]="serialCount()" icon="qr_code_2" />
+    <app-stat-card
+      label="มูลค่ารับเข้า (ก่อน VAT)"
+      [value]="(valueTotal() | currency: 'THB' : 'symbol-narrow' : '1.0-2') ?? ''"
+      icon="payments"
+    />
+    <app-stat-card label="ผิดพลาด (จะข้าม)" [value]="errorCount()" icon="error" tone="error" />
+  </section>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      <div class="toolbar">
+        <span class="file"><mat-icon inline>description</mat-icon> {{ fileName() }}</span>
+        <mat-slide-toggle [checked]="onlyErrors()" (change)="onlyErrors.set($event.checked)">
+          แสดงเฉพาะแถวที่ผิด
+        </mat-slide-toggle>
+        <span class="spacer"></span>
+        @if (step() === 'preview') {
+          <button mat-button (click)="reset()">เลือกไฟล์ใหม่</button>
+          <button mat-flat-button [disabled]="!validLines().length" (click)="import()">
+            <mat-icon>move_to_inbox</mat-icon>
+            รับเข้า {{ validLines().length }} แถว
+          </button>
+        } @else if (step() === 'done') {
+          <span class="badge badge-success">สำเร็จ {{ savedRows() }} แถว</span>
+          @if (failedRows()) {
+            <span class="badge badge-error">ไม่สำเร็จ {{ failedRows() }} แถว</span>
+          }
+          <button mat-button (click)="reset()">นำเข้าไฟล์อื่น</button>
+          <a mat-flat-button routerLink="/inventory">กลับคลังสินค้า</a>
+        }
+      </div>
+
+      @if (step() === 'saving') {
+        <mat-progress-bar mode="determinate" [value]="progress()" />
+      }
+
+      <div class="table-wrap">
+        <table class="rows">
+          <thead>
+            <tr>
+              <th class="num">แถว</th>
+              <th>SKU</th>
+              <th>ประเภท</th>
+              <th class="num">จำนวน / Serial</th>
+              <th class="num">ทุน/หน่วยฐาน</th>
+              <th class="num">มูลค่า</th>
+              <th>อ้างอิง</th>
+              <th>ผลตรวจ / ผลรับเข้า</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (line of visibleLines(); track line.rowNo) {
+              <tr [class.error]="line.errors.length > 0">
+                <td class="num text-muted">{{ line.rowNo }}</td>
+                <td>
+                  <span class="mono">{{ line.sku || '-' }}</span>
+                  <div class="text-muted small">{{ line.name }}</div>
+                </td>
+                <td>
+                  @if (line.kind === 'serial') {
+                    <span class="badge badge-success">Serial</span>
+                  } @else {
+                    <span class="badge">จำนวน</span>
+                  }
+                </td>
+                <td class="num">
+                  @if (line.kind === 'serial') {
+                    <span class="mono">{{ line.serial || '-' }}</span>
+                  } @else {
+                    {{ line.baseQty }} {{ productOf(line)?.unit ?? '' }}
+                    @if (line.unitLabel !== (productOf(line)?.unit ?? line.unitLabel)) {
+                      <div class="text-muted small">(หน่วย {{ line.unitLabel }})</div>
+                    }
+                  }
+                </td>
+                <td class="num">{{ line.unitCostBase | number: '1.2-2' }}</td>
+                <td class="num">{{ line.value | number: '1.2-2' }}</td>
+                <td class="small">{{ line.note || '-' }}</td>
+                <td>
+                  @if (line.errors.length) {
+                    <ul class="errors">
+                      @for (e of line.errors; track e) {
+                        <li>{{ e }}</li>
+                      }
+                    </ul>
+                  } @else if (resultOf(line); as r) {
+                    @if (r.ok) {
+                      <span class="ok"><mat-icon inline>check_circle</mat-icon> รับเข้าแล้ว</span>
+                    } @else {
+                      <span class="fail"><mat-icon inline>error</mat-icon> {{ r.message }}</span>
+                    }
+                  } @else {
+                    <span class="text-muted">พร้อมรับเข้า</span>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="8" class="text-muted empty">ไม่มีแถวที่ผิด 🎉</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+}

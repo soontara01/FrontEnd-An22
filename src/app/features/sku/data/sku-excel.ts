@@ -1,4 +1,5 @@
 import type { Workbook, Worksheet } from 'exceljs';
+import { loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
 import {
   Category,
   PRODUCT_DEFAULTS,
@@ -161,25 +162,6 @@ const STATUS_CODES: Record<string, SkuStatus> = {
 const codeOf = <T extends string>(map: Record<string, T>, value: T): string =>
   Object.entries(map).find(([, v]) => v === value)?.[0] ?? '';
 
-async function loadExcel() {
-  return (await import('exceljs')).default;
-}
-
-function styleHeader(sheet: Worksheet): void {
-  const header = sheet.getRow(1);
-  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  header.alignment = { vertical: 'middle', wrapText: true };
-  header.height = 30;
-  SKU_COLUMNS.forEach((col, i) => {
-    header.getCell(i + 1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: col.info ? 'FF9E9E9E' : 'FF1565C0' },
-    };
-  });
-  sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: 1 }];
-}
-
 /** Pack units as 'กล่อง:20:8850000000126; ลัง:100:' */
 export const formatPacks = (packs: PackUnit[]): string =>
   packs.map((p) => `${p.unit}:${p.factor}:${p.barcode}`).join('; ');
@@ -195,7 +177,8 @@ function skuSheet(workbook: Workbook): Worksheet {
       ? { numFmt: '@' }
       : {},
   }));
-  styleHeader(sheet);
+  styleHeaderRow(sheet, new Set(SKU_COLUMNS.flatMap((c, i) => (c.info ? [i + 1] : []))));
+  sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: 1 }];
   return sheet;
 }
 
@@ -254,7 +237,7 @@ export async function exportSkusToExcel(
     });
   }
   categorySheet(workbook, categories);
-  return toBlob(await workbook.xlsx.writeBuffer());
+  return xlsxBlob(await workbook.xlsx.writeBuffer());
 }
 
 /** Empty import template with an example row, column help and category codes. */
@@ -295,13 +278,7 @@ export async function buildImportTemplate(categories: Category[]): Promise<Blob>
   });
 
   categorySheet(workbook, categories);
-  return toBlob(await workbook.xlsx.writeBuffer());
-}
-
-function toBlob(buffer: ArrayBuffer): Blob {
-  return new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
+  return xlsxBlob(await workbook.xlsx.writeBuffer());
 }
 
 /** Raw cell text per column key, plus the Excel row number. */

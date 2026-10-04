@@ -6,7 +6,7 @@ import {
   SerialNumber,
   SerialReceiveResult,
   SerialRemoveStatus,
-  StockMovement,
+  StockCardResult,
   Supplier,
 } from '@core/models';
 
@@ -32,9 +32,12 @@ export class InventoryApi {
     return this.api.put<Product>(`products/${id}/stock`, { delta, unitCost, note });
   }
 
-  /** Stock card (inventory ledger) of one SKU, oldest first. */
-  movements(productId: number): Observable<StockMovement[]> {
-    return this.api.get<StockMovement[]>(`products/${productId}/movements`);
+  /** Stock card of one SKU for a local-date range (both optional, inclusive). */
+  movements(productId: number, from?: string, to?: string): Observable<StockCardResult> {
+    const params: Record<string, string> = {};
+    if (from) params['from'] = from;
+    if (to) params['to'] = to;
+    return this.api.get<StockCardResult>(`products/${productId}/movements`, params);
   }
 
   /** All serials of a serial-controlled SKU (in stock + removed history). */
