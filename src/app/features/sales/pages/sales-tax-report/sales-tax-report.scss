@@ -1,0 +1,92 @@
+.month {
+  max-width: 220px;
+}
+
+.wrap {
+  overflow-x: auto;
+}
+
+// Landscape A4 sheet (printed with printElement(el, 'A4-landscape')).
+.sheet {
+  box-sizing: border-box;
+  width: 297mm;
+  min-height: 150mm;
+  padding: 10mm;
+  font:
+    11px/1.4 'Sarabun',
+    system-ui,
+    sans-serif;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface-container-lowest);
+
+  @media print {
+    color: #000;
+    background: #fff;
+  }
+}
+
+header {
+  text-align: center;
+  margin-bottom: 8px;
+
+  .title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 3px 5px;
+    border: 1px solid currentColor;
+    vertical-align: top;
+    text-align: left;
+  }
+
+  th {
+    text-align: center;
+  }
+
+  tfoot td {
+    font-weight: 700;
+  }
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.kind {
+  margin-left: 6px;
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.note {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+tr.ref td {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.empty {
+  text-align: center !important;
+  padding: 16px;
+}

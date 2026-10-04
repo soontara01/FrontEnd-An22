@@ -48,6 +48,11 @@ export class SalesApi {
     return this.api.get<CreditNote[]>('credit-notes', rangeParams(from, to));
   }
 
+  /** Full tax invoices issued within a local-date range, oldest first. */
+  taxInvoices(from: string | null, to: string | null): Observable<TaxInvoice[]> {
+    return this.api.get<TaxInvoice[]>('tax-invoices', rangeParams(from, to));
+  }
+
   /** The bill's full tax invoice, or null when none was issued. */
   taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {
     return this.api.get<TaxInvoice | null>(`sales/${saleId}/tax-invoice`);

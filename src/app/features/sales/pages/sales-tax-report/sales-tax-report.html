@@ -1,0 +1,104 @@
+<app-page-header
+  title="รายงานภาษีขาย"
+  subtitle="ใบกำกับภาษีอย่างย่อ (สรุปรายวัน) · ใบกำกับภาษีเต็มรูป · ใบลดหนี้"
+>
+  <a mat-button routerLink="/sales">
+    <mat-icon>arrow_back</mat-icon>
+    การขาย
+  </a>
+  <button mat-stroked-button [disabled]="!report() || exporting()" (click)="exportExcel()">
+    <mat-icon>download</mat-icon>
+    Excel
+  </button>
+  <button mat-stroked-button [disabled]="!report()" (click)="print()">
+    <mat-icon>print</mat-icon>
+    พิมพ์
+  </button>
+</app-page-header>
+
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="month">
+    <mat-label>เดือนภาษี</mat-label>
+    <input
+      matInput
+      type="month"
+      [value]="currentMonth()"
+      (change)="setMonth($any($event.target).value)"
+    />
+  </mat-form-field>
+</div>
+
+@if (report(); as r) {
+  <div class="wrap">
+    <div #sheet class="sheet">
+      <header>
+        <div class="title">รายงานภาษีขาย</div>
+        <div>เดือนภาษี {{ r.month + '-01' | thaiDate }}</div>
+        @if (store.storeInfo(); as info) {
+          <div>
+            ชื่อผู้ประกอบการ {{ info.name }} · เลขประจำตัวผู้เสียภาษี {{ info.taxId }} ({{
+              sellerBranch()
+            }})
+          </div>
+        }
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>ลำดับ</th>
+            <th>วันที่</th>
+            <th>เลขที่เอกสาร</th>
+            <th>ชื่อผู้ซื้อ</th>
+            <th>เลขประจำตัวผู้เสียภาษี</th>
+            <th>สาขา</th>
+            <th class="num">มูลค่าสินค้า/บริการ</th>
+            <th class="num">ภาษีมูลค่าเพิ่ม</th>
+            <th class="num">ยกเว้นภาษี</th>
+            <th class="num">รวม</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of r.rows; track $index; let n = $index) {
+            <tr [class.ref]="!row.counted" [class.credit]="row.kind === 'credit'">
+              <td>{{ n + 1 }}</td>
+              <td class="nowrap">{{ row.date | thaiDate }}</td>
+              <td>
+                <span class="mono">{{ row.docNo }}</span>
+                <span class="kind">{{ kindText(row) }}</span>
+                @if (row.note) {
+                  <div class="note">{{ row.note }}</div>
+                }
+              </td>
+              <td>{{ row.buyerName }}</td>
+              <td class="mono">{{ row.buyerTaxId }}</td>
+              <td>{{ row.buyerBranch }}</td>
+              @if (row.counted) {
+                <td class="num">{{ row.net | number: '1.2-2' }}</td>
+                <td class="num">{{ row.vat | number: '1.2-2' }}</td>
+                <td class="num">{{ row.exempt | number: '1.2-2' }}</td>
+                <td class="num">{{ row.total | number: '1.2-2' }}</td>
+              } @else {
+                <td class="num" colspan="4">ไม่นับซ้ำ (อ้างอิง)</td>
+              }
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="10" class="empty">ไม่มีเอกสารในเดือนนี้</td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6" class="num">รวม</td>
+            <td class="num">{{ r.totals.net | number: '1.2-2' }}</td>
+            <td class="num">{{ r.totals.vat | number: '1.2-2' }}</td>
+            <td class="num">{{ r.totals.exempt | number: '1.2-2' }}</td>
+            <td class="num">{{ r.totals.total | number: '1.2-2' }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+}

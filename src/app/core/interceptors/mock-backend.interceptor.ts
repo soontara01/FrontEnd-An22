@@ -791,6 +791,17 @@ function handle(
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
   if (path === 'credit-notes' && req.method === 'GET') return listCreditNotes(req, db);
+  if (path === 'tax-invoices' && req.method === 'GET') {
+    // Full tax invoices issued within a local-date range (oldest first, for the tax report).
+    const from = req.params.get('from') || null;
+    const to = req.params.get('to') || null;
+    const day = (t: TaxInvoice) => toIsoDate(new Date(t.date));
+    return ok(
+      db.taxInvoices
+        .filter((t) => (!from || day(t) >= from) && (!to || day(t) <= to))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    );
+  }
   if (path === 'tax-invoices/buyer' && req.method === 'GET') {
     // Last buyer details used with this tax ID (+ branch), to fill the form.
     const taxId = req.params.get('taxId') ?? '';

@@ -10,6 +10,7 @@ import {
   StoreInfo,
   TaxInvoice,
   TaxInvoiceBuyer,
+  toIsoDate,
 } from '@core/models';
 import { SalesApi } from './sales-api.service';
 
@@ -71,6 +72,19 @@ export class SalesStore {
 
   createCreditNote(saleId: number, payload: CreditNotePayload): Observable<CreditNote> {
     return this.api.createCreditNote(saleId, payload);
+  }
+
+  /** Everything the monthly sales tax report needs ('YYYY-MM'). */
+  taxReportData(month: string) {
+    const from = `${month}-01`;
+    // Last day of the month (a real server would reject 2026-02-31).
+    const [y, m] = month.split('-').map(Number);
+    const to = toIsoDate(new Date(y, m, 0));
+    return forkJoin({
+      sales: this.api.list(from, to),
+      invoices: this.api.taxInvoices(from, to),
+      notes: this.api.creditNotes(from, to),
+    });
   }
 
   taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {
