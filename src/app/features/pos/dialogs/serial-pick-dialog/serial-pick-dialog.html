@@ -1,0 +1,65 @@
+<h2 mat-dialog-title>{{ data.title }}</h2>
+
+<mat-dialog-content>
+  <div class="product">
+    <span class="mono">{{ data.product.sku }}</span> — {{ data.product.name }}
+    <div class="text-muted small">
+      @if (data.count === null) {
+        สแกนได้หลายเครื่อง แต่ละเครื่องเป็น 1 บรรทัดในบิล
+      } @else {
+        ต้องเลือก {{ data.count }} เครื่อง
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <app-loading-spinner [diameter]="32" />
+  } @else {
+    <div class="row">
+      <mat-form-field appearance="outline">
+        <mat-label>สแกน / พิมพ์ Serial แล้วกด Enter</mat-label>
+        <input
+          #scanInput
+          matInput
+          appAutofocus
+          class="mono"
+          (keydown.enter)="$event.preventDefault(); scan(scanInput)"
+        />
+        <mat-icon matPrefix>qr_code_scanner</mat-icon>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>ค้นหาในรายการ</mat-label>
+        <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
+        <mat-icon matPrefix>search</mat-icon>
+      </mat-form-field>
+    </div>
+    @if (scanError()) {
+      <div class="scan-error">{{ scanError() }}</div>
+    }
+
+    <div class="list">
+      <mat-selection-list (selectionChange)="onSelectionChange($event)">
+        @for (s of visible(); track s.id) {
+          <mat-list-option
+            [value]="s.serial"
+            [selected]="isPicked(s.serial)"
+            togglePosition="before"
+          >
+            <span class="mono">{{ s.serial }}</span>
+          </mat-list-option>
+        } @empty {
+          <mat-list-item><span class="text-muted">ไม่มี Serial คงคลัง</span></mat-list-item>
+        }
+      </mat-selection-list>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <span class="badge badge-warn picked">เลือก {{ picked().length }}</span>
+  <button mat-button mat-dialog-close>ยกเลิก</button>
+  <button mat-flat-button [disabled]="!canSave()" (click)="save()">
+    <mat-icon>check</mat-icon>
+    ตกลง
+  </button>
+</mat-dialog-actions>

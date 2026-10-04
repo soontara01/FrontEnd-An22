@@ -22,8 +22,14 @@ export const MENU: MenuItem[] = [
     loadChildren: () => import('@features/dashboard/dashboard.routes'),
   },
   {
-    label: 'การขาย',
+    label: 'ขายหน้าร้าน',
     icon: 'point_of_sale',
+    path: 'pos',
+    loadChildren: () => import('@features/pos/pos.routes'),
+  },
+  {
+    label: 'การขาย',
+    icon: 'receipt_long',
     path: 'sales',
     loadChildren: () => import('@features/sales/sales.routes'),
   },

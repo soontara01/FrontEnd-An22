@@ -1,0 +1,141 @@
+@if (done(); as sale) {
+  <h2 mat-dialog-title>ชำระเงินสำเร็จ</h2>
+  <mat-dialog-content>
+    <div class="done">
+      <div class="text-muted">
+        บิล <span class="mono">{{ sale.orderNo }}</span>
+      </div>
+      <div class="label">เงินทอน</div>
+      <div class="change">{{ sale.change | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</div>
+      @if (summary().opensDrawer) {
+        <div class="badge badge-warn">
+          <mat-icon inline>point_of_sale</mat-icon> เปิดลิ้นชักเก็บเงิน
+        </div>
+      }
+    </div>
+  </mat-dialog-content>
+  <mat-dialog-actions align="end">
+    <button mat-flat-button appAutofocus (click)="finish()">
+      <mat-icon>add_shopping_cart</mat-icon>
+      เริ่มบิลใหม่
+    </button>
+  </mat-dialog-actions>
+} @else {
+  <h2 mat-dialog-title>ชำระเงิน</h2>
+  <mat-dialog-content>
+    <div class="due">
+      <span>ยอดที่ต้องชำระ</span>
+      <strong>{{ total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</strong>
+    </div>
+
+    @if (total > 0) {
+      <div class="methods">
+        @for (m of store.methods(); track m.id) {
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="isCash(m) && hasCash()"
+            (click)="addLine(m)"
+          >
+            <mat-icon>{{ icon[m.type] }}</mat-icon>
+            {{ m.name }}
+          </button>
+        }
+      </div>
+
+      @for (line of lines(); track $index; let i = $index) {
+        @let m = method(line);
+        <div class="line">
+          <div class="line-head">
+            <mat-icon>{{ m ? icon[m.type] : 'help' }}</mat-icon>
+            <strong>{{ m?.name ?? 'ไม่พบช่องทาง' }}</strong>
+            <span class="spacer"></span>
+            <button mat-icon-button type="button" matTooltip="ลบ" (click)="removeLine(i)">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+          <div class="row">
+            <mat-form-field appearance="outline">
+              <mat-label>{{ isCash(m) ? 'รับเงินมา' : 'จำนวนเงิน' }}</mat-label>
+              <input
+                matInput
+                type="number"
+                min="0"
+                step="0.01"
+                appAutofocus
+                [value]="line.amount"
+                (input)="setAmount(i, $any($event.target).value)"
+                (keydown.enter)="confirm()"
+              />
+              <span matTextPrefix>฿&nbsp;</span>
+            </mat-form-field>
+            @if (m?.requireReference) {
+              <mat-form-field appearance="outline">
+                <mat-label>{{ m?.referenceLabel }}</mat-label>
+                <input
+                  matInput
+                  [value]="line.reference"
+                  (input)="update(i, { reference: $any($event.target).value })"
+                />
+              </mat-form-field>
+            }
+            @if (m?.type === 'installment') {
+              <mat-form-field appearance="outline">
+                <mat-label>ผ่อน (เดือน)</mat-label>
+                <mat-select
+                  [value]="line.installmentMonths"
+                  (selectionChange)="update(i, { installmentMonths: $event.value })"
+                >
+                  @for (n of m?.installmentMonths ?? []; track n) {
+                    <mat-option [value]="n">{{ n }} เดือน</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
+          </div>
+          @if (isCash(m)) {
+            <div class="quick">
+              @for (amount of quickCash(); track amount) {
+                <button mat-stroked-button type="button" (click)="setCash(amount)">
+                  {{ amount | number: '1.0-2' }}
+                </button>
+              }
+            </div>
+          }
+        </div>
+      }
+    }
+
+    <div class="totals">
+      @if (summary().rounding) {
+        <div>
+          <span>ปัดเศษเงินสด</span><span>{{ summary().rounding | number: '1.2-2' }}</span>
+        </div>
+      }
+      <div>
+        <span>รับเงินสด</span><span>{{ summary().tendered | number: '1.2-2' }}</span>
+      </div>
+      <div>
+        <span>ช่องทางอื่น</span><span>{{ summary().nonCash | number: '1.2-2' }}</span>
+      </div>
+      <div class="big" [class.ok]="summary().complete">
+        @if (summary().complete) {
+          <span>เงินทอน</span><span>{{ summary().change | number: '1.2-2' }}</span>
+        } @else {
+          <span>ค้างชำระ</span><span>{{ summary().balance | number: '1.2-2' }}</span>
+        }
+      </div>
+    </div>
+    @if (problem(); as message) {
+      <div class="problem">{{ message }}</div>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button mat-dialog-close [disabled]="saving()">ยกเลิก</button>
+    <button mat-flat-button [disabled]="!!problem() || saving()" (click)="confirm()">
+      <mat-icon>check_circle</mat-icon>
+      ยืนยันชำระเงิน
+    </button>
+  </mat-dialog-actions>
+}

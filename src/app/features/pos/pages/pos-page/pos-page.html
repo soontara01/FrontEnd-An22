@@ -1,0 +1,252 @@
+<div class="pos">
+  <section class="main">
+    <mat-form-field appearance="outline" class="w-full scan" subscriptSizing="dynamic">
+      <mat-label>สแกนบาร์โค้ด / ค้นหาสินค้า (F2)</mat-label>
+      <mat-icon matPrefix>barcode_scanner</mat-icon>
+      <input
+        #scanInput
+        matInput
+        appAutofocus
+        autocomplete="off"
+        [matAutocomplete]="auto"
+        [value]="query()"
+        (input)="query.set($any($event.target).value); scanError.set('')"
+        (keydown.enter)="$event.preventDefault(); onEnter()"
+      />
+    </mat-form-field>
+    @if (scanError()) {
+      <div class="scan-error">{{ scanError() }}</div>
+    }
+    <mat-autocomplete
+      #auto="matAutocomplete"
+      [displayWith]="displayNothing"
+      (optionSelected)="onOptionSelected($event)"
+    >
+      @for (o of options(); track o.product.id + '-' + o.factor) {
+        <mat-option [value]="o">
+          <div class="option">
+            <span class="mono">{{ o.product.sku }}</span>
+            <span class="option-name"
+              >{{ o.product.shortName || o.product.name }} · {{ o.unit }}</span
+            >
+            <span class="text-muted small">{{ stockText(o.product) }}</span>
+            <strong>
+              @if (o.price === null) {
+                ไม่มีราคา
+              } @else {
+                {{ o.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+              }
+            </strong>
+          </div>
+        </mat-option>
+      }
+    </mat-autocomplete>
+
+    @if (store.loading() && !store.products().length) {
+      <app-loading-spinner />
+    } @else if (!cart().lines.length) {
+      <app-empty-state icon="shopping_cart" message="สแกนบาร์โค้ดหรือค้นหาสินค้าเพื่อเริ่มขาย" />
+    } @else {
+      <div class="lines">
+        @for (line of cart().lines; track $index; let n = $index) {
+          <div class="line" [class.free]="line.freeOfPromotionId !== null">
+            <div class="no">{{ n + 1 }}</div>
+            <div class="info">
+              <div class="name">
+                {{ line.shortName }}
+                @if (line.freeOfPromotionId !== null) {
+                  <span class="badge badge-success"><mat-icon inline>redeem</mat-icon> ของแถม</span>
+                }
+              </div>
+              <div class="text-muted small">
+                <span class="mono">{{ line.sku }}</span>
+                @if (line.factor > 1) {
+                  · {{ line.unit }} ({{ line.factor }} ชิ้นฐาน)
+                }
+                @if (line.serial) {
+                  · SN <span class="mono">{{ line.serial }}</span>
+                }
+              </div>
+              @for (name of promotionNames(line); track name) {
+                <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
+              }
+              @if (line.freeOfPromotionId !== null && needsSerial(line)) {
+                <button mat-button type="button" class="serial-btn" (click)="pickFreeSerials(line)">
+                  <mat-icon>qr_code_scanner</mat-icon>
+                  {{ line.serial ? 'เปลี่ยน Serial' : 'เลือก Serial ของแถม' }}
+                </button>
+              }
+            </div>
+
+            <div class="qty">
+              @if (line.cartIndex !== null && !line.serial) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  aria-label="ลดจำนวน"
+                  [disabled]="line.qty <= 1"
+                  (click)="changeQty(line, line.qty - 1)"
+                >
+                  <mat-icon>remove</mat-icon>
+                </button>
+                <input
+                  class="qty-input"
+                  type="number"
+                  min="1"
+                  aria-label="จำนวน"
+                  [value]="line.qty"
+                  (change)="changeQty(line, $any($event.target).value)"
+                />
+                <button
+                  mat-icon-button
+                  type="button"
+                  aria-label="เพิ่มจำนวน"
+                  (click)="changeQty(line, line.qty + 1)"
+                >
+                  <mat-icon>add</mat-icon>
+                </button>
+              } @else {
+                <span class="qty-fixed">{{ line.qty }}</span>
+              }
+              <span class="unit text-muted small">{{ line.unit }}</span>
+            </div>
+
+            <div class="money">
+              <div>{{ line.unitPrice * line.qty | number: '1.2-2' }}</div>
+              @if (line.itemDiscount) {
+                <div class="discount small">−{{ line.itemDiscount | number: '1.2-2' }}</div>
+              }
+            </div>
+
+            <div class="remove">
+              @if (line.cartIndex !== null) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  matTooltip="ลบรายการ"
+                  (click)="removeLine(line)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </section>
+
+  <aside class="side">
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <mat-form-field appearance="outline" class="w-full" subscriptSizing="dynamic">
+          <mat-label>ชื่อลูกค้า (ไม่บังคับ)</mat-label>
+          <mat-icon matPrefix>person</mat-icon>
+          <input
+            matInput
+            [value]="store.customer()"
+            (input)="store.setCustomer($any($event.target).value)"
+          />
+        </mat-form-field>
+
+        <div class="totals">
+          <div>
+            <span>รวม {{ cart().itemCount }} ชิ้น</span>
+            <span>{{ cart().subtotal | number: '1.2-2' }}</span>
+          </div>
+          @if (cart().itemDiscount) {
+            <div class="discount">
+              <span>ส่วนลดสินค้า</span><span>−{{ cart().itemDiscount | number: '1.2-2' }}</span>
+            </div>
+          }
+          @if (cart().billDiscount) {
+            <div class="discount">
+              <span>ส่วนลดท้ายบิล</span><span>−{{ cart().billDiscount | number: '1.2-2' }}</span>
+            </div>
+            @for (name of billPromotionNames(); track name) {
+              <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
+            }
+          }
+          <div class="text-muted small">
+            <span>VAT ที่รวมอยู่</span><span>{{ cart().vat | number: '1.2-2' }}</span>
+          </div>
+          <div class="grand">
+            <span>ยอดสุทธิ</span>
+            <span>{{ cart().total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</span>
+          </div>
+        </div>
+
+        @for (issue of blocking(); track $index) {
+          <div class="issue error"><mat-icon inline>error</mat-icon> {{ issue.message }}</div>
+        }
+        @for (issue of warnings(); track $index) {
+          <div class="issue warn"><mat-icon inline>warning</mat-icon> {{ issue.message }}</div>
+        }
+
+        <button mat-flat-button class="pay w-full" [disabled]="!!store.blocker()" (click)="pay()">
+          <mat-icon>payments</mat-icon>
+          ชำระเงิน (F12)
+        </button>
+
+        <div class="actions">
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="!cart().lines.length"
+            (click)="hold()"
+          >
+            <mat-icon>pause_circle</mat-icon>
+            พักบิล (F8)
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="!store.holds().length"
+            [matMenuTriggerFor]="holdMenu"
+          >
+            <mat-icon>restore</mat-icon>
+            บิลที่พัก ({{ store.holds().length }})
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="!cart().lines.length && !store.customer()"
+            (click)="clearBill()"
+          >
+            <mat-icon>delete_sweep</mat-icon>
+            ล้างบิล
+          </button>
+        </div>
+        <mat-menu #holdMenu="matMenu">
+          @for (bill of store.holds(); track bill.id) {
+            <div class="hold-row">
+              <button mat-menu-item (click)="resume(bill.id)">
+                <mat-icon>restore</mat-icon>
+                <span>
+                  {{ time(bill.heldAt) }} · {{ bill.customer || 'ลูกค้าทั่วไป' }} ·
+                  {{ bill.total | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+                </span>
+              </button>
+              <button
+                mat-icon-button
+                type="button"
+                matTooltip="ทิ้งบิลนี้"
+                (click)="store.discardHold(bill.id)"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
+        </mat-menu>
+
+        @if (store.lastSale(); as sale) {
+          <div class="last text-muted small">
+            บิลล่าสุด <span class="mono">{{ sale.orderNo }}</span> ·
+            {{ sale.total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }} · ทอน
+            {{ sale.change | number: '1.2-2' }}
+          </div>
+        }
+      </mat-card-content>
+    </mat-card>
+  </aside>
+</div>
