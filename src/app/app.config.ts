@@ -7,7 +7,7 @@ import { GlobalErrorHandler } from '@core/error/global-error-handler';
 import { authInterceptor } from '@core/interceptors/auth.interceptor';
 import { errorInterceptor } from '@core/interceptors/error.interceptor';
 import { loadingInterceptor } from '@core/interceptors/loading.interceptor';
-import { mockBackendInterceptor } from '@core/interceptors/mock-backend.interceptor';
+import { lazyMockBackendInterceptor } from '@core/interceptors/lazy-mock-backend.interceptor';
 import { environment } from '@env/environment';
 import { routes } from './app.routes';
 
@@ -21,8 +21,8 @@ export const appConfig: ApplicationConfig = {
         loadingInterceptor,
         authInterceptor,
         errorInterceptor,
-        // Mock must be last: it replaces the real backend call.
-        ...(environment.useMock ? [mockBackendInterceptor] : []),
+        // Mock must be last: it replaces the real backend call. Loaded lazily (own chunk).
+        ...(environment.useMock ? [lazyMockBackendInterceptor] : []),
       ]),
     ),
     { provide: ErrorHandler, useClass: GlobalErrorHandler },

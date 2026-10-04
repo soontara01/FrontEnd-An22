@@ -49,5 +49,6 @@ export default class MasterDataShell {
   protected readonly tabs: MasterTab[] = [
     { label: 'หมวดหมู่สินค้า', icon: 'account_tree', path: 'categories' },
     { label: 'ผู้จำหน่าย', icon: 'local_shipping', path: 'suppliers' },
+    { label: 'ช่องทางชำระเงิน', icon: 'payments', path: 'payment-methods' },
   ];
 }

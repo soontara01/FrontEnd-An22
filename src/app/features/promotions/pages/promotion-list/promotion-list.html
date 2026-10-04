@@ -1,0 +1,135 @@
+<app-page-header title="โปรโมชั่น" subtitle="ส่วนลดและของแถมตามช่วงเวลา (ใช้กับหน้าจอขาย)">
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <a mat-flat-button routerLink="new">
+    <mat-icon>add</mat-icon>
+    เพิ่มโปรโมชั่น
+  </a>
+</app-page-header>
+
+<section class="stat-grid">
+  <app-stat-card label="ใช้อยู่" [value]="store.countByStatus().active" icon="campaign" />
+  <app-stat-card
+    label="รอเริ่ม"
+    [value]="store.countByStatus().scheduled"
+    icon="event_upcoming"
+    tone="warn"
+  />
+  <app-stat-card label="หมดอายุ" [value]="store.countByStatus().expired" icon="history" />
+  <app-stat-card
+    label="ปิดใช้งาน"
+    [value]="store.countByStatus().disabled"
+    icon="block"
+    tone="warn"
+  />
+</section>
+
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>ค้นหา รหัส / ชื่อ / สินค้า</mat-label>
+    <input matInput [value]="filterText()" (input)="filterText.set($any($event.target).value)" />
+    <mat-icon matPrefix>search</mat-icon>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="select-filter">
+    <mat-label>สถานะ</mat-label>
+    <mat-select [value]="statusFilter()" (selectionChange)="statusFilter.set($event.value)">
+      <mat-option value="current">ใช้อยู่ + รอเริ่ม</mat-option>
+      <mat-option value="all">ทั้งหมด</mat-option>
+      @for (s of statuses; track s) {
+        <mat-option [value]="s">{{ statusLabel[s] }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="select-filter">
+    <mat-label>ประเภท</mat-label>
+    <mat-select [value]="typeFilter()" (selectionChange)="typeFilter.set($event.value)">
+      <mat-option value="all">ทั้งหมด</mat-option>
+      @for (t of types; track t) {
+        <mat-option [value]="t">{{ typeLabel[t] }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+</div>
+
+<mat-card appearance="outlined">
+  @if (store.loading() && store.rows().length === 0) {
+    <app-loading-spinner />
+  }
+
+  <div class="table-wrap" [hidden]="store.rows().length === 0">
+    <table mat-table matSort [dataSource]="dataSource">
+      <ng-container matColumnDef="code">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>รหัส</th>
+        <td mat-cell *matCellDef="let r" class="mono">{{ r.promotion.code }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>ชื่อโปรโมชั่น</th>
+        <td mat-cell *matCellDef="let r">
+          {{ r.promotion.name }}
+          <div class="text-muted small">
+            ลำดับ {{ r.promotion.priority }}
+            @if (r.promotion.stackable) {
+              · ใช้ร่วมโปรอื่นได้
+            }
+          </div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="type">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>ประเภท</th>
+        <td mat-cell *matCellDef="let r" class="nowrap">
+          <mat-icon inline>{{ typeIcon(r) }}</mat-icon>
+          {{ typeText(r) }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="condition">
+        <th mat-header-cell *matHeaderCellDef>เงื่อนไข</th>
+        <td mat-cell *matCellDef="let r" class="small">{{ r.condition }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="reward">
+        <th mat-header-cell *matHeaderCellDef>ลูกค้าได้รับ</th>
+        <td mat-cell *matCellDef="let r" class="small">{{ r.reward }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="period">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>ช่วงเวลา</th>
+        <td mat-cell *matCellDef="let r" class="small nowrap">{{ range(r) }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef mat-sort-header>สถานะ</th>
+        <td mat-cell *matCellDef="let r">
+          <span class="badge" [class]="statusClass(r)">{{ statusText(r) }}</span>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr
+        mat-row
+        *matRowDef="let row; columns: columns"
+        class="clickable"
+        tabindex="0"
+        (click)="open(row)"
+        (keydown.enter)="open(row)"
+      ></tr>
+      <tr class="mat-row" *matNoDataRow>
+        <td class="mat-cell no-data" [attr.colspan]="columns.length">
+          ไม่พบโปรโมชั่นที่ตรงเงื่อนไข
+        </td>
+      </tr>
+    </table>
+    <mat-paginator [pageSizeOptions]="[10, 25, 50]" [pageSize]="10" showFirstLastButtons />
+  </div>
+
+  @if (!store.loading() && store.rows().length === 0) {
+    <app-empty-state icon="campaign" message="ยังไม่มีโปรโมชั่น">
+      <a mat-flat-button routerLink="new">เพิ่มโปรโมชั่นแรก</a>
+    </app-empty-state>
+  }
+</mat-card>

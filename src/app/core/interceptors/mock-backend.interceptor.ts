@@ -15,9 +15,15 @@ import {
   CategoryPayload,
   LoginRequest,
   LoginResponse,
+  PAYMENT_METHOD_DEFAULTS,
   PRODUCT_DEFAULTS,
+  PROMOTION_DEFAULTS,
   Product,
+  PaymentMethod,
+  PaymentMethodPayload,
   ProductPayload,
+  Promotion,
+  PromotionPayload,
   Sale,
   SaleStatus,
   SkuSupplier,
@@ -49,7 +55,13 @@ import {
   findOverlap,
   formatDateRange,
   isLeaf,
+  isLastActiveCash,
   isValidThaiTaxId,
+  paymentMethodError,
+  withPaymentTypeRules,
+  promotionError,
+  promotionStatus,
+  hasStarted,
   serialFormatError,
   todayIso,
 } from '../models';
@@ -76,6 +88,12 @@ interface MockDb {
   /** Stock card lines (inventory ledger with running cost balance). */
   movements: StockMovement[];
   nextMovementId: number;
+  /** Promotion master (discounts / free goods by period), used by the future POS. */
+  promotions: Promotion[];
+  nextPromotionId: number;
+  /** Payment method master (POS tender buttons), ordered by sortOrder. */
+  paymentMethods: PaymentMethod[];
+  nextPaymentMethodId: number;
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -418,6 +436,145 @@ const SEED_PRICES: SkuPrice[] = [
   { id: 12, productId: 9, price: 500, startDate: '2026-01-01', endDate: null, note: '' },
 ];
 
+const promo = (
+  p: Pick<Promotion, 'id' | 'code' | 'name' | 'type' | 'startDate'> & Partial<Promotion>,
+): Promotion => ({ ...PROMOTION_DEFAULTS, ...p });
+
+const SCOPE = (productIds: number[], categoryIds: number[] = []) => ({
+  all: false,
+  productIds,
+  categoryIds,
+});
+
+/** Sample promotions as of the seed date (2026-10): active, scheduled and expired ones. */
+const SEED_PROMOTIONS: Promotion[] = [
+  promo({
+    id: 1,
+    code: 'PRO-MSKB10',
+    name: 'เมาส์และคีย์บอร์ดลด 10%',
+    type: 'item_discount',
+    startDate: '2026-10-01',
+    endDate: '2026-10-31',
+    priority: 10,
+    scope: SCOPE([], [6]),
+    discount: { kind: 'percent', value: 10, maxDiscount: null },
+  }),
+  promo({
+    id: 2,
+    code: 'PRO-BILL5K',
+    name: 'ซื้อครบ ฿5,000 ลด ฿300',
+    type: 'bill_discount',
+    startDate: '2026-10-01',
+    endDate: '2026-12-31',
+    stackable: true,
+    scope: { all: true, productIds: [], categoryIds: [] },
+    minQty: 0,
+    minAmount: 5000,
+    discount: { kind: 'amount', value: 300, maxDiscount: null },
+  }),
+  promo({
+    id: 3,
+    code: 'PRO-NB-GIFT',
+    name: 'ซื้อโน้ตบุ๊ก แถมเมาส์ + ลงโปรแกรมฟรี',
+    type: 'free_goods',
+    startDate: '2026-09-15',
+    priority: 20,
+    stackable: true,
+    scope: SCOPE([1]),
+    minQty: 1,
+    discount: null,
+    freeGoods: {
+      items: [
+        { productId: 2, qty: 1 },
+        { productId: 9, qty: 1 },
+      ],
+      repeat: true,
+      maxSets: null,
+    },
+  }),
+  promo({
+    id: 4,
+    code: 'PRO-USB-2F1',
+    name: 'สาย USB-C ซื้อ 2 แถม 1',
+    type: 'free_goods',
+    startDate: '2026-09-15',
+    scope: SCOPE([7]),
+    minQty: 2,
+    discount: null,
+    freeGoods: { items: [{ productId: 7, qty: 1 }], repeat: true, maxSets: 5 },
+  }),
+  promo({
+    id: 5,
+    code: 'PRO-1111',
+    name: '11.11 หูฟังลด 15% (สูงสุด ฿300)',
+    type: 'item_discount',
+    startDate: '2026-11-11',
+    endDate: '2026-11-11',
+    priority: 30,
+    scope: SCOPE([5]),
+    discount: { kind: 'percent', value: 15, maxDiscount: 300 },
+  }),
+  promo({
+    id: 6,
+    code: 'PRO-SUMMER',
+    name: 'ซัมเมอร์ จอ 24 นิ้วลด ฿500',
+    type: 'item_discount',
+    startDate: '2026-04-01',
+    endDate: '2026-05-31',
+    scope: SCOPE([4]),
+    discount: { kind: 'amount', value: 500, maxDiscount: null },
+  }),
+];
+
+const payment = (
+  m: Pick<PaymentMethod, 'id' | 'code' | 'name' | 'type'> & Partial<PaymentMethod>,
+): PaymentMethod => ({ ...PAYMENT_METHOD_DEFAULTS, sortOrder: m.id, ...m });
+
+/** Sample tenders of the store (fees are typical Thai MDR rates, for net-received reports). */
+const SEED_PAYMENT_METHODS: PaymentMethod[] = [
+  payment({ id: 1, code: 'CASH', name: 'เงินสด', type: 'cash', cashRounding: '0.25' }),
+  payment({
+    id: 2,
+    code: 'CARD',
+    name: 'บัตรเครดิต/เดบิต',
+    type: 'card',
+    requireReference: true,
+    referenceLabel: 'เลขอนุมัติ',
+    minAmount: 300,
+    feePercent: 1.6,
+  }),
+  payment({
+    id: 3,
+    code: 'QR-PP',
+    name: 'QR พร้อมเพย์',
+    type: 'qr',
+    promptPayId: '0105550123451',
+    bankAccount: 'กสิกรไทย 123-4-56789-0',
+  }),
+  payment({
+    id: 4,
+    code: 'TRANSFER',
+    name: 'โอนผ่านธนาคาร',
+    type: 'transfer',
+    requireReference: true,
+    referenceLabel: 'เลขอ้างอิงการโอน',
+    bankAccount: 'กสิกรไทย 123-4-56789-0',
+  }),
+  payment({ id: 5, code: 'TMW', name: 'TrueMoney Wallet', type: 'e_wallet', feePercent: 1.5 }),
+  payment({
+    id: 6,
+    code: 'INST-0',
+    name: 'ผ่อน 0%',
+    type: 'installment',
+    requireReference: true,
+    referenceLabel: 'เลขอนุมัติ',
+    minAmount: 3000,
+    feePercent: 3,
+    installmentMonths: [3, 6, 10],
+    note: 'ผ่อนผ่านบัตรเครดิตที่ร่วมรายการ',
+  }),
+];
+
 const SEED_SALES: Sale[] = [
   {
     id: 1,
@@ -500,6 +657,10 @@ const seedDb = (): MockDb => ({
   nextSupplierId: SEED_SUPPLIERS.length + 1,
   movements: [],
   nextMovementId: 1,
+  promotions: SEED_PROMOTIONS.map((x) => structuredClone(x)),
+  nextPromotionId: SEED_PROMOTIONS.length + 1,
+  paymentMethods: SEED_PAYMENT_METHODS.map((x) => structuredClone(x)),
+  nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
 });
 
 const LATENCY_MS = 300;
@@ -525,6 +686,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   // Products stored before the SKU master fields existed get defaults filled in.
   db.products = db.products.map((p) => ({ ...PRODUCT_DEFAULTS, ...p }));
   db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
+  db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
+  db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
@@ -559,6 +722,12 @@ function handle(
     return handleCategories(req, path, db);
   }
   if (path === 'sales' || path.startsWith('sales/')) return handleSales(req, path, db);
+  if (path === 'promotions' || path.startsWith('promotions/')) {
+    return handlePromotions(req, path, db);
+  }
+  if (path === 'payment-methods' || path.startsWith('payment-methods/')) {
+    return handlePaymentMethods(req, path, db);
+  }
   return notFound(req, path);
 }
 
@@ -672,10 +841,13 @@ function handleProducts(
         };
         return ok(products[index]);
       }
-      case 'DELETE':
+      case 'DELETE': {
         if (products[index].stock > 0) return error(400, 'ยังมีสต็อกคงเหลือ ลบไม่ได้');
+        const usedBy = promotionsUsing(db, (p) => promotionRefersToProduct(p, id));
+        if (usedBy) return error(400, `SKU นี้อยู่ในโปรโมชั่น ${usedBy} ลบไม่ได้`);
         products.splice(index, 1);
         return ok(null);
+      }
     }
   }
   const stockMatch = /^products\/(\d+)\/stock$/.exec(path);
@@ -1214,6 +1386,8 @@ function handleCategories(
         if (categories[index].productCount) {
           return error(400, `ยังมี SKU ${categories[index].productCount} รายการในหมวดนี้ ลบไม่ได้`);
         }
+        const usedBy = promotionsUsing(db, (p) => p.scope.categoryIds.includes(id));
+        if (usedBy) return error(400, `หมวดหมู่นี้อยู่ในโปรโมชั่น ${usedBy} ลบไม่ได้`);
         categories.splice(index, 1);
         return ok(null);
       }
@@ -1316,6 +1490,161 @@ function handleSuppliers(
           );
         }
         suppliers.splice(index, 1);
+        return ok(null);
+    }
+  }
+  return notFound(req, path);
+}
+
+/** True when the promotion lists the SKU as a qualifying or free item. */
+function promotionRefersToProduct(p: Promotion, productId: number): boolean {
+  return (
+    p.scope.productIds.includes(productId) ||
+    !!p.freeGoods?.items.some((i) => i.productId === productId)
+  );
+}
+
+/** Codes of not-yet-expired promotions matching `test` (expired ones are history only). */
+function promotionsUsing(db: MockDb, test: (p: Promotion) => boolean): string {
+  const today = todayIso();
+  return db.promotions
+    .filter((p) => promotionStatus(p, today) !== 'expired' && test(p))
+    .map((p) => p.code)
+    .join(', ');
+}
+
+/** GET/POST /promotions, GET/PUT/DELETE /promotions/:id */
+function handlePromotions(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const { promotions } = db;
+  const ctx = () => ({
+    products: db.products,
+    categories: db.categories,
+    promotions,
+    today: todayIso(),
+  });
+  const normalize = (p: PromotionPayload): PromotionPayload => ({
+    ...PROMOTION_DEFAULTS,
+    ...p,
+    code: (p.code ?? '').trim().toUpperCase(),
+    name: (p.name ?? '').trim(),
+    endDate: p.endDate || null,
+    // Bill discounts apply to the whole bill: no item scope.
+    scope:
+      p.type === 'bill_discount'
+        ? { all: true, productIds: [], categoryIds: [] }
+        : (p.scope ?? PROMOTION_DEFAULTS.scope),
+  });
+
+  if (path === 'promotions' && req.method === 'GET') {
+    return ok([...promotions]);
+  }
+  if (path === 'promotions' && req.method === 'POST') {
+    const payload = normalize(req.body as PromotionPayload);
+    const problem = promotionError(payload, ctx());
+    if (problem) return error(400, problem);
+    const created: Promotion = { ...payload, id: db.nextPromotionId++ };
+    promotions.push(created);
+    return ok(created);
+  }
+  const idMatch = /^promotions\/(\d+)$/.exec(path);
+  if (idMatch) {
+    const id = Number(idMatch[1]);
+    const index = promotions.findIndex((p) => p.id === id);
+    if (index < 0) return error(404, 'ไม่พบโปรโมชั่น');
+    switch (req.method) {
+      case 'GET':
+        return ok(promotions[index]);
+      case 'PUT': {
+        const payload = normalize(req.body as PromotionPayload);
+        const problem = promotionError(payload, ctx(), promotions[index]);
+        if (problem) return error(400, problem);
+        promotions[index] = { ...payload, id };
+        return ok(promotions[index]);
+      }
+      case 'DELETE':
+        if (hasStarted(promotions[index], todayIso())) {
+          return error(400, 'โปรที่เริ่มแล้วลบไม่ได้ (ปิดใช้งานแทน)');
+        }
+        promotions.splice(index, 1);
+        return ok(null);
+    }
+  }
+  return notFound(req, path);
+}
+
+/**
+ * GET/POST /payment-methods, PUT/DELETE /payment-methods/:id,
+ * PUT /payment-methods/order { ids } (new button order; returns the sorted list)
+ */
+function handlePaymentMethods(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const sorted = () => [...db.paymentMethods].sort((a, b) => a.sortOrder - b.sortOrder);
+  const normalize = (m: PaymentMethodPayload): PaymentMethodPayload =>
+    withPaymentTypeRules({
+      ...PAYMENT_METHOD_DEFAULTS,
+      ...m,
+      code: (m.code ?? '').trim().toUpperCase(),
+      name: (m.name ?? '').trim(),
+      maxAmount: m.maxAmount || null,
+    });
+
+  if (path === 'payment-methods' && req.method === 'GET') return ok(sorted());
+  if (path === 'payment-methods' && req.method === 'POST') {
+    const payload = normalize(req.body as PaymentMethodPayload);
+    const problem = paymentMethodError(payload, db.paymentMethods);
+    if (problem) return error(400, problem);
+    const created: PaymentMethod = {
+      ...payload,
+      id: db.nextPaymentMethodId++,
+      // New buttons go last.
+      sortOrder: Math.max(0, ...db.paymentMethods.map((m) => m.sortOrder)) + 1,
+    };
+    db.paymentMethods.push(created);
+    return ok(created);
+  }
+  if (path === 'payment-methods/order' && req.method === 'PUT') {
+    const { ids } = req.body as { ids: number[] };
+    const known = new Set(db.paymentMethods.map((m) => m.id));
+    if (ids.length !== known.size || ids.some((id) => !known.delete(id))) {
+      return error(400, 'ลำดับไม่ครบหรือมีรายการที่ไม่รู้จัก กรุณาโหลดใหม่');
+    }
+    ids.forEach((id, i) => {
+      const method = db.paymentMethods.find((m) => m.id === id);
+      if (method) method.sortOrder = i + 1;
+    });
+    return ok(sorted());
+  }
+  const idMatch = /^payment-methods\/(\d+)$/.exec(path);
+  if (idMatch) {
+    const id = Number(idMatch[1]);
+    const index = db.paymentMethods.findIndex((m) => m.id === id);
+    if (index < 0) return error(404, 'ไม่พบช่องทางชำระเงิน');
+    switch (req.method) {
+      case 'PUT': {
+        const payload = normalize(req.body as PaymentMethodPayload);
+        const problem = paymentMethodError(payload, db.paymentMethods, id);
+        if (problem) return error(400, problem);
+        // The order is changed only via PUT /payment-methods/order.
+        db.paymentMethods[index] = {
+          ...payload,
+          id,
+          sortOrder: db.paymentMethods[index].sortOrder,
+        };
+        return ok(db.paymentMethods[index]);
+      }
+      case 'DELETE':
+        if (isLastActiveCash(db.paymentMethods, id)) {
+          return error(400, 'ต้องมีช่องทางเงินสดที่เปิดใช้งานอย่างน้อย 1 ช่องทาง ลบไม่ได้');
+        }
+        // No sales reference payment methods yet; once the POS exists, used ones must be kept.
+        db.paymentMethods.splice(index, 1);
         return ok(null);
     }
   }

@@ -1,7 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { Category, CategoryPayload, Supplier, SupplierPayload } from '@core/models';
+import {
+  Category,
+  CategoryPayload,
+  PaymentMethod,
+  PaymentMethodPayload,
+  Supplier,
+  SupplierPayload,
+} from '@core/models';
 
 /** HTTP calls for master data (provided in master-data.routes.ts). */
 @Injectable()
@@ -42,5 +49,26 @@ export class MasterDataApi {
 
   removeSupplier(id: number): Observable<void> {
     return this.api.delete(`suppliers/${id}`);
+  }
+
+  paymentMethods(): Observable<PaymentMethod[]> {
+    return this.api.get<PaymentMethod[]>('payment-methods');
+  }
+
+  createPaymentMethod(payload: PaymentMethodPayload): Observable<PaymentMethod> {
+    return this.api.post<PaymentMethod>('payment-methods', payload);
+  }
+
+  updatePaymentMethod(id: number, payload: PaymentMethodPayload): Observable<PaymentMethod> {
+    return this.api.put<PaymentMethod>(`payment-methods/${id}`, payload);
+  }
+
+  /** Saves the POS button order; returns every method sorted. */
+  reorderPaymentMethods(ids: number[]): Observable<PaymentMethod[]> {
+    return this.api.put<PaymentMethod[]>('payment-methods/order', { ids });
+  }
+
+  removePaymentMethod(id: number): Observable<void> {
+    return this.api.delete(`payment-methods/${id}`);
   }
 }

@@ -1,0 +1,158 @@
+<h2 mat-dialog-title>{{ data.method ? 'แก้ไขช่องทางชำระเงิน' : 'เพิ่มช่องทางชำระเงิน' }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="grid">
+      <mat-form-field appearance="outline">
+        <mat-label>ประเภท</mat-label>
+        <mat-select formControlName="type">
+          @for (t of types; track t) {
+            <mat-option [value]="t">
+              <mat-icon>{{ typeIcon[t] }}</mat-icon>
+              {{ typeLabel[t] }}
+            </mat-option>
+          }
+        </mat-select>
+        @if (lockedCash) {
+          <mat-hint>เงินสดช่องทางสุดท้าย ล็อกไว้</mat-hint>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>รหัส</mat-label>
+        <input matInput appAutofocus formControlName="code" class="mono" (input)="toUpper()" />
+        <mat-hint>A-Z, 0-9 และ - เช่น CARD-KBANK</mat-hint>
+        @if (form.controls.code.invalid) {
+          <mat-error>A-Z, 0-9 และ - ไม่เกิน 20 ตัว</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>ชื่อบนปุ่ม / ใบเสร็จ</mat-label>
+        <input matInput formControlName="name" [maxlength]="nameMax" />
+        <mat-hint align="end">{{ form.controls.name.value.length }} / {{ nameMax }}</mat-hint>
+        @if (form.controls.name.hasError('required')) {
+          <mat-error>กรุณากรอกชื่อ</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ยอดขั้นต่ำต่อครั้ง</mat-label>
+        <input matInput type="number" min="0" formControlName="minAmount" />
+        <span matTextSuffix>฿</span>
+        <mat-hint>0 = ไม่มีขั้นต่ำ</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ยอดสูงสุดต่อครั้ง</mat-label>
+        <input matInput type="number" min="0" formControlName="maxAmount" />
+        <span matTextSuffix>฿</span>
+        <mat-hint>เว้นว่าง = ไม่จำกัด</mat-hint>
+      </mat-form-field>
+
+      @if (type() === 'cash') {
+        <mat-form-field appearance="outline">
+          <mat-label>ปัดเศษเงินสด</mat-label>
+          <mat-select formControlName="cashRounding">
+            @for (r of roundings; track r) {
+              <mat-option [value]="r">{{ roundingLabel[r] }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint
+            >เช่น ฿{{ sampleCash | number: '1.2-2' }} → ฿{{
+              sampleRounded() | number: '1.2-2'
+            }}</mat-hint
+          >
+        </mat-form-field>
+        <p class="text-muted small span-2">
+          <mat-icon inline>info</mat-icon>
+          เงินสดรับเกินยอดได้ (ทอนเงิน) และเปิดลิ้นชักเงิน ไม่มีค่าธรรมเนียม
+          @if (lockedCash) {
+            <br />
+            <mat-icon inline>lock</mat-icon>
+            เป็นเงินสดช่องทางเดียวที่เปิดใช้ จึงเปลี่ยนประเภทหรือปิดใช้งานไม่ได้
+          }
+        </p>
+      } @else {
+        <mat-form-field appearance="outline">
+          <mat-label>ค่าธรรมเนียม (MDR)</mat-label>
+          <input
+            matInput
+            type="number"
+            min="0"
+            [max]="feeMax"
+            step="0.01"
+            formControlName="feePercent"
+          />
+          <span matTextSuffix>%</span>
+          <mat-hint
+            >รับ ฿{{ sampleAmount | number }} ได้สุทธิ ฿{{
+              sampleNet() | number: '1.2-2'
+            }}</mat-hint
+          >
+        </mat-form-field>
+
+        <div class="toggle">
+          <mat-slide-toggle formControlName="requireReference">ต้องกรอกเลขอ้างอิง</mat-slide-toggle>
+        </div>
+
+        @if (form.controls.requireReference.value) {
+          <mat-form-field appearance="outline" class="span-2">
+            <mat-label>ชื่อช่องเลขอ้างอิง</mat-label>
+            <input matInput formControlName="referenceLabel" placeholder="เช่น เลขอนุมัติ" />
+          </mat-form-field>
+        }
+      }
+
+      @if (type() === 'qr') {
+        <mat-form-field appearance="outline">
+          <mat-label>PromptPay ID</mat-label>
+          <input matInput formControlName="promptPayId" inputmode="numeric" class="mono" />
+          <mat-hint>มือถือ 10 หลัก / เลขภาษี 13 หลัก</mat-hint>
+        </mat-form-field>
+      }
+
+      @if (type() === 'qr' || type() === 'transfer') {
+        <mat-form-field appearance="outline" [class.span-2]="type() === 'transfer'">
+          <mat-label>บัญชีรับเงิน</mat-label>
+          <input matInput formControlName="bankAccount" placeholder="ธนาคาร เลขที่บัญชี" />
+          <mat-hint>ใช้กระทบยอด</mat-hint>
+        </mat-form-field>
+      }
+
+      @if (type() === 'installment') {
+        <mat-form-field appearance="outline" class="span-2">
+          <mat-label>จำนวนเดือนที่ผ่อนได้</mat-label>
+          <input matInput formControlName="installmentMonths" placeholder="3, 6, 10" />
+          <mat-hint>คั่นด้วยจุลภาค (2 - 60 เดือน)</mat-hint>
+        </mat-form-field>
+      }
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>หมายเหตุ</mat-label>
+        <input matInput formControlName="note" />
+      </mat-form-field>
+
+      <div class="toggle span-2">
+        <mat-slide-toggle formControlName="active"
+          >เปิดใช้งาน (แสดงเป็นปุ่มที่หน้าขาย)</mat-slide-toggle
+        >
+      </div>
+    </div>
+
+    @if (problem(); as message) {
+      <p class="problem">
+        <mat-icon inline>error</mat-icon>
+        {{ message }}
+      </p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>ยกเลิก</button>
+    <button mat-flat-button type="submit" [disabled]="saving() || !!problem()">
+      <mat-icon>save</mat-icon>
+      บันทึก
+    </button>
+  </mat-dialog-actions>
+</form>

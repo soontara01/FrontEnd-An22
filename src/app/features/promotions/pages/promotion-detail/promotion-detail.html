@@ -1,0 +1,104 @@
+@if (promotion(); as p) {
+  <app-page-header [title]="p.code" [subtitle]="p.name">
+    <a mat-button routerLink="/promotions">
+      <mat-icon>arrow_back</mat-icon>
+      กลับ
+    </a>
+    @if (!started()) {
+      <button mat-stroked-button (click)="remove(p)">
+        <mat-icon>delete</mat-icon>
+        ลบ
+      </button>
+    }
+    <button mat-stroked-button [disabled]="busy()" (click)="toggleEnabled(p)">
+      <mat-icon>{{ p.enabled ? 'pause_circle' : 'play_circle' }}</mat-icon>
+      {{ p.enabled ? 'ปิดใช้งาน' : 'เปิดใช้งาน' }}
+    </button>
+    <a mat-flat-button [routerLink]="['/promotions', p.id, 'edit']">
+      <mat-icon>edit</mat-icon>
+      แก้ไข
+    </a>
+  </app-page-header>
+
+  <div class="tags">
+    @if (status(); as s) {
+      <span class="badge" [class]="s.badge">{{ s.label }}</span>
+    }
+    <span class="badge"
+      ><mat-icon inline>{{ typeIcon[p.type] }}</mat-icon> {{ typeLabel[p.type] }}</span
+    >
+    @if (p.stackable) {
+      <span class="badge">ใช้ร่วมโปรอื่นได้</span>
+    }
+    @if (started()) {
+      <span class="badge" matTooltip="แก้ได้เฉพาะวันสิ้นสุด การเปิด/ปิด และหมายเหตุ">
+        <mat-icon inline>lock</mat-icon> เริ่มแล้ว
+      </span>
+    }
+  </div>
+
+  <div class="layout">
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>ข้อมูลโปรโมชั่น</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <dl>
+          <dt>รหัส</dt>
+          <dd class="mono">{{ p.code }}</dd>
+          <dt>ชื่อ</dt>
+          <dd>{{ p.name }}</dd>
+          <dt>ช่วงเวลา</dt>
+          <dd>{{ period() }}</dd>
+          <dt>ลำดับความสำคัญ</dt>
+          <dd>{{ p.priority }}</dd>
+          <dt>หมายเหตุ</dt>
+          <dd>{{ p.note || '-' }}</dd>
+        </dl>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>เงื่อนไขและสิ่งที่ได้รับ</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <dl>
+          <dt>เงื่อนไข</dt>
+          <dd>{{ store.conditionText(p) }}</dd>
+          <dt>ลูกค้าได้รับ</dt>
+          <dd>{{ store.rewardText(p) }}</dd>
+        </dl>
+        @if (p.type !== 'bill_discount' && !p.scope.all) {
+          <h3 class="section-title">สินค้า / หมวดหมู่ที่ร่วมรายการ</h3>
+          <ul class="list">
+            @for (id of p.scope.productIds; track id) {
+              <li><mat-icon inline>inventory_2</mat-icon> {{ store.productLabel(id) }}</li>
+            }
+            @for (id of p.scope.categoryIds; track id) {
+              <li><mat-icon inline>category</mat-icon> {{ store.categoryLabel(id) }}</li>
+            }
+          </ul>
+        }
+        @if (p.freeGoods; as f) {
+          <h3 class="section-title">ของแถมต่อชุด</h3>
+          <ul class="list">
+            @for (i of f.items; track i.productId) {
+              <li>
+                <mat-icon inline>redeem</mat-icon> {{ store.productLabel(i.productId) }} ×
+                {{ i.qty }}
+              </li>
+            }
+          </ul>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined" class="wide">
+      <mat-card-header>
+        <mat-card-title>ตัวอย่างผลของโปร (ราคาวันนี้)</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <app-promotion-preview [promotion]="payloadOf(p)" />
+      </mat-card-content>
+    </mat-card>
+  </div>
+} @else {
+  <app-loading-spinner />
+}

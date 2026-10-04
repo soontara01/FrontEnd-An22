@@ -1,0 +1,38 @@
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 16px;
+  row-gap: 8px;
+  padding-top: 8px;
+
+  @media (max-width: 599px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.span-2 {
+  grid-column: 1 / -1;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  padding-bottom: 20px;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.problem {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+  font: var(--mat-sys-body-small);
+}
