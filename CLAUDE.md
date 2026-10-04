@@ -2,7 +2,7 @@
 
 Angular 22 SPA (standalone, zoneless, signals) + Angular Material 3. Backend is mocked for now.
 
-POS (sales screen) plan: `docs/pos-plan.md`.
+POS (sales screen) plan + decisions: `docs/pos-plan.md` (in progress). Its rules live in `core/models/pos-pricing.model.ts` (`priceCart()` / `cartError()`) and `pos-payment.model.ts` (`paymentSummary()` / `paymentError()`) — shared by the POS screen and the mock; don't re-implement promotion or payment math elsewhere.
 
 Domain: front end of a **retail system for an IT / electrical-appliance store** (serial numbers, warranty, VAT-inclusive prices). SKU-master roadmap: round 1 done (VAT, categories, packs/barcodes, short name + image, sale status); round 2 done (suppliers + reorder); round 3 done (Excel import/export, label printing).
 

@@ -24,6 +24,7 @@ import {
   ProductPayload,
   Promotion,
   PromotionPayload,
+  SALE_DEFAULTS,
   Sale,
   SaleStatus,
   SkuSupplier,
@@ -575,71 +576,79 @@ const SEED_PAYMENT_METHODS: PaymentMethod[] = [
   }),
 ];
 
-const SEED_SALES: Sale[] = [
-  {
-    id: 1,
-    orderNo: 'SO-2026-0001',
-    customer: 'บริษัท เอ จำกัด',
-    date: '2026-09-01T09:15:00Z',
-    itemCount: 3,
-    total: 52370,
-    status: 'paid',
-  },
-  {
-    id: 2,
-    orderNo: 'SO-2026-0002',
-    customer: 'ร้านบีคอม',
-    date: '2026-09-05T13:40:00Z',
-    itemCount: 10,
-    total: 5900,
-    status: 'paid',
-  },
-  {
-    id: 3,
-    orderNo: 'SO-2026-0003',
-    customer: 'คุณสมศักดิ์',
-    date: '2026-09-12T10:05:00Z',
-    itemCount: 1,
-    total: 4990,
-    status: 'cancelled',
-  },
-  {
-    id: 4,
-    orderNo: 'SO-2026-0004',
-    customer: 'บริษัท ซี เทรดดิ้ง',
-    date: '2026-09-20T16:20:00Z',
-    itemCount: 5,
-    total: 12450,
-    status: 'pending',
-  },
-  {
-    id: 5,
-    orderNo: 'SO-2026-0005',
-    customer: 'คุณมาลี',
-    date: '2026-09-28T11:00:00Z',
-    itemCount: 2,
-    total: 2580,
-    status: 'paid',
-  },
-  {
-    id: 6,
-    orderNo: 'SO-2026-0006',
-    customer: 'ร้านดีไอที',
-    date: '2026-10-01T08:30:00Z',
-    itemCount: 4,
-    total: 8760,
-    status: 'pending',
-  },
-  {
-    id: 7,
-    orderNo: 'SO-2026-0007',
-    customer: 'บริษัท เอ จำกัด',
-    date: '2026-10-02T14:45:00Z',
-    itemCount: 2,
-    total: 49800,
-    status: 'paid',
-  },
-];
+/** Orders from before the POS (no lines/payments). */
+const SEED_SALES: Sale[] = (
+  [
+    {
+      id: 1,
+      orderNo: 'SO-2026-0001',
+      customer: 'บริษัท เอ จำกัด',
+      date: '2026-09-01T09:15:00Z',
+      itemCount: 3,
+      total: 52370,
+      status: 'paid',
+    },
+    {
+      id: 2,
+      orderNo: 'SO-2026-0002',
+      customer: 'ร้านบีคอม',
+      date: '2026-09-05T13:40:00Z',
+      itemCount: 10,
+      total: 5900,
+      status: 'paid',
+    },
+    {
+      id: 3,
+      orderNo: 'SO-2026-0003',
+      customer: 'คุณสมศักดิ์',
+      date: '2026-09-12T10:05:00Z',
+      itemCount: 1,
+      total: 4990,
+      status: 'cancelled',
+    },
+    {
+      id: 4,
+      orderNo: 'SO-2026-0004',
+      customer: 'บริษัท ซี เทรดดิ้ง',
+      date: '2026-09-20T16:20:00Z',
+      itemCount: 5,
+      total: 12450,
+      status: 'pending',
+    },
+    {
+      id: 5,
+      orderNo: 'SO-2026-0005',
+      customer: 'คุณมาลี',
+      date: '2026-09-28T11:00:00Z',
+      itemCount: 2,
+      total: 2580,
+      status: 'paid',
+    },
+    {
+      id: 6,
+      orderNo: 'SO-2026-0006',
+      customer: 'ร้านดีไอที',
+      date: '2026-10-01T08:30:00Z',
+      itemCount: 4,
+      total: 8760,
+      status: 'pending',
+    },
+    {
+      id: 7,
+      orderNo: 'SO-2026-0007',
+      customer: 'บริษัท เอ จำกัด',
+      date: '2026-10-02T14:45:00Z',
+      itemCount: 2,
+      total: 49800,
+      status: 'paid',
+    },
+  ] satisfies Partial<Sale>[]
+).map(withSaleDefaults);
+
+/** Fills POS fields missing from sales stored before the POS existed. */
+function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
+  return { ...SALE_DEFAULTS, subtotal: s.total, ...s } as Sale;
+}
 
 const seedDb = (): MockDb => ({
   users: [...SEED_USERS],
@@ -688,6 +697,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
   db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
+  db.sales = db.sales.map(withSaleDefaults);
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
