@@ -39,6 +39,8 @@ import {
   SkuPrice,
   SHORT_NAME_MAX,
   SKU_STATUS_LABEL,
+  STORE_INFO_DEFAULTS,
+  StoreInfo,
   SUPPLIER_DEFAULTS,
   SkuPricePayload,
   Supplier,
@@ -72,6 +74,8 @@ import {
   paymentSummary,
   priceCart,
   voidError,
+  normalizeStoreInfo,
+  storeInfoError,
 } from '../models';
 import { StorageService } from '../services/storage.service';
 
@@ -102,6 +106,8 @@ interface MockDb {
   /** Payment method master (POS tender buttons), ordered by sortOrder. */
   paymentMethods: PaymentMethod[];
   nextPaymentMethodId: number;
+  /** The store's details printed on receipts (Settings menu). */
+  storeInfo: StoreInfo;
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -657,6 +663,16 @@ function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
   return { ...SALE_DEFAULTS, subtotal: s.total, ...s } as Sale;
 }
 
+const SEED_STORE_INFO: StoreInfo = {
+  ...STORE_INFO_DEFAULTS,
+  name: 'บริษัท ไอทีดี คอมพิวเตอร์ จำกัด',
+  taxId: '0105550123451',
+  address: '99/9 ถนนพหลโยธิน แขวงสามเสนใน เขตพญาไท กรุงเทพฯ 10400',
+  phone: '02-123-4567',
+  posId: 'E051234567890',
+  receiptFooter: 'ขอบคุณที่ใช้บริการ · เปลี่ยน/คืนสินค้าภายใน 7 วันพร้อมใบเสร็จ',
+};
+
 const seedDb = (): MockDb => ({
   users: [...SEED_USERS],
   nextId: SEED_USERS.length + 1,
@@ -677,6 +693,7 @@ const seedDb = (): MockDb => ({
   nextPromotionId: SEED_PROMOTIONS.length + 1,
   paymentMethods: SEED_PAYMENT_METHODS.map((x) => structuredClone(x)),
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
+  storeInfo: { ...SEED_STORE_INFO },
 });
 
 const LATENCY_MS = 300;
@@ -705,6 +722,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
+  db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
@@ -745,6 +763,7 @@ function handle(
   if (path === 'payment-methods' || path.startsWith('payment-methods/')) {
     return handlePaymentMethods(req, path, db);
   }
+  if (path === 'settings/store') return handleStoreInfo(req, path, db);
   return notFound(req, path);
 }
 
@@ -1853,6 +1872,23 @@ function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpRespon
   }
   Object.assign(sale, { status: 'cancelled', voidedAt: now, voidReason: reason });
   return ok(sale);
+}
+
+/** GET/PUT /settings/store (receipt header / footer) */
+function handleStoreInfo(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  if (req.method === 'GET') return ok(db.storeInfo);
+  if (req.method === 'PUT') {
+    const payload = normalizeStoreInfo(req.body as StoreInfo);
+    const problem = storeInfoError(payload);
+    if (problem) return error(400, problem);
+    db.storeInfo = payload;
+    return ok(db.storeInfo);
+  }
+  return notFound(req, path);
 }
 
 function login(

@@ -153,4 +153,24 @@ body {
   html.print-labels app-main-layout .content {
     padding: 0 !important;
   }
+
+  // Receipts (printElement): only the receipt, on a page sized to it.
+  .print-hide {
+    display: none !important;
+  }
+
+  html.print-receipt app-main-layout .content {
+    padding: 0 !important;
+  }
+
+  html.print-receipt .print-stage {
+    position: static !important;
+  }
+}
+
+// Keeps something printable laid out but off-screen (printElement needs its size).
+.print-stage {
+  position: fixed;
+  top: 0;
+  left: -10000px;
 }

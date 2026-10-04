@@ -16,10 +16,17 @@ import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
 import { PosStore } from '../../data/pos.store';
 
+/** Closing result after a successful sale. */
+export interface PaymentResult {
+  sale: Sale;
+  /** Print the receipt now */
+  print: boolean;
+}
+
 /**
  * Takes payment for the current bill (split tenders, cash change / rounding via
  * `paymentSummary()` / `paymentError()`), submits it and shows the result.
- * Closes with the saved Sale, or nothing when cancelled.
+ * Closes with the saved Sale (+ whether to print), or nothing when cancelled.
  */
 @Component({
   selector: 'app-payment-dialog',
@@ -30,7 +37,7 @@ import { PosStore } from '../../data/pos.store';
 })
 export class PaymentDialog {
   protected readonly store = inject(PosStore);
-  private readonly dialogRef = inject<MatDialogRef<PaymentDialog, Sale>>(MatDialogRef);
+  private readonly dialogRef = inject<MatDialogRef<PaymentDialog, PaymentResult>>(MatDialogRef);
 
   protected readonly icon = PAYMENT_TYPE_ICON;
   protected readonly total = this.store.cart().total;
@@ -125,7 +132,9 @@ export class PaymentDialog {
     });
   }
 
-  protected finish(): void {
-    this.dialogRef.close(this.done() ?? undefined);
+  /** Closes after a successful sale; the POS page prints the receipt when asked. */
+  protected finish(print: boolean): void {
+    const sale = this.done();
+    this.dialogRef.close(sale ? { sale, print } : undefined);
   }
 }

@@ -241,12 +241,27 @@
 
         @if (store.lastSale(); as sale) {
           <div class="last text-muted small">
-            บิลล่าสุด <span class="mono">{{ sale.orderNo }}</span> ·
-            {{ sale.total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }} · ทอน
-            {{ sale.change | number: '1.2-2' }}
+            <span>
+              บิลล่าสุด <span class="mono">{{ sale.orderNo }}</span> ·
+              {{ sale.total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }} · ทอน
+              {{ sale.change | number: '1.2-2' }}
+            </span>
+            <button mat-button type="button" [disabled]="!store.storeInfo()" (click)="printLast()">
+              <mat-icon>print</mat-icon>
+              พิมพ์ใบเสร็จ
+            </button>
           </div>
         }
       </mat-card-content>
     </mat-card>
   </aside>
 </div>
+
+<!-- Off-screen receipt of the last sale, printed by printLast() -->
+@if (store.lastSale(); as sale) {
+  @if (store.storeInfo(); as info) {
+    <div class="print-stage" aria-hidden="true">
+      <app-receipt #receipt [sale]="sale" [store]="info" />
+    </div>
+  }
+}

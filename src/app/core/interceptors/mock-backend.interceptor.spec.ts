@@ -8,6 +8,7 @@ import {
   PaymentInput,
   Product,
   Sale,
+  StoreInfo,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
@@ -15,7 +16,7 @@ import {
   StockCardResult,
   Supplier,
 } from '../models';
-import { addDaysIso, todayIso } from '../models';
+import { addDaysIso, storeInfoError, todayIso } from '../models';
 import { mockBackendInterceptor } from './mock-backend.interceptor';
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
@@ -619,5 +620,33 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(await errorOf(del(`products/${ESIM}`))).toBe(
       'SKU นี้มีประวัติการขาย ลบไม่ได้ (เปลี่ยนสถานะเป็นเลิกจำหน่ายแทน)',
     );
+  });
+});
+
+describe('mockBackendInterceptor – store info', () => {
+  let http: HttpClient;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('serves the seed store info and validates updates', async () => {
+    const info = await firstValueFrom(http.get<StoreInfo>('/api/settings/store'));
+    expect(storeInfoError(info)).toBeNull();
+    const saved = await firstValueFrom(
+      http.put<StoreInfo>('/api/settings/store', { ...info, name: ' ร้านใหม่ ' }),
+    );
+    expect(saved.name).toBe('ร้านใหม่');
+    const bad = await firstValueFrom(
+      http.put('/api/settings/store', { ...info, taxId: '123' }),
+    ).then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+    expect(bad).toBe('เลขประจำตัวผู้เสียภาษีต้องเป็น 13 หลักที่ถูกต้อง');
   });
 });

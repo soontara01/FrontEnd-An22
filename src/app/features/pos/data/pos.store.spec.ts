@@ -6,6 +6,7 @@ import {
   PaymentMethod,
   Product,
   SALE_DEFAULTS,
+  STORE_INFO_DEFAULTS,
   Sale,
 } from '@core/models';
 import { PosApi } from './pos-api.service';
@@ -51,6 +52,7 @@ describe('PosStore', () => {
       paymentMethods: vi.fn(() => of(methods)),
       serials: vi.fn(() => of([])),
       checkout: vi.fn(() => of(sale)),
+      storeInfo: vi.fn(() => of(STORE_INFO_DEFAULTS)),
     };
     TestBed.configureTestingModule({ providers: [PosStore, { provide: PosApi, useValue: api }] });
     store = TestBed.inject(PosStore);

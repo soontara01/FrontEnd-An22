@@ -11,6 +11,7 @@ import {
   Promotion,
   Sale,
   SerialNumber,
+  StoreInfo,
   cartError,
   priceCart,
   todayIso,
@@ -45,6 +46,7 @@ export class PosStore {
   private readonly _promotions = signal<Promotion[]>([]);
   private readonly _categories = signal<Category[]>([]);
   private readonly _methods = signal<PaymentMethod[]>([]);
+  private readonly _storeInfo = signal<StoreInfo | null>(null);
   private readonly _loading = signal(false);
   private readonly _items = signal<CartItem[]>([]);
   private readonly _freeSerials = signal<FreeSerial[]>([]);
@@ -60,6 +62,8 @@ export class PosStore {
   readonly customer = this._customer.asReadonly();
   readonly holds = this._holds.asReadonly();
   readonly lastSale = this._lastSale.asReadonly();
+  /** Receipt header / footer */
+  readonly storeInfo = this._storeInfo.asReadonly();
 
   /** Tender buttons: active methods in button order. */
   readonly methods = computed(() =>
@@ -100,13 +104,15 @@ export class PosStore {
       promotions: this.api.promotions(),
       categories: this.api.categories(),
       methods: this.api.paymentMethods(),
+      storeInfo: this.api.storeInfo(),
     })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ products, promotions, categories, methods }) => {
+      .subscribe(({ products, promotions, categories, methods, storeInfo }) => {
         this._products.set(products);
         this._promotions.set(promotions);
         this._categories.set(categories);
         this._methods.set(methods);
+        this._storeInfo.set(storeInfo);
       });
   }
 

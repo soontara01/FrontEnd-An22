@@ -15,9 +15,13 @@
     </div>
   </mat-dialog-content>
   <mat-dialog-actions align="end">
-    <button mat-flat-button appAutofocus (click)="finish()">
+    <button mat-button (click)="finish(false)">
       <mat-icon>add_shopping_cart</mat-icon>
-      เริ่มบิลใหม่
+      บิลใหม่ (ไม่พิมพ์)
+    </button>
+    <button mat-flat-button appAutofocus (click)="finish(true)">
+      <mat-icon>print</mat-icon>
+      พิมพ์ใบเสร็จ
     </button>
   </mat-dialog-actions>
 } @else {

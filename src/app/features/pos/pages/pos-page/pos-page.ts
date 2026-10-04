@@ -17,15 +17,17 @@ import {
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { filter, tap } from 'rxjs';
-import { PricedLine, Product, Sale, stockInPacks } from '@core/models';
+import { PricedLine, Product, stockInPacks } from '@core/models';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
+import { Receipt } from '@shared/components/receipt/receipt';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
+import { printElement } from '@shared/utils/print-element';
 import { SellUnit, findByCode, searchProducts } from '../../data/product-lookup';
 import { PosStore } from '../../data/pos.store';
-import { PaymentDialog } from '../../dialogs/payment-dialog/payment-dialog';
+import { PaymentDialog, PaymentResult } from '../../dialogs/payment-dialog/payment-dialog';
 import {
   SerialPickData,
   SerialPickDialog,
@@ -39,7 +41,7 @@ interface UnitOption extends SellUnit {
 
 /**
  * POS screen: scan / search → cart (priced live by `priceCart()`) → payment dialog.
- * Shortcuts: F2 search, F8 park bill, F12 pay.
+ * Shortcuts: F2 search, F8 park bill, F12 pay. Receipts print via `printElement()` (80 mm).
  */
 @Component({
   selector: 'app-pos-page',
@@ -50,6 +52,7 @@ interface UnitOption extends SellUnit {
     MatMenuModule,
     EmptyState,
     LoadingSpinner,
+    Receipt,
     AutofocusDirective,
     MATERIAL,
   ],
@@ -65,6 +68,7 @@ export default class PosPage {
 
   private readonly scanInput = viewChild.required<ElementRef<HTMLInputElement>>('scanInput');
   private readonly trigger = viewChild.required(MatAutocompleteTrigger);
+  private readonly receipt = viewChild('receipt', { read: ElementRef<HTMLElement> });
 
   protected readonly query = signal('');
   protected readonly scanError = signal('');
@@ -187,7 +191,7 @@ export default class PosPage {
   protected pay(): void {
     if (this.store.blocker() || this.dialog.openDialogs.length) return;
     this.dialog
-      .open<PaymentDialog, void, Sale>(PaymentDialog, {
+      .open<PaymentDialog, void, PaymentResult>(PaymentDialog, {
         injector: this.injector,
         width: '560px',
         maxWidth: '95vw',
@@ -195,7 +199,19 @@ export default class PosPage {
         autoFocus: false,
       })
       .afterClosed()
-      .subscribe(() => this.focusScan());
+      .subscribe((result) => {
+        if (result?.print) this.printLast();
+        this.focusScan();
+      });
+  }
+
+  /** Prints the receipt of the last sale (rendered off-screen below the page). */
+  protected printLast(): void {
+    // Let the dialog backdrop leave and the receipt render first.
+    setTimeout(() => {
+      const el = this.receipt()?.nativeElement;
+      if (el) printElement(el);
+    });
   }
 
   protected hold(): void {

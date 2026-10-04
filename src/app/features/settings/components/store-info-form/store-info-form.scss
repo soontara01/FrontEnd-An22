@@ -1,0 +1,58 @@
+.layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+form {
+  flex: 1 1 360px;
+  min-width: 0;
+}
+
+.toggle {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 16px;
+
+  mat-form-field {
+    flex: 1 1 200px;
+  }
+
+  mat-button-toggle-group {
+    margin-top: 4px;
+    margin-bottom: 20px;
+  }
+
+  .branch-no {
+    flex: 0 1 140px;
+  }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.problem {
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+}
+
+.preview {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container);
+  max-width: 100%;
+  overflow-x: auto;
+}

@@ -9,6 +9,7 @@ import {
   Sale,
   SalePayload,
   SerialNumber,
+  StoreInfo,
 } from '@core/models';
 
 /** HTTP calls for the POS feature (provided in pos.routes.ts). */
@@ -34,6 +35,10 @@ export class PosApi {
 
   serials(productId: number): Observable<SerialNumber[]> {
     return this.api.get<SerialNumber[]>(`products/${productId}/serials`);
+  }
+
+  storeInfo(): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>('settings/store');
   }
 
   checkout(payload: SalePayload): Observable<Sale> {
