@@ -107,3 +107,16 @@ table.lines .num {
 .danger:not([disabled]) {
   color: var(--mat-sys-error);
 }
+
+.notes {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.note {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+}

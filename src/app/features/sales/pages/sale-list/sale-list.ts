@@ -49,7 +49,8 @@ import { SalesStore } from '../../data/sales.store';
 
 /**
  * Bills of a local-date range (`/sales?from=&to=`, `?all=1`; default = today) with totals,
- * gross profit and money in per payment method (for closing the drawer).
+ * gross profit and money in per payment method (for closing the drawer), net of the credit notes
+ * issued in the same range.
  */
 @Component({
   selector: 'app-sale-list',
@@ -122,8 +123,14 @@ export default class SaleList {
     params: () => this.range(),
     stream: ({ params }) => this.store.list(params.from, params.to),
   });
+  protected readonly creditNotes = rxResource({
+    params: () => this.range(),
+    stream: ({ params }) => this.store.creditNotes(params.from, params.to),
+  });
   private readonly rows = computed(() => (this.sales.hasValue() ? this.sales.value() : []));
-  protected readonly summary = computed(() => summarizeSales(this.rows()));
+  protected readonly summary = computed(() =>
+    summarizeSales(this.rows(), this.creditNotes.hasValue() ? this.creditNotes.value() : []),
+  );
 
   private readonly filtered = computed(() => {
     const text = this.filterText().trim().toLowerCase();
@@ -198,6 +205,7 @@ export default class SaleList {
 
   protected reload(): void {
     this.sales.reload();
+    this.creditNotes.reload();
   }
 
   /** Pre-POS orders only. */

@@ -81,7 +81,11 @@ function selectPromotions(
 }
 
 /** Free sets earned by `qty` base units / `amount` baht of qualifying items. */
-function freeSets(p: Promotion, qty: number, amount: number): number {
+export function freeSets(
+  p: Pick<Promotion, 'minQty' | 'minAmount' | 'freeGoods'>,
+  qty: number,
+  amount: number,
+): number {
   const free = p.freeGoods;
   if (!free) return 0;
   let sets = p.minQty > 0 ? Math.floor(qty / p.minQty) : p.minAmount > 0 ? amount / p.minAmount : 0;
@@ -102,6 +106,7 @@ function snapshot(product: Product, factor: number) {
     unit: pack?.unit ?? product.unit,
     factor,
     vatType: product.vatType,
+    itemType: product.itemType,
     warrantyMonths: product.warrantyMonths,
   };
 }
@@ -238,7 +243,13 @@ export function priceCart(
         stockLeft.set(product.id, left - freeQty);
       }
       if (!freeQty) continue;
-      const base = { ...snapshot(product, 1), unitPrice: 0, itemDiscount: 0, billDiscount: 0 };
+      const base = {
+        ...snapshot(product, 1),
+        unitPrice: 0,
+        listPrice: product.currentPrice ?? 0,
+        itemDiscount: 0,
+        billDiscount: 0,
+      };
       const extra = { amount: 0, vat: 0, promotionIds: [p.id], freeOfPromotionId: p.id };
       if (!product.serialControl) {
         freeLines.push({ ...base, ...extra, qty: freeQty, serial: null, cartIndex: null });
@@ -288,6 +299,7 @@ export function priceCart(
       ...snapshot(l.product, l.item.factor),
       qty: l.item.qty,
       unitPrice: round2((l.product.currentPrice ?? 0) * l.item.factor),
+      listPrice: round2((l.product.currentPrice ?? 0) * l.item.factor),
       itemDiscount: l.itemDiscount,
       billDiscount: shares[i],
       amount,

@@ -11,18 +11,17 @@
         พิมพ์สำเนาใบเสร็จ
       </button>
     }
-    @if (isPos() && s.status === 'paid') {
-      <span [matTooltip]="voidBlocker() ?? ''">
-        <button
-          mat-stroked-button
-          class="danger"
-          [disabled]="!!voidBlocker()"
-          (click)="voidSale(s)"
-        >
-          <mat-icon>cancel</mat-icon>
-          ยกเลิกบิล
-        </button>
-      </span>
+    @if (canCredit() && isAdmin()) {
+      <a mat-stroked-button [routerLink]="['/sales', s.id, 'credit-note']">
+        <mat-icon>assignment_return</mat-icon>
+        ออกใบลดหนี้
+      </a>
+    }
+    @if (isPos() && s.status === 'paid' && !voidBlocker()) {
+      <button mat-stroked-button class="danger" (click)="voidSale(s)">
+        <mat-icon>cancel</mat-icon>
+        ยกเลิกบิล
+      </button>
     }
   </app-page-header>
 
@@ -42,9 +41,12 @@
               {{ s.voidedAt | thaiDate: 'datetime' }} — {{ s.voidReason }}
             </div>
           }
-          @if (s.status === 'paid' && voidBlocker()) {
+          @if (isPos() && s.status === 'paid' && voidBlocker()) {
             <div class="text-muted small hint">
               <mat-icon inline>info</mat-icon> {{ voidBlocker() }}
+              @if (canCredit() && !isAdmin()) {
+                — ให้ผู้ดูแลระบบออกใบลดหนี้
+              }
             </div>
           }
         </mat-card-content>
@@ -60,6 +62,9 @@
                   <th>#</th>
                   <th>สินค้า</th>
                   <th class="num">จำนวน</th>
+                  @if (creditNotes().length) {
+                    <th class="num">คืนแล้ว</th>
+                  }
                   <th class="num">ราคา/หน่วย</th>
                   <th class="num">ส่วนลด</th>
                   <th class="num">ยอดสุทธิ</th>
@@ -95,6 +100,11 @@
                       }
                     </td>
                     <td class="num">{{ l.qty }} {{ l.unit }}</td>
+                    @if (creditNotes().length) {
+                      <td class="num" [class.loss]="returnedQty(n)">
+                        {{ returnedQty(n) || '' }}
+                      </td>
+                    }
                     <td class="num">{{ l.unitPrice | number: '1.2-2' }}</td>
                     <td class="num">
                       @if (l.itemDiscount + l.billDiscount) {
@@ -189,6 +199,42 @@
             </mat-card-content>
           </mat-card>
         </div>
+        @if (creditNotes().length) {
+          <mat-card appearance="outlined">
+            <mat-card-header><mat-card-title>ใบลดหนี้</mat-card-title></mat-card-header>
+            <mat-card-content class="notes">
+              @for (cn of creditNotes(); track cn.id; let i = $index) {
+                <div class="note">
+                  <div>
+                    <strong class="mono">{{ cn.cnNo }}</strong>
+                    <span class="text-muted">
+                      · {{ cn.date | thaiDate: 'datetime' }} · {{ cn.reason }}</span
+                    >
+                    <div class="text-muted small">
+                      @for (l of cn.lines; track $index) {
+                        {{ l.shortName }} × {{ l.qty }}{{ l.restock ? '' : ' (ชำรุด)'
+                        }}{{ $last ? '' : ', ' }}
+                      }
+                      @if (cn.deduction) {
+                        · หักของแถม {{ cn.deduction | number: '1.2-2' }}
+                      }
+                      · คืนผ่าน
+                      @for (r of cn.refunds; track $index) {
+                        {{ r.name }} {{ r.amount | number: '1.2-2' }}{{ $last ? '' : ', ' }}
+                      }
+                    </div>
+                  </div>
+                  <strong class="loss">-{{ cn.total | number: '1.2-2' }}</strong>
+                  @if (store.storeInfo()) {
+                    <button mat-icon-button matTooltip="พิมพ์ใบลดหนี้" (click)="printNote(i)">
+                      <mat-icon>print</mat-icon>
+                    </button>
+                  }
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        }
       } @else {
         <mat-card appearance="outlined">
           <mat-card-content class="text-muted">
@@ -206,6 +252,14 @@
       </aside>
     }
   </div>
+  <!-- Off-screen credit note slips, printed by printNote() -->
+  @if (store.storeInfo(); as info) {
+    <div class="print-stage" aria-hidden="true">
+      @for (cn of creditNotes(); track cn.id) {
+        <app-credit-note-receipt #noteSlip [note]="cn" [store]="info" />
+      }
+    </div>
+  }
 } @else if (sale.isLoading()) {
   <app-loading-spinner />
 }

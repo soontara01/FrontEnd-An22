@@ -39,7 +39,7 @@
 @let sum = summary();
 <section class="stat-grid">
   <app-stat-card
-    [label]="'ยอดขายสุทธิ (' + sum.count + ' บิล)'"
+    [label]="'ยอดขาย (' + sum.count + ' บิล)'"
     [value]="(sum.total | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
     icon="payments"
   />
@@ -54,6 +54,12 @@
     "
     [value]="(sum.grossProfit | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
     icon="savings"
+  />
+  <app-stat-card
+    [label]="'ลดหนี้ (' + sum.creditCount + ' ใบ)'"
+    [value]="(sum.creditTotal | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+    icon="assignment_return"
+    tone="warn"
   />
   <app-stat-card
     [label]="'ยกเลิก (' + sum.cancelledCount + ' บิล)'"
@@ -72,7 +78,12 @@
           <div class="method">
             <mat-icon>{{ methodIcon[m.type] }}</mat-icon>
             <span class="name">{{ m.name }}</span>
-            <span class="text-muted small">{{ m.count }} รายการ</span>
+            <span class="text-muted small">
+              {{ m.count }} รายการ
+              @if (m.refunded) {
+                · คืนเงิน {{ m.refunded | number: '1.2-2' }}
+              }
+            </span>
             <strong>{{ m.amount | number: '1.2-2' }}</strong>
           </div>
         }

@@ -24,6 +24,8 @@ import {
   ProductPayload,
   Promotion,
   PromotionPayload,
+  CreditNote,
+  CreditNotePayload,
   SALE_DEFAULTS,
   Sale,
   SaleLine,
@@ -76,6 +78,9 @@ import {
   voidError,
   saleDay,
   normalizeStoreInfo,
+  creditNoteError,
+  draftCreditNote,
+  toRefunds,
   storeInfoError,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -109,6 +114,8 @@ interface MockDb {
   nextPaymentMethodId: number;
   /** The store's details printed on receipts (Settings menu). */
   storeInfo: StoreInfo;
+  /** Credit notes (returns after the day of sale). */
+  creditNotes: CreditNote[];
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -661,7 +668,13 @@ const SEED_SALES: Sale[] = (
 
 /** Fills POS fields missing from sales stored before the POS existed. */
 function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
-  return { ...SALE_DEFAULTS, subtotal: s.total, ...s } as Sale;
+  // Lines stored before listPrice / itemType were snapshotted.
+  const lines = (s.lines ?? []).map((l) => ({
+    ...l,
+    listPrice: l.listPrice ?? l.unitPrice,
+    itemType: l.itemType ?? 'stock',
+  }));
+  return { ...SALE_DEFAULTS, subtotal: s.total, ...s, lines } as Sale;
 }
 
 const SEED_STORE_INFO: StoreInfo = {
@@ -695,6 +708,7 @@ const seedDb = (): MockDb => ({
   paymentMethods: SEED_PAYMENT_METHODS.map((x) => structuredClone(x)),
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
   storeInfo: { ...SEED_STORE_INFO },
+  creditNotes: [],
 });
 
 const LATENCY_MS = 300;
@@ -765,6 +779,7 @@ function handle(
     return handlePaymentMethods(req, path, db);
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
+  if (path === 'credit-notes' && req.method === 'GET') return listCreditNotes(req, db);
   return notFound(req, path);
 }
 
@@ -1719,7 +1734,7 @@ function handleSales(
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
 
-  const idMatch = /^sales\/(\d+)(?:\/(status|void))?$/.exec(path);
+  const idMatch = /^sales\/(\d+)(?:\/(status|void|credit-notes))?$/.exec(path);
   if (!idMatch) return notFound(req, path);
   const index = sales.findIndex((s) => s.id === Number(idMatch[1]));
   if (index < 0) return error(404, 'ไม่พบบิลขาย');
@@ -1730,6 +1745,12 @@ function handleSales(
   if (action === 'void' && req.method === 'POST') {
     const { reason } = req.body as { reason: string };
     return voidSale(sale, (reason ?? '').trim(), db);
+  }
+  if (action === 'credit-notes' && req.method === 'GET') {
+    return ok(db.creditNotes.filter((n) => n.saleId === sale.id));
+  }
+  if (action === 'credit-notes' && req.method === 'POST') {
+    return createCreditNote(sale, req.body as CreditNotePayload, db);
   }
   if (action === 'status' && req.method === 'PUT') {
     if (sale.lines.length) return error(400, 'บิลขายหน้าร้านเปลี่ยนสถานะไม่ได้ (ใช้การยกเลิกบิล)');
@@ -1833,6 +1854,120 @@ function issueStock(db: MockDb, line: Omit<SaleLine, 'cogs'>, now: Date, note: s
   db.products[index] = { ...product, stock: product.stock - baseQty };
   recordMovement(db, db.products[index], 'issue', -baseQty, product.avgCost, -cogs, [], note);
   return cogs;
+}
+
+/** GET /credit-notes?from&to (local day of the credit note, newest first) */
+function listCreditNotes(req: HttpRequest<unknown>, db: MockDb): Observable<HttpResponse<unknown>> {
+  const from = req.params.get('from') || null;
+  const to = req.params.get('to') || null;
+  const day = (n: CreditNote) => saleDay(n);
+  return ok(
+    db.creditNotes
+      .filter((n) => (!from || day(n) >= from) && (!to || day(n) <= to))
+      .sort((a, b) => b.date.localeCompare(a.date)),
+  );
+}
+
+/**
+ * POST /sales/:id/credit-notes: validated by `creditNoteError()` before anything changes, then
+ * returned goods go back into stock at their sale cost (serials back in stock) or are written
+ * off (serials → damaged); services never move stock.
+ */
+function createCreditNote(
+  sale: Sale,
+  body: CreditNotePayload,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const today = todayIso();
+  const notes = db.creditNotes.filter((n) => n.saleId === sale.id);
+  const payload: CreditNotePayload = {
+    lines: body.lines ?? [],
+    refunds: body.refunds ?? [],
+    reason: (body.reason ?? '').trim(),
+    expectedTotal: body.expectedTotal,
+  };
+  const problem = creditNoteError(sale, notes, payload, {
+    promotions: db.promotions,
+    methods: db.paymentMethods,
+    today,
+  });
+  if (problem) return error(400, problem);
+  const draft = draftCreditNote(sale, notes, payload.lines, db.promotions);
+  for (const line of draft.lines) {
+    if (!db.products.some((p) => p.id === line.productId)) {
+      return error(400, `ไม่พบ SKU ${line.sku} รับคืนไม่ได้`);
+    }
+    const unit = line.serial ? db.serials.find((s) => s.serial === line.serial) : undefined;
+    if (line.serial && (unit?.productId !== line.productId || unit.status !== 'sold')) {
+      return error(400, `ซีเรียล ${line.serial} ไม่อยู่ในสถานะขายแล้ว รับคืนไม่ได้`);
+    }
+  }
+
+  const now = new Date();
+  const prefix = `CN-${today.replaceAll('-', '')}-`;
+  const last = db.creditNotes
+    .filter((n) => n.cnNo.startsWith(prefix))
+    .reduce((max, n) => Math.max(max, Number(n.cnNo.slice(prefix.length))), 0);
+  const cnNo = prefix + String(last + 1).padStart(4, '0');
+  const note = `ลดหนี้ ${cnNo} (บิล ${sale.orderNo})`;
+
+  for (const line of draft.lines) {
+    const index = db.products.findIndex((p) => p.id === line.productId);
+    const product = db.products[index];
+    if (isService(product)) continue;
+    const unit = line.serial ? db.serials.find((s) => s.serial === line.serial) : undefined;
+    if (unit) {
+      Object.assign(
+        unit,
+        line.restock
+          ? { status: 'in_stock', removedAt: null, receivedAt: now.toISOString(), note }
+          : { status: 'damaged', removedAt: now.toISOString(), note: `${note} · ไม่รับเข้าคลัง` },
+      );
+      if (line.restock) {
+        db.products[index] = withSerialStock(product, db);
+        recordMovement(
+          db,
+          db.products[index],
+          'receive',
+          1,
+          unit.cost,
+          unit.cost,
+          [unit.serial],
+          note,
+        );
+      }
+      continue;
+    }
+    if (!line.restock) continue;
+    const baseQty = line.qty * line.factor;
+    const unitCost = line.cogs / baseQty;
+    db.products[index] = {
+      ...product,
+      stock: product.stock + baseQty,
+      avgCost: movingAverage(product.stock, product.avgCost, baseQty, unitCost),
+    };
+    recordMovement(db, db.products[index], 'receive', baseQty, unitCost, line.cogs, [], note);
+  }
+
+  const created: CreditNote = {
+    id: Math.max(0, ...db.creditNotes.map((n) => n.id)) + 1,
+    cnNo,
+    saleId: sale.id,
+    orderNo: sale.orderNo,
+    saleDate: sale.date,
+    date: now.toISOString(),
+    cashier: db.users[0]?.name ?? '',
+    reason: payload.reason,
+    lines: draft.lines,
+    deductions: draft.deductions,
+    subtotal: draft.subtotal,
+    deduction: draft.deduction,
+    total: draft.total,
+    vat: draft.vat,
+    refunds: toRefunds(payload.refunds, db.paymentMethods),
+  };
+  db.creditNotes.push(created);
+  return ok(created);
 }
 
 /**

@@ -3,6 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
+  CreditNote,
+  CreditNoteLineInput,
   Category,
   PRODUCT_DEFAULTS,
   PaymentInput,
@@ -623,6 +625,67 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(await errorOf(get('sales?from=2026-10-05&to=2026-10-04'))).toBe(
       'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด',
     );
+  });
+
+  it('issues credit notes from the next day: stock back, free goods deducted', async () => {
+    const [unit] = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    const sale = await sell([item(NOTEBOOK, 1, unit.serial), item(MOUSE)], 25131, [
+      pay(CARD, 20000, 'A1'),
+      pay(CASH, 5131),
+    ]);
+    const body = (lines: CreditNoteLineInput[], total: number, refunds: PaymentInput[]) => ({
+      lines,
+      refunds,
+      reason: 'ลูกค้าคืนสินค้า',
+      expectedTotal: total,
+    });
+    const notebookOnly = body([{ saleLineIndex: 0, qty: 1, restock: true }], 23516.26, [
+      pay(CARD, 20000, 'R1'),
+      pay(CASH, 3516.26),
+    ]);
+    expect(await errorOf(post(`sales/${sale.id}/credit-notes`, notebookOnly))).toBe(
+      'บิลของวันนี้ให้ยกเลิกบิลแทนการออกใบลดหนี้',
+    );
+
+    vi.setSystemTime(new Date(2026, 9, 5, 11, 0));
+    // the notebook (24,606.26 after its bill-discount share) comes back; the free mouse (590)
+    // and setup (500) stay with the customer
+    const cn = await post<CreditNote>(`sales/${sale.id}/credit-notes`, notebookOnly);
+    expect(cn).toMatchObject({
+      cnNo: 'CN-20261005-0001',
+      subtotal: 24606.26,
+      deduction: 1090,
+      total: 23516.26,
+    });
+    expect(cn.refunds.map((r) => [r.name, r.amount])).toEqual([
+      ['บัตรเครดิต/เดบิต', 20000],
+      ['เงินสด', 3516.26],
+    ]);
+    expect((await product(NOTEBOOK)).stock).toBe(12);
+    const serials = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    expect(serials.find((s) => s.id === unit.id)?.status).toBe('in_stock');
+
+    // the paid mouse comes back damaged: no restock; the card has nothing left to refund
+    const mouseBefore = (await product(MOUSE)).stock;
+    const damaged = body([{ saleLineIndex: 1, qty: 1, restock: false }], 524.74, [
+      pay(CARD, 524.74, 'R2'),
+    ]);
+    expect(await errorOf(post(`sales/${sale.id}/credit-notes`, damaged))).toBe(
+      'คืนเงินได้เฉพาะเงินสดหรือช่องทางที่ลูกค้าชำระบิลนี้',
+    );
+    const second = await post<CreditNote>(`sales/${sale.id}/credit-notes`, {
+      ...damaged,
+      refunds: [pay(CASH, 524.74)],
+    });
+    expect(second.cnNo).toBe('CN-20261005-0002');
+    expect((await product(MOUSE)).stock).toBe(mouseBefore);
+    expect(await errorOf(post(`sales/${sale.id}/credit-notes`, damaged))).toBe(
+      'MS-010 คืนได้ไม่เกิน 0 ชิ้น',
+    );
+
+    expect(await get<CreditNote[]>(`sales/${sale.id}/credit-notes`)).toHaveLength(2);
+    expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
+    expect(await get<CreditNote[]>('credit-notes?from=2026-10-04&to=2026-10-04')).toHaveLength(0);
   });
 
   it('keeps payment methods and SKUs that sales refer to', async () => {

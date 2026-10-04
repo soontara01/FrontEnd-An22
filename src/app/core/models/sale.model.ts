@@ -1,6 +1,6 @@
 import type { PaymentType } from './payment-method.model';
 import { toIsoDate } from './price.model';
-import type { VatType } from './product.model';
+import type { ItemType, VatType } from './product.model';
 
 export type SaleStatus = 'pending' | 'paid' | 'cancelled';
 
@@ -35,6 +35,8 @@ export interface SaleLine {
   qty: number;
   /** Price per sold unit before discounts (0 for free items) */
   unitPrice: number;
+  /** Sale price per sold unit at sale time, also for free items (credit-note deductions) */
+  listPrice: number;
   /** Item promotions over the whole line */
   itemDiscount: number;
   /** Share of the bill discount allocated to this line */
@@ -42,6 +44,7 @@ export interface SaleLine {
   /** unitPrice × qty − itemDiscount − billDiscount */
   amount: number;
   vatType: VatType;
+  itemType: ItemType;
   /** VAT contained in `amount` */
   vat: number;
   /** Item promotions applied to this line (the free-goods promotion for a free line) */

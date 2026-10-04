@@ -176,7 +176,8 @@ export class PosStore {
   hold(): void {
     if (!this._items().length) return;
     const bill: HeldBill = {
-      id: `H${Date.now()}`,
+      // Unique even for two parks within the same millisecond.
+      id: `H${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       heldAt: new Date().toISOString(),
       customer: this._customer(),
       items: this._items(),
@@ -191,8 +192,8 @@ export class PosStore {
   resume(id: string): void {
     const bill = this._holds().find((b) => b.id === id);
     if (!bill) return;
-    this.hold();
     this.saveHolds(this._holds().filter((b) => b.id !== id));
+    this.hold();
     this._items.set(bill.items);
     this._freeSerials.set(bill.freeSerials);
     this._customer.set(bill.customer);

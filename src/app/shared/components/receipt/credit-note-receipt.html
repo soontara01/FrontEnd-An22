@@ -1,0 +1,99 @@
+@let n = note();
+@let shop = store();
+<div class="receipt">
+  <header>
+    <div class="shop">{{ shop.name }}</div>
+    @if (shop.address) {
+      <div>{{ shop.address }}</div>
+    }
+    @if (shop.taxId) {
+      <div>เลขประจำตัวผู้เสียภาษี {{ shop.taxId }} ({{ branch() }})</div>
+    }
+    <div class="title">ใบลดหนี้</div>
+  </header>
+
+  <div class="meta">
+    <div>
+      <span>เลขที่</span><span>{{ n.cnNo }}</span>
+    </div>
+    <div>
+      <span>วันที่</span><span>{{ n.date | thaiDate: 'datetime' }}</span>
+    </div>
+    <div>
+      <span>อ้างอิงบิล</span><span>{{ n.orderNo }}</span>
+    </div>
+    <div>
+      <span>วันที่บิล</span><span>{{ n.saleDate | thaiDate: 'datetime' }}</span>
+    </div>
+    <div>
+      <span>เหตุผล</span><span>{{ n.reason }}</span>
+    </div>
+  </div>
+
+  <div class="lines">
+    @for (line of n.lines; track $index) {
+      <div class="line">
+        <div class="row">
+          <span class="name">
+            {{ line.shortName }}
+            @if (line.vatType === 'exempt') {
+              <span class="flag">(E)</span>
+            }
+          </span>
+          <span>{{ line.amount | number: '1.2-2' }}</span>
+        </div>
+        <div class="sub">
+          คืน {{ line.qty }} {{ line.unit }}
+          @if (line.free) {
+            · ของแถม
+          }
+          @if (!line.restock) {
+            · ไม่รับเข้าคลัง
+          }
+        </div>
+        @if (line.serial) {
+          <div class="sub">SN {{ line.serial }}</div>
+        }
+      </div>
+    }
+    @for (d of n.deductions; track $index) {
+      <div class="row sub">
+        <span>หักของแถมที่ไม่คืน {{ d.sku }} × {{ d.qty }}</span>
+        <span>-{{ d.amount | number: '1.2-2' }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="totals">
+    <div class="row grand">
+      <span>ยอดลดหนี้</span><span>{{ n.total | number: '1.2-2' }}</span>
+    </div>
+    @if (shop.vatRegistered) {
+      <div class="row sub">
+        <span>มูลค่าก่อนภาษี</span><span>{{ n.total - n.vat | number: '1.2-2' }}</span>
+      </div>
+      <div class="row sub">
+        <span>ภาษีมูลค่าเพิ่ม</span><span>{{ n.vat | number: '1.2-2' }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="payments">
+    @for (r of n.refunds; track $index) {
+      <div class="row">
+        <span>คืนเงิน {{ r.name }}</span
+        ><span>{{ r.amount | number: '1.2-2' }}</span>
+      </div>
+      @if (r.reference) {
+        <div class="sub">อ้างอิง {{ r.reference }}</div>
+      }
+    }
+  </div>
+
+  <footer>
+    <div>ลงชื่อผู้รับเงินคืน ......................</div>
+    @if (n.cashier) {
+      <div>พนักงาน {{ n.cashier }}</div>
+    }
+  </footer>
+</div>
