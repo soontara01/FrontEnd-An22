@@ -1,0 +1,148 @@
+<section class="stat-grid">
+  <app-stat-card label="เปิดใช้งาน" [value]="store.activeCount()" icon="payments" />
+  <app-stat-card label="ทั้งหมด" [value]="store.count()" icon="list" />
+  <app-stat-card label="มีค่าธรรมเนียม" [value]="store.withFeeCount()" icon="percent" />
+</section>
+
+<div class="filter-row">
+  <span class="text-muted">เรียงตามลำดับปุ่มที่หน้าขาย · ใช้ ▲▼ เพื่อจัดลำดับ</span>
+  <span class="spacer"></span>
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <button mat-flat-button (click)="openForm()">
+    <mat-icon>add</mat-icon>
+    เพิ่มช่องทางชำระเงิน
+  </button>
+</div>
+
+@if (store.posButtons().length) {
+  <mat-card appearance="outlined" class="preview">
+    <mat-card-header>
+      <mat-card-title>ตัวอย่างปุ่มที่หน้าขาย</mat-card-title>
+    </mat-card-header>
+    <mat-card-content class="buttons">
+      @for (m of store.posButtons(); track m.id) {
+        <div class="tender" [matTooltip]="details(m)">
+          <mat-icon>{{ icon(m) }}</mat-icon>
+          <span>{{ m.name }}</span>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+}
+
+<mat-card appearance="outlined">
+  @if (store.loading() && store.count() === 0) {
+    <app-loading-spinner />
+  }
+
+  <div class="table-wrap" [hidden]="store.count() === 0">
+    <table mat-table [dataSource]="store.methods()">
+      <ng-container matColumnDef="order">
+        <th mat-header-cell *matHeaderCellDef>ลำดับ</th>
+        <td mat-cell *matCellDef="let m; let i = index; let last = last" class="order">
+          <button
+            mat-icon-button
+            matTooltip="เลื่อนขึ้น"
+            aria-label="เลื่อนขึ้น"
+            [disabled]="i === 0 || moving()"
+            (click)="move(m, -1)"
+          >
+            <mat-icon>arrow_upward</mat-icon>
+          </button>
+          <button
+            mat-icon-button
+            matTooltip="เลื่อนลง"
+            aria-label="เลื่อนลง"
+            [disabled]="last || moving()"
+            (click)="move(m, 1)"
+          >
+            <mat-icon>arrow_downward</mat-icon>
+          </button>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>ชื่อบนปุ่ม</th>
+        <td mat-cell *matCellDef="let m">
+          {{ m.name }}
+          <div class="text-muted small mono">{{ m.code }}</div>
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="type">
+        <th mat-header-cell *matHeaderCellDef>ประเภท</th>
+        <td mat-cell *matCellDef="let m" class="nowrap">
+          <mat-icon inline>{{ icon(m) }}</mat-icon>
+          {{ typeText(m) }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="limits">
+        <th mat-header-cell *matHeaderCellDef class="num">ยอดต่อครั้ง</th>
+        <td mat-cell *matCellDef="let m" class="num small nowrap">
+          @if (m.minAmount || m.maxAmount) {
+            {{ m.minAmount | currency: 'THB' : 'symbol-narrow' : '1.0-0' }} –
+            {{
+              m.maxAmount ? (m.maxAmount | currency: 'THB' : 'symbol-narrow' : '1.0-0') : 'ไม่จำกัด'
+            }}
+          } @else {
+            <span class="text-muted">ไม่จำกัด</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="fee">
+        <th mat-header-cell *matHeaderCellDef class="num">ค่าธรรมเนียม</th>
+        <td mat-cell *matCellDef="let m" class="num">
+          {{ m.feePercent ? (m.feePercent | number: '1.0-2') + '%' : '-' }}
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="details">
+        <th mat-header-cell *matHeaderCellDef>รายละเอียด</th>
+        <td mat-cell *matCellDef="let m" class="small">{{ details(m) || '-' }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+        <td mat-cell *matCellDef="let m">
+          @if (m.active) {
+            <span class="badge badge-success">ใช้งาน</span>
+          } @else {
+            <span class="badge">ปิดใช้งาน</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let m" class="actions">
+          <button mat-icon-button matTooltip="แก้ไข" (click)="openForm(m)">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <span [matTooltip]="deleteBlocker(m)">
+            <button
+              mat-icon-button
+              aria-label="ลบ"
+              [disabled]="!!deleteBlocker(m)"
+              (click)="remove(m)"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </span>
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns" [class.inactive]="!row.active"></tr>
+    </table>
+  </div>
+
+  @if (!store.loading() && store.count() === 0) {
+    <app-empty-state icon="payments" message="ยังไม่มีช่องทางชำระเงิน">
+      <button mat-flat-button (click)="openForm()">เพิ่มช่องทางแรก</button>
+    </app-empty-state>
+  }
+</mat-card>

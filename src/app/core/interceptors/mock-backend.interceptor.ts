@@ -15,9 +15,12 @@ import {
   CategoryPayload,
   LoginRequest,
   LoginResponse,
+  PAYMENT_METHOD_DEFAULTS,
   PRODUCT_DEFAULTS,
   PROMOTION_DEFAULTS,
   Product,
+  PaymentMethod,
+  PaymentMethodPayload,
   ProductPayload,
   Promotion,
   PromotionPayload,
@@ -52,7 +55,10 @@ import {
   findOverlap,
   formatDateRange,
   isLeaf,
+  isLastActiveCash,
   isValidThaiTaxId,
+  paymentMethodError,
+  withPaymentTypeRules,
   promotionError,
   promotionStatus,
   hasStarted,
@@ -85,6 +91,9 @@ interface MockDb {
   /** Promotion master (discounts / free goods by period), used by the future POS. */
   promotions: Promotion[];
   nextPromotionId: number;
+  /** Payment method master (POS tender buttons), ordered by sortOrder. */
+  paymentMethods: PaymentMethod[];
+  nextPaymentMethodId: number;
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -517,6 +526,55 @@ const SEED_PROMOTIONS: Promotion[] = [
   }),
 ];
 
+const payment = (
+  m: Pick<PaymentMethod, 'id' | 'code' | 'name' | 'type'> & Partial<PaymentMethod>,
+): PaymentMethod => ({ ...PAYMENT_METHOD_DEFAULTS, sortOrder: m.id, ...m });
+
+/** Sample tenders of the store (fees are typical Thai MDR rates, for net-received reports). */
+const SEED_PAYMENT_METHODS: PaymentMethod[] = [
+  payment({ id: 1, code: 'CASH', name: 'เงินสด', type: 'cash', cashRounding: '0.25' }),
+  payment({
+    id: 2,
+    code: 'CARD',
+    name: 'บัตรเครดิต/เดบิต',
+    type: 'card',
+    requireReference: true,
+    referenceLabel: 'เลขอนุมัติ',
+    minAmount: 300,
+    feePercent: 1.6,
+  }),
+  payment({
+    id: 3,
+    code: 'QR-PP',
+    name: 'QR พร้อมเพย์',
+    type: 'qr',
+    promptPayId: '0105550123451',
+    bankAccount: 'กสิกรไทย 123-4-56789-0',
+  }),
+  payment({
+    id: 4,
+    code: 'TRANSFER',
+    name: 'โอนผ่านธนาคาร',
+    type: 'transfer',
+    requireReference: true,
+    referenceLabel: 'เลขอ้างอิงการโอน',
+    bankAccount: 'กสิกรไทย 123-4-56789-0',
+  }),
+  payment({ id: 5, code: 'TMW', name: 'TrueMoney Wallet', type: 'e_wallet', feePercent: 1.5 }),
+  payment({
+    id: 6,
+    code: 'INST-0',
+    name: 'ผ่อน 0%',
+    type: 'installment',
+    requireReference: true,
+    referenceLabel: 'เลขอนุมัติ',
+    minAmount: 3000,
+    feePercent: 3,
+    installmentMonths: [3, 6, 10],
+    note: 'ผ่อนผ่านบัตรเครดิตที่ร่วมรายการ',
+  }),
+];
+
 const SEED_SALES: Sale[] = [
   {
     id: 1,
@@ -601,6 +659,8 @@ const seedDb = (): MockDb => ({
   nextMovementId: 1,
   promotions: SEED_PROMOTIONS.map((x) => structuredClone(x)),
   nextPromotionId: SEED_PROMOTIONS.length + 1,
+  paymentMethods: SEED_PAYMENT_METHODS.map((x) => structuredClone(x)),
+  nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
 });
 
 const LATENCY_MS = 300;
@@ -627,6 +687,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.products = db.products.map((p) => ({ ...PRODUCT_DEFAULTS, ...p }));
   db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
   db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
+  db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
@@ -663,6 +724,9 @@ function handle(
   if (path === 'sales' || path.startsWith('sales/')) return handleSales(req, path, db);
   if (path === 'promotions' || path.startsWith('promotions/')) {
     return handlePromotions(req, path, db);
+  }
+  if (path === 'payment-methods' || path.startsWith('payment-methods/')) {
+    return handlePaymentMethods(req, path, db);
   }
   return notFound(req, path);
 }
@@ -1506,6 +1570,81 @@ function handlePromotions(
           return error(400, 'โปรที่เริ่มแล้วลบไม่ได้ (ปิดใช้งานแทน)');
         }
         promotions.splice(index, 1);
+        return ok(null);
+    }
+  }
+  return notFound(req, path);
+}
+
+/**
+ * GET/POST /payment-methods, PUT/DELETE /payment-methods/:id,
+ * PUT /payment-methods/order { ids } (new button order; returns the sorted list)
+ */
+function handlePaymentMethods(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const sorted = () => [...db.paymentMethods].sort((a, b) => a.sortOrder - b.sortOrder);
+  const normalize = (m: PaymentMethodPayload): PaymentMethodPayload =>
+    withPaymentTypeRules({
+      ...PAYMENT_METHOD_DEFAULTS,
+      ...m,
+      code: (m.code ?? '').trim().toUpperCase(),
+      name: (m.name ?? '').trim(),
+      maxAmount: m.maxAmount || null,
+    });
+
+  if (path === 'payment-methods' && req.method === 'GET') return ok(sorted());
+  if (path === 'payment-methods' && req.method === 'POST') {
+    const payload = normalize(req.body as PaymentMethodPayload);
+    const problem = paymentMethodError(payload, db.paymentMethods);
+    if (problem) return error(400, problem);
+    const created: PaymentMethod = {
+      ...payload,
+      id: db.nextPaymentMethodId++,
+      // New buttons go last.
+      sortOrder: Math.max(0, ...db.paymentMethods.map((m) => m.sortOrder)) + 1,
+    };
+    db.paymentMethods.push(created);
+    return ok(created);
+  }
+  if (path === 'payment-methods/order' && req.method === 'PUT') {
+    const { ids } = req.body as { ids: number[] };
+    const known = new Set(db.paymentMethods.map((m) => m.id));
+    if (ids.length !== known.size || ids.some((id) => !known.delete(id))) {
+      return error(400, 'ลำดับไม่ครบหรือมีรายการที่ไม่รู้จัก กรุณาโหลดใหม่');
+    }
+    ids.forEach((id, i) => {
+      const method = db.paymentMethods.find((m) => m.id === id);
+      if (method) method.sortOrder = i + 1;
+    });
+    return ok(sorted());
+  }
+  const idMatch = /^payment-methods\/(\d+)$/.exec(path);
+  if (idMatch) {
+    const id = Number(idMatch[1]);
+    const index = db.paymentMethods.findIndex((m) => m.id === id);
+    if (index < 0) return error(404, 'ไม่พบช่องทางชำระเงิน');
+    switch (req.method) {
+      case 'PUT': {
+        const payload = normalize(req.body as PaymentMethodPayload);
+        const problem = paymentMethodError(payload, db.paymentMethods, id);
+        if (problem) return error(400, problem);
+        // The order is changed only via PUT /payment-methods/order.
+        db.paymentMethods[index] = {
+          ...payload,
+          id,
+          sortOrder: db.paymentMethods[index].sortOrder,
+        };
+        return ok(db.paymentMethods[index]);
+      }
+      case 'DELETE':
+        if (isLastActiveCash(db.paymentMethods, id)) {
+          return error(400, 'ต้องมีช่องทางเงินสดที่เปิดใช้งานอย่างน้อย 1 ช่องทาง ลบไม่ได้');
+        }
+        // No sales reference payment methods yet; once the POS exists, used ones must be kept.
+        db.paymentMethods.splice(index, 1);
         return ok(null);
     }
   }

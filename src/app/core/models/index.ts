@@ -2,6 +2,7 @@ export * from './auth.model';
 export * from './category.model';
 export * from './costing.model';
 export * from './price.model';
+export * from './payment-method.model';
 export * from './product.model';
 export * from './promotion.model';
 export * from './sale.model';
