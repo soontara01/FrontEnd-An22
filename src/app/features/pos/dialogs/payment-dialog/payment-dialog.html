@@ -46,7 +46,7 @@
     @if (store.buyer(); as buyer) {
       <div class="invoice-note">
         <mat-icon inline>receipt_long</mat-icon>
-        ออกใบกำกับภาษีเต็มรูปให้ {{ buyer.name }} ({{ buyer.taxId }})
+        ออกใบกำกับภาษีเต็มรูปให้ {{ buyer.name }} ({{ buyerId(buyer) }})
       </div>
     }
 

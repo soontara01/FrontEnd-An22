@@ -18,9 +18,16 @@ import type { Sale } from './sale.model';
  */
 export type BuyerBranchType = BranchType | 'none';
 
+/**
+ * 'passport' = foreign buyer without a Thai tax ID: only name + address are required by law, the
+ * passport number is kept for traceability. Missing (older data) = 'tax_id'.
+ */
+export type BuyerIdType = 'tax_id' | 'passport';
+
 export interface TaxInvoiceBuyer {
   name: string;
-  /** 13-digit tax ID (companies) or national ID (individuals) */
+  idType?: BuyerIdType;
+  /** 13-digit tax ID (companies) or national ID (individuals); the passport number when idType = 'passport' */
   taxId: string;
   branchType: BuyerBranchType;
   /** 5 digits when branchType = 'branch' */
@@ -78,6 +85,7 @@ export function invoiceTotals(sale: Pick<Sale, 'lines' | 'total' | 'vat'>): Invo
 
 export const EMPTY_BUYER: TaxInvoiceBuyer = {
   name: '',
+  idType: 'tax_id',
   taxId: '',
   branchType: 'none',
   branchNo: '',
@@ -96,19 +104,57 @@ export function buyerBranchLabel(b: Pick<TaxInvoiceBuyer, 'branchType' | 'branch
     : branchLabel({ branchType: b.branchType, branchNo: b.branchNo });
 }
 
+export const isPassportBuyer = (b: Pick<TaxInvoiceBuyer, 'idType'>): boolean =>
+  b.idType === 'passport';
+
+/** Label printed before the buyer's ID number. */
+export function buyerIdLabel(b: Pick<TaxInvoiceBuyer, 'idType'>): string {
+  return isPassportBuyer(b) ? 'เลขที่หนังสือเดินทาง' : 'เลขประจำตัวผู้เสียภาษี';
+}
+
+/** Short ID for on-screen summaries: the tax ID, or 'Passport AB1234567'. */
+export function buyerIdShort(b: Pick<TaxInvoiceBuyer, 'idType' | 'taxId'>): string {
+  return isPassportBuyer(b) ? `Passport ${b.taxId}` : b.taxId;
+}
+
+/** ID number as typed, cleaned for its type (tax ID: digits; passport: upper-case letters/digits). */
+export function normalizeBuyerId(idType: BuyerIdType | undefined, id: string): string {
+  const clean = (id ?? '').replace(/[\s-]/g, '');
+  return idType === 'passport' ? clean.toUpperCase() : clean;
+}
+
+/** Error of the ID number alone (also gates the previous-buyer lookup). */
+export function buyerIdError(idType: BuyerIdType | undefined, id: string): string | null {
+  if (idType === 'passport') {
+    return /^[A-Z0-9]{6,20}$/.test(id)
+      ? null
+      : 'เลขที่หนังสือเดินทางต้องเป็นตัวอักษรอังกฤษ/ตัวเลข 6–20 ตัว';
+  }
+  return isValidThaiTaxId(id) ? null : 'เลขประจำตัวผู้เสียภาษีผู้ซื้อต้องเป็น 13 หลักที่ถูกต้อง';
+}
+
 export function normalizeBuyer(b: TaxInvoiceBuyer): TaxInvoiceBuyer {
+  const idType: BuyerIdType = b.idType === 'passport' ? 'passport' : 'tax_id';
+  const branchType: BuyerBranchType =
+    idType === 'passport'
+      ? 'none'
+      : b.branchType === 'branch' || b.branchType === 'none'
+        ? b.branchType
+        : 'head';
   return {
     name: (b.name ?? '').trim(),
-    taxId: (b.taxId ?? '').replace(/[\s-]/g, ''),
-    branchType: b.branchType === 'branch' || b.branchType === 'none' ? b.branchType : 'head',
-    branchNo: b.branchType === 'branch' ? (b.branchNo ?? '').trim() : '',
+    idType,
+    taxId: normalizeBuyerId(idType, b.taxId),
+    branchType,
+    branchNo: branchType === 'branch' ? (b.branchNo ?? '').trim() : '',
     address: (b.address ?? '').trim(),
   };
 }
 
 export function buyerError(b: TaxInvoiceBuyer): string | null {
   if (!b.name) return 'กรุณากรอกชื่อผู้ซื้อ';
-  if (!isValidThaiTaxId(b.taxId)) return 'เลขประจำตัวผู้เสียภาษีผู้ซื้อต้องเป็น 13 หลักที่ถูกต้อง';
+  const idProblem = buyerIdError(b.idType, b.taxId);
+  if (idProblem) return idProblem;
   if (b.branchType === 'branch' && !/^\d{5}$/.test(b.branchNo)) {
     return 'เลขที่สาขาผู้ซื้อต้องเป็นตัวเลข 5 หลัก';
   }

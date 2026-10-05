@@ -6,7 +6,9 @@ import {
   PaymentInput,
   PaymentMethod,
   Sale,
+  TaxInvoiceBuyer,
   allowsChange,
+  buyerIdShort,
   cashDueFor,
   paymentError,
   paymentSummary,
@@ -64,6 +66,11 @@ export class PaymentDialog {
 
   protected method(line: PaymentInput): PaymentMethod | undefined {
     return this.store.methods().find((m) => m.id === line.methodId);
+  }
+
+  /** Tax ID, or 'Passport AB1234567' for a foreign buyer. */
+  protected buyerId(buyer: TaxInvoiceBuyer): string {
+    return buyerIdShort(buyer);
   }
 
   protected isCash(method: PaymentMethod | undefined): boolean {

@@ -29,7 +29,7 @@
       <div class="strong">{{ inv.buyer.name }}</div>
       <div>{{ inv.buyer.address }}</div>
       <div>
-        เลขประจำตัวผู้เสียภาษี {{ inv.buyer.taxId }}
+        {{ buyerIdLabel() }} {{ inv.buyer.taxId }}
         @if (buyerBranch(); as b) {
           ({{ b }})
         }

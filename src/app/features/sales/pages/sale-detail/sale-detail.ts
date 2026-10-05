@@ -28,6 +28,8 @@ import {
   SaleLine,
   TaxInvoiceBuyer,
   buyerBranchLabel,
+  buyerIdLabel,
+  buyerIdShort,
   creditedQty,
   round2,
   saleDay,
@@ -194,10 +196,14 @@ export default class SaleDetail {
     return SALE_STATUS_LABEL[sale.status];
   }
 
-  /** ' (สำนักงานใหญ่)' / ' (สาขา 00001)', '' when the buyer is not a VAT registrant. */
-  protected buyerBranch(buyer: TaxInvoiceBuyer): string {
-    const label = buyerBranchLabel(buyer);
-    return label ? ` (${label})` : '';
+  /** 'เลขประจำตัวผู้เสียภาษี 0105… (สำนักงานใหญ่)' / 'เลขที่หนังสือเดินทาง AB…' of a buyer. */
+  protected buyerIdText(buyer: TaxInvoiceBuyer): string {
+    const branch = buyerBranchLabel(buyer);
+    return `${buyerIdLabel(buyer)} ${buyer.taxId}${branch ? ` (${branch})` : ''}`;
+  }
+
+  protected buyerIdShort(buyer: TaxInvoiceBuyer): string {
+    return buyerIdShort(buyer);
   }
 
   protected statusBadge(sale: Sale): string {

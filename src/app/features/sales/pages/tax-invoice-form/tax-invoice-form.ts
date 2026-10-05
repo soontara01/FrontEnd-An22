@@ -11,13 +11,16 @@ import { rxResource, takeUntilDestroyed, toSignal } from '@angular/core/rxjs-int
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Router, RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, filter, switchMap } from 'rxjs';
+import { debounceTime, distinctUntilChanged, filter, map, switchMap } from 'rxjs';
 import {
+  BuyerIdType,
   EMPTY_BUYER,
   TaxInvoice,
   TaxInvoiceBuyer,
   defaultBuyerBranch,
-  isValidThaiTaxId,
+  buyerIdError,
+  isPassportBuyer,
+  normalizeBuyerId,
   normalizeBuyer,
   reissueError,
   taxInvoiceError,
@@ -84,11 +87,17 @@ export default class TaxInvoiceForm {
   });
   protected readonly saving = signal(false);
 
-  protected readonly form = inject(NonNullableFormBuilder).group({ ...EMPTY_BUYER });
+  protected readonly form = inject(NonNullableFormBuilder).group({
+    ...EMPTY_BUYER,
+    idType: 'tax_id' as BuyerIdType,
+  });
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
   protected readonly buyer = computed(() =>
     normalizeBuyer({ ...EMPTY_BUYER, ...this.value() } as TaxInvoiceBuyer),
   );
+  /** Foreign buyer identified by passport (no branch). */
+  protected readonly passport = computed(() => isPassportBuyer(this.buyer()));
+  private readonly idType = () => this.form.controls.idType.value;
   protected readonly problem = computed(() => {
     const info = this.store.storeInfo();
     if (!this.sale.hasValue() || !info) return null;
@@ -133,7 +142,7 @@ export default class TaxInvoiceForm {
       const current = this.current.value();
       if (this.prefilled || !current) return;
       this.prefilled = true;
-      this.form.reset({ ...current.buyer });
+      this.form.reset({ ...EMPTY_BUYER, ...current.buyer });
     });
     // New buyer: suggest head office for a company tax ID, none for a national ID, until the
     // user picks one (reissue keeps the current choice).
@@ -141,19 +150,24 @@ export default class TaxInvoiceForm {
     this.form.controls.taxId.valueChanges
       .pipe(takeUntilDestroyed())
       .subscribe(
-        (id) => this.isReissue() || branch.dirty || branch.setValue(defaultBuyerBranch(id)),
+        (id) =>
+          this.isReissue() ||
+          branch.dirty ||
+          this.idType() === 'passport' ||
+          branch.setValue(defaultBuyerBranch(id)),
       );
-    // A known tax ID fills the rest from the last invoice issued to that buyer.
+    // A known tax ID / passport fills the rest from the last invoice issued to that buyer.
     this.form.controls.taxId.valueChanges
       .pipe(
+        map((id) => normalizeBuyerId(this.idType(), id)),
         debounceTime(300),
         distinctUntilChanged(),
-        filter((id) => isValidThaiTaxId(id.replace(/[\s-]/g, ''))),
-        switchMap((id) => this.store.buyerByTaxId(id.replace(/[\s-]/g, ''))),
+        filter((id) => !buyerIdError(this.idType(), id)),
+        switchMap((id) => this.store.buyerByTaxId(id)),
         filter((found): found is TaxInvoiceBuyer => !!found),
       )
       .subscribe((found) => {
-        if (!this.form.controls.name.value.trim()) {
+        if (isPassportBuyer(found) === this.passport() && !this.form.controls.name.value.trim()) {
           this.form.patchValue({ ...found, taxId: this.form.controls.taxId.value });
           this.notify.info('เติมข้อมูลผู้ซื้อจากใบกำกับภาษีครั้งก่อน');
         }

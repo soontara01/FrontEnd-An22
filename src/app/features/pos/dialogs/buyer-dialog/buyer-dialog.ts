@@ -5,11 +5,14 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { debounceTime, distinctUntilChanged, filter, map, switchMap } from 'rxjs';
 import {
+  BuyerIdType,
   EMPTY_BUYER,
   TaxInvoiceBuyer,
   buyerError,
   defaultBuyerBranch,
-  isValidThaiTaxId,
+  buyerIdError,
+  isPassportBuyer,
+  normalizeBuyerId,
   normalizeBuyer,
 } from '@core/models';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
@@ -41,6 +44,9 @@ import { PosStore } from '../../data/pos.store';
     mat-button-toggle-group {
       margin: 4px 0 20px;
     }
+    .id-type {
+      margin: 0 0 12px;
+    }
     .branch-no {
       flex: 0 1 140px;
     }
@@ -60,22 +66,34 @@ export class BuyerDialog {
   private readonly dialogRef = inject<MatDialogRef<BuyerDialog, TaxInvoiceBuyer>>(MatDialogRef);
   private readonly initial = inject<TaxInvoiceBuyer | null>(MAT_DIALOG_DATA) ?? EMPTY_BUYER;
 
-  protected readonly form = inject(NonNullableFormBuilder).group({ ...this.initial });
+  protected readonly form = inject(NonNullableFormBuilder).group({
+    ...EMPTY_BUYER,
+    ...this.initial,
+    idType: (this.initial.idType ?? 'tax_id') as BuyerIdType,
+  });
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
   protected readonly buyer = computed(() =>
     normalizeBuyer({ ...EMPTY_BUYER, ...this.value() } as TaxInvoiceBuyer),
   );
   protected readonly problem = computed(() => buyerError(this.buyer()));
+  /** Foreign buyer identified by passport (no branch). */
+  protected readonly passport = computed(() => isPassportBuyer(this.buyer()));
+  private readonly idType = () => this.form.controls.idType.value;
 
   /** Set when the details came from an earlier invoice. */
   protected readonly found = toSignal(
     this.form.controls.taxId.valueChanges.pipe(
-      map((id) => id.replace(/[\s-]/g, '')),
+      map((id) => normalizeBuyerId(this.idType(), id)),
       debounceTime(300),
       distinctUntilChanged(),
-      filter((id) => isValidThaiTaxId(id)),
+      filter((id) => !buyerIdError(this.idType(), id)),
       switchMap((id) => this.store.buyerByTaxId(id)),
-      filter((found): found is TaxInvoiceBuyer => !!found && !this.form.controls.name.value.trim()),
+      filter(
+        (found): found is TaxInvoiceBuyer =>
+          !!found &&
+          isPassportBuyer(found) === this.passport() &&
+          !this.form.controls.name.value.trim(),
+      ),
       map((found) => {
         this.form.patchValue({ ...found, taxId: this.form.controls.taxId.value });
         return true;
@@ -91,7 +109,10 @@ export class BuyerDialog {
       const branch = this.form.controls.branchType;
       this.form.controls.taxId.valueChanges
         .pipe(takeUntilDestroyed())
-        .subscribe((id) => branch.dirty || branch.setValue(defaultBuyerBranch(id)));
+        .subscribe(
+          (id) =>
+            branch.dirty || this.idType() === 'passport' || branch.setValue(defaultBuyerBranch(id)),
+        );
     }
   }
 

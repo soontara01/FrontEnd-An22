@@ -225,8 +225,7 @@
                     <span class="text-muted small"> · ออกแทน {{ inv.replacesInvoiceNo }}</span>
                   }
                   <div class="text-muted small">
-                    {{ inv.buyer.name }} · เลขผู้เสียภาษี {{ inv.buyer.taxId
-                    }}{{ buyerBranch(inv.buyer) }}
+                    {{ inv.buyer.name }} · {{ buyerIdText(inv.buyer) }}
                   </div>
                 </div>
                 <span></span>
@@ -273,7 +272,7 @@
                   @if (old.replacedByNo) {
                     · แทนด้วย {{ old.replacedByNo }}
                   }
-                  · {{ old.buyer.name }} ({{ old.buyer.taxId }})
+                  · {{ old.buyer.name }} ({{ buyerIdShort(old.buyer) }})
                 </div>
               }
             </mat-card-content>
