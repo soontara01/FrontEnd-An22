@@ -2,9 +2,21 @@
 <mat-dialog-content>
   <p class="text-muted small">ออกพร้อมการขาย ลงวันที่วันนี้ — ไม่ต้องออกใบกำกับภาษีอย่างย่อ</p>
   <form [formGroup]="form" id="buyer-form" (ngSubmit)="save()">
+    <mat-button-toggle-group formControlName="idType" aria-label="ประเภทเลขผู้ซื้อ" class="id-type">
+      <mat-button-toggle value="tax_id">เลขผู้เสียภาษี / บัตรประชาชน</mat-button-toggle>
+      <mat-button-toggle value="passport">หนังสือเดินทาง (ชาวต่างชาติ)</mat-button-toggle>
+    </mat-button-toggle-group>
     <mat-form-field appearance="outline" class="w-full">
-      <mat-label>เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน</mat-label>
-      <input matInput appAutofocus formControlName="taxId" inputmode="numeric" maxlength="17" />
+      <mat-label>{{
+        passport() ? 'เลขที่หนังสือเดินทาง' : 'เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน'
+      }}</mat-label>
+      <input
+        matInput
+        appAutofocus
+        formControlName="taxId"
+        [attr.inputmode]="passport() ? 'text' : 'numeric'"
+        maxlength="20"
+      />
     </mat-form-field>
     @if (found()) {
       <div class="found">เติมข้อมูลจากใบกำกับภาษีครั้งก่อนแล้ว</div>
@@ -13,23 +25,28 @@
       <mat-label>ชื่อผู้ซื้อ / ชื่อบริษัท</mat-label>
       <input matInput formControlName="name" />
     </mat-form-field>
-    <div class="text-muted small">สำนักงานใหญ่ / สาขา — ระบุเฉพาะผู้ซื้อที่จดทะเบียน VAT</div>
-    <div class="row">
-      <mat-button-toggle-group formControlName="branchType" aria-label="ประเภทสาขา">
-        <mat-button-toggle value="none">ไม่ระบุ (บุคคลธรรมดา)</mat-button-toggle>
-        <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
-        <mat-button-toggle value="branch">สาขา</mat-button-toggle>
-      </mat-button-toggle-group>
-      @if (buyer().branchType === 'branch') {
-        <mat-form-field appearance="outline" class="branch-no">
-          <mat-label>เลขที่สาขา</mat-label>
-          <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" />
-        </mat-form-field>
-      }
-    </div>
+    @if (!passport()) {
+      <div class="text-muted small">สำนักงานใหญ่ / สาขา — ระบุเฉพาะผู้ซื้อที่จดทะเบียน VAT</div>
+      <div class="row">
+        <mat-button-toggle-group formControlName="branchType" aria-label="ประเภทสาขา">
+          <mat-button-toggle value="none">ไม่ระบุ (บุคคลธรรมดา)</mat-button-toggle>
+          <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
+          <mat-button-toggle value="branch">สาขา</mat-button-toggle>
+        </mat-button-toggle-group>
+        @if (buyer().branchType === 'branch') {
+          <mat-form-field appearance="outline" class="branch-no">
+            <mat-label>เลขที่สาขา</mat-label>
+            <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" />
+          </mat-form-field>
+        }
+      </div>
+    }
     <mat-form-field appearance="outline" class="w-full">
       <mat-label>ที่อยู่</mat-label>
       <textarea matInput formControlName="address" rows="3"></textarea>
+      @if (passport()) {
+        <mat-hint>ที่อยู่ในประเทศไทย (เช่น โรงแรม) หรือที่อยู่ตามหนังสือเดินทาง</mat-hint>
+      }
     </mat-form-field>
     @if (problem(); as message) {
       <div class="problem">{{ message }}</div>

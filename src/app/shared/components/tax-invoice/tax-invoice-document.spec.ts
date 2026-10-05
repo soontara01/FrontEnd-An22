@@ -117,6 +117,15 @@ describe('TaxInvoiceDocument', () => {
     expect(text).not.toContain('1101700230708(');
   });
 
+  it('prints the passport number of a foreign buyer', () => {
+    const text = render(false, {
+      ...invoice,
+      buyer: { ...invoice.buyer, idType: 'passport', taxId: 'AB1234567', branchType: 'none' },
+    });
+    expect(text).toContain('เลขที่หนังสือเดินทางAB1234567');
+    expect(text).not.toContain('AB1234567(');
+  });
+
   it('marks copies and cancelled invoices', () => {
     expect(render(true)).toContain('สำเนา');
     expect(render(false, { ...invoice, cancelledAt: sale.date })).toContain('ยกเลิกแล้ว');

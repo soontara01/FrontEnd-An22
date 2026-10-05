@@ -6,6 +6,7 @@ import {
   TaxInvoice,
   branchLabel,
   buyerBranchLabel,
+  buyerIdLabel,
   invoiceTotals,
 } from '@core/models';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
@@ -31,6 +32,7 @@ export class TaxInvoiceSlip {
 
   protected readonly sellerBranch = computed(() => branchLabel(this.store()));
   protected readonly buyerBranch = computed(() => buyerBranchLabel(this.invoice().buyer));
+  protected readonly buyerIdLabel = computed(() => buyerIdLabel(this.invoice().buyer));
   protected readonly totals = computed(() => invoiceTotals(this.sale()));
   protected readonly words = computed(() => bahtText(this.sale().total));
 }

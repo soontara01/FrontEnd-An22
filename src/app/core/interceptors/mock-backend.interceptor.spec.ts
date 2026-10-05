@@ -718,7 +718,10 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer }))).toBe(
       'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-20261004-0001)',
     );
-    expect(await get('tax-invoices/buyer?taxId=0105550123451')).toEqual(buyer);
+    expect(await get('tax-invoices/buyer?taxId=0105550123451')).toEqual({
+      ...buyer,
+      idType: 'tax_id',
+    });
     expect(await get('tax-invoices/buyer?taxId=1111111111119')).toBeNull();
 
     await post(`sales/${sale.id}/void`, { reason: 'คีย์ผิด' });
@@ -837,6 +840,35 @@ describe('mockBackendInterceptor – POS sales', () => {
       cancelledAt: null,
     });
     expect(invoice.date).toBe(sale.date);
+  });
+
+  it('issues a full tax invoice to a foreign buyer by passport number', async () => {
+    const body = (taxId: string) => ({
+      items: [item(MOUSE)],
+      freeSerials: [],
+      payments: [pay(CASH, 531)],
+      customer: '',
+      expectedTotal: 531,
+      buyer: {
+        name: 'John Smith',
+        idType: 'passport',
+        taxId,
+        branchType: 'head',
+        branchNo: '',
+        address: 'Hotel ABC, Bangkok',
+      },
+    });
+    expect(await errorOf(post('sales', body('AB-1')))).toBe(
+      'เลขที่หนังสือเดินทางต้องเป็นตัวอักษรอังกฤษ/ตัวเลข 6–20 ตัว',
+    );
+    const sale = await post<Sale>('sales', body('ab 123 4567'));
+    const invoice = await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`);
+    expect(invoice.buyer).toMatchObject({
+      idType: 'passport',
+      taxId: 'AB1234567',
+      branchType: 'none',
+    });
+    expect(await get('tax-invoices/buyer?taxId=AB1234567')).toMatchObject({ name: 'John Smith' });
   });
 
   it('keeps payment methods and SKUs that sales refer to', async () => {

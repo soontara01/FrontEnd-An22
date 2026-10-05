@@ -2,6 +2,8 @@ import {
   EMPTY_BUYER,
   buyerBranchLabel,
   buyerError,
+  buyerIdLabel,
+  buyerIdShort,
   defaultBuyerBranch,
   invoiceTotals,
   currentInvoice,
@@ -24,11 +26,35 @@ describe('tax invoice model', () => {
   it('normalizes buyer text, tax ID and the branch of a head office', () => {
     expect(buyer).toEqual({
       name: 'บริษัท ลูกค้า จำกัด',
+      idType: 'tax_id',
       taxId: '0105550123451',
       branchType: 'head',
       branchNo: '',
       address: 'กรุงเทพฯ',
     });
+  });
+
+  it('identifies a foreign buyer by passport number, without a branch', () => {
+    const tourist = normalizeBuyer({
+      name: 'John Smith',
+      idType: 'passport',
+      taxId: ' ab-1234567 ',
+      branchType: 'branch',
+      branchNo: '00001',
+      address: 'Hotel ABC, Bangkok',
+    });
+    expect(tourist).toMatchObject({ taxId: 'AB1234567', branchType: 'none', branchNo: '' });
+    expect(buyerError(tourist)).toBeNull();
+    expect(buyerError({ ...tourist, taxId: 'AB12' })).toBe(
+      'เลขที่หนังสือเดินทางต้องเป็นตัวอักษรอังกฤษ/ตัวเลข 6–20 ตัว',
+    );
+    expect(buyerError({ ...tourist, taxId: 'AB/123456' })).not.toBeNull();
+    expect(buyerIdLabel(tourist)).toBe('เลขที่หนังสือเดินทาง');
+    expect(buyerIdShort(tourist)).toBe('Passport AB1234567');
+    expect(buyerIdLabel(buyer)).toBe('เลขประจำตัวผู้เสียภาษี');
+    expect(buyerIdShort(buyer)).toBe('0105550123451');
+    // stored before the ID type existed → Thai tax ID
+    expect(normalizeBuyer({ ...buyer, idType: undefined }).idType).toBe('tax_id');
   });
 
   it('keeps "no branch" for buyers who are not VAT registrants', () => {
