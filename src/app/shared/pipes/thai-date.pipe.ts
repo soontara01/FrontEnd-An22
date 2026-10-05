@@ -1,10 +1,10 @@
 import { Pipe, PipeTransform } from '@angular/core';
 import { fromIsoDate } from '@core/models';
 
-type Format = 'short' | 'datetime' | 'long';
+type Format = 'short' | 'datetime' | 'long' | 'month';
 
 /** Formats a date in Thai (Buddhist era), e.g. `{{ value | thaiDate }}` → "5 ม.ค. 2569"
- * (`datetime` → "5 ม.ค. 2569 14:05", `long` → full month + time). */
+ * (`datetime` → "5 ม.ค. 2569 14:05", `long` → full month + time, `month` → "มกราคม 2569"). */
 @Pipe({ name: 'thaiDate' })
 export class ThaiDatePipe implements PipeTransform {
   private static readonly formats: Record<Format, Intl.DateTimeFormatOptions> = {
@@ -17,6 +17,7 @@ export class ThaiDatePipe implements PipeTransform {
       minute: '2-digit',
     },
     long: { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' },
+    month: { month: 'long', year: 'numeric' },
   };
 
   transform(value: string | number | Date | null | undefined, format: Format = 'short'): string {

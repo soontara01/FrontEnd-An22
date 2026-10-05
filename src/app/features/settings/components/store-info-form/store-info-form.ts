@@ -30,6 +30,7 @@ export class StoreInfoForm {
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     name: '',
+    placeName: '',
     vatRegistered: true,
     taxId: '',
     branchType: STORE_INFO_DEFAULTS.branchType,

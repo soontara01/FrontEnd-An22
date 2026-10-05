@@ -3,6 +3,7 @@ import { PaymentMethod, allowsChange } from './payment-method.model';
 import { freeSets } from './pos-pricing.model';
 import { VatType, vatBreakdown } from './product.model';
 import type { Promotion } from './promotion.model';
+import type { TaxInvoiceBuyer } from './tax-invoice.model';
 import { PaymentInput, Sale, SaleLine, SalePayment, saleDay } from './sale.model';
 
 /**
@@ -61,6 +62,8 @@ export interface CreditNote {
   orderNo: string;
   /** Full tax invoice of the bill, if one was issued (printed as the reference) */
   taxInvoiceNo: string | null;
+  /** Buyer of that invoice when the note was issued (server-set; null = abbreviated invoice only) */
+  buyer: TaxInvoiceBuyer | null;
   saleDate: string;
   /** ISO timestamp */
   date: string;

@@ -18,7 +18,8 @@ import {
  * - a full invoice issued *later* is dated on the sale day (accountant's decision) and replaces an
  *   abbreviated one already counted that day, so it is listed for reference only (not in the totals)
  * - voided bills count 0 (their numbers stay in the day's range; a voided full invoice is listed
- *   as cancelled); credit notes reduce the month they are issued in
+ *   as cancelled); credit notes reduce the month they are issued in, with the buyer of the full
+ *   invoice they quote (retail when the bill only had an abbreviated one)
  */
 export type TaxReportRowKind = 'abbreviated' | 'full' | 'replacement' | 'credit';
 
@@ -65,6 +66,7 @@ const KIND_ORDER: Record<TaxReportRowKind, number> = {
 const sum = (values: number[]): number => round2(values.reduce((a, b) => a + b, 0));
 const inMonth = (day: string, month: string) => day.startsWith(`${month}-`);
 const blank = { buyerName: '', buyerTaxId: '', buyerBranch: '' };
+const RETAIL = 'ขายปลีก (ใบกำกับภาษีอย่างย่อ)';
 
 /** Builds the report of `month` ('YYYY-MM') from that month's bills, invoices and credit notes. */
 export function buildSalesTaxReport(
@@ -96,7 +98,7 @@ export function buildSalesTaxReport(
       date: day,
       docNo: numbers.length > 1 ? `${numbers[0]} – ${numbers.at(-1)}` : numbers[0],
       ...blank,
-      buyerName: 'ขายปลีก (ใบกำกับภาษีอย่างย่อ)',
+      buyerName: RETAIL,
       net: sum(t.map((x) => x.net)),
       vat: sum(t.map((x) => x.vat)),
       exempt: sum(t.map((x) => x.exempt)),
@@ -159,7 +161,13 @@ export function buildSalesTaxReport(
       kind: 'credit',
       date: day,
       docNo: n.cnNo,
-      ...blank,
+      ...(n.buyer
+        ? {
+            buyerName: n.buyer.name,
+            buyerTaxId: n.buyer.taxId,
+            buyerBranch: branchLabel(n.buyer),
+          }
+        : { ...blank, buyerName: RETAIL }),
       net: -round2(n.total - n.vat - exempt),
       vat: -n.vat,
       exempt: -exempt,

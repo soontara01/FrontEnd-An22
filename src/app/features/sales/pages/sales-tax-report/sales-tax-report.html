@@ -33,12 +33,15 @@
     <div #sheet class="sheet">
       <header>
         <div class="title">รายงานภาษีขาย</div>
-        <div>เดือนภาษี {{ r.month + '-01' | thaiDate }}</div>
+        <div>เดือนภาษี {{ r.month + '-01' | thaiDate: 'month' }}</div>
         @if (store.storeInfo(); as info) {
-          <div>
-            ชื่อผู้ประกอบการ {{ info.name }} · เลขประจำตัวผู้เสียภาษี {{ info.taxId }} ({{
-              sellerBranch()
-            }})
+          <div class="seller">
+            <span>ชื่อผู้ประกอบการ {{ info.name }}</span>
+            <span
+              >เลขประจำตัวผู้เสียภาษีอากร <span class="mono">{{ info.taxId }}</span></span
+            >
+            <span>ชื่อสถานประกอบการ {{ sellerPlace() }}</span>
+            <span>{{ sellerBranch() }}</span>
           </div>
         }
       </header>

@@ -9,8 +9,10 @@ import { BranchType, isValidThaiTaxId } from './supplier.model';
 export type InvoicePaper = 'A4' | '80mm';
 
 export interface StoreInfo {
-  /** Registered business name */
+  /** Registered business name (ชื่อผู้ประกอบการ) */
   name: string;
+  /** Name of the business place (ชื่อสถานประกอบการ, e.g. shop / branch name); '' = same as `name` */
+  placeName: string;
   vatRegistered: boolean;
   /** 13-digit Thai tax ID (required when VAT-registered) */
   taxId: string;
@@ -29,6 +31,7 @@ export interface StoreInfo {
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {
   name: '',
+  placeName: '',
   vatRegistered: true,
   taxId: '',
   branchType: 'head',
@@ -44,9 +47,14 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
 export const receiptTitle = (s: Pick<StoreInfo, 'vatRegistered'>): string =>
   s.vatRegistered ? 'ใบกำกับภาษีอย่างย่อ/ใบเสร็จรับเงิน' : 'ใบเสร็จรับเงิน';
 
+/** Name of the business place for tax reports (falls back to the business name). */
+export const placeName = (s: Pick<StoreInfo, 'name' | 'placeName'>): string =>
+  s.placeName || s.name;
+
 /** The single rule for the settings form and the server. Thai message or null. */
 export function storeInfoError(s: StoreInfo): string | null {
   if (!s.name.trim()) return 'กรุณากรอกชื่อร้าน';
+  if (s.placeName.length > 100) return 'ชื่อสถานประกอบการต้องไม่เกิน 100 ตัวอักษร';
   if (s.vatRegistered && !isValidThaiTaxId(s.taxId)) {
     return 'เลขประจำตัวผู้เสียภาษีต้องเป็น 13 หลักที่ถูกต้อง';
   }
@@ -69,6 +77,7 @@ export function normalizeStoreInfo(s: StoreInfo): StoreInfo {
     ...STORE_INFO_DEFAULTS,
     ...s,
     name: s.name.trim(),
+    placeName: (s.placeName ?? '').trim(),
     taxId: s.taxId.replace(/[\s-]/g, ''),
     branchNo: s.branchType === 'branch' ? s.branchNo.trim() : '',
     address: s.address.trim(),

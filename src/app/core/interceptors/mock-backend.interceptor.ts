@@ -691,6 +691,7 @@ function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
 const SEED_STORE_INFO: StoreInfo = {
   ...STORE_INFO_DEFAULTS,
   name: 'บริษัท ไอทีดี คอมพิวเตอร์ จำกัด',
+  placeName: 'ร้านไอทีดี คอมพิวเตอร์',
   taxId: '0105550123451',
   address: '99/9 ถนนพหลโยธิน แขวงสามเสนใน เขตพญาไท กรุงเทพฯ 10400',
   phone: '02-123-4567',
@@ -750,12 +751,20 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
-  db.creditNotes = db.creditNotes.map((n) => ({ ...n, taxInvoiceNo: n.taxInvoiceNo ?? null }));
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
     ...t,
     atSale: t.atSale ?? false,
     issuedAt: t.issuedAt ?? t.date,
+  }));
+  // Notes stored before the buyer snapshot existed take it from the invoice they quote.
+  db.creditNotes = db.creditNotes.map((n) => ({
+    ...n,
+    taxInvoiceNo: n.taxInvoiceNo ?? null,
+    buyer:
+      n.buyer !== undefined
+        ? n.buyer
+        : (db.taxInvoices.find((t) => t.invoiceNo === n.taxInvoiceNo)?.buyer ?? null),
   }));
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
@@ -2026,6 +2035,7 @@ function createCreditNote(
     saleId: sale.id,
     orderNo: sale.orderNo,
     taxInvoiceNo: sale.taxInvoiceNo,
+    buyer: db.taxInvoices.find((t) => t.invoiceNo === sale.taxInvoiceNo)?.buyer ?? null,
     saleDate: sale.date,
     date: now.toISOString(),
     cashier: db.users[0]?.name ?? '',

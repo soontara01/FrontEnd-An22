@@ -86,6 +86,7 @@ describe('buildSalesTaxReport', () => {
     saleId: 2,
     orderNo: b2.orderNo,
     taxInvoiceNo: 'INV-1',
+    buyer: invoices[0].buyer,
     saleDate: b2.date,
     date: at(6),
     cashier: '',
@@ -139,6 +140,9 @@ describe('buildSalesTaxReport', () => {
       'ออกแทนใบกำกับภาษีอย่างย่อ POS-20261004-0001 (ภาษีนับในใบอย่างย่อแล้ว · ออกใบเมื่อ 2026-10-05)',
     );
     expect(report.rows[4]).toMatchObject({
+      buyerName: 'บริษัท ลูกค้า จำกัด',
+      buyerTaxId: '0105550123451',
+      buyerBranch: 'สำนักงานใหญ่',
       net: -500,
       vat: -35,
       total: -535,
@@ -146,6 +150,18 @@ describe('buildSalesTaxReport', () => {
     });
     // 1270 + 535 + 214 − 535; VAT counted once per sale
     expect(report.totals).toEqual({ net: 1200, vat: 84, exempt: 200, total: 1484 });
+  });
+
+  it('shows retail as the buyer of a credit note on an abbreviated invoice', () => {
+    const retail = { ...note, saleId: 1, orderNo: b1.orderNo, taxInvoiceNo: null, buyer: null };
+    const r = buildSalesTaxReport('2026-10', [], [], [retail]);
+    expect(r.rows[0]).toMatchObject({
+      kind: 'credit',
+      buyerName: 'ขายปลีก (ใบกำกับภาษีอย่างย่อ)',
+      buyerTaxId: '',
+      buyerBranch: '',
+      note: `ใบลดหนี้ อ้างอิง ${b1.orderNo}`,
+    });
   });
 
   it('counts a reissued invoice once: the cancelled one at 0, the replacement in full', () => {

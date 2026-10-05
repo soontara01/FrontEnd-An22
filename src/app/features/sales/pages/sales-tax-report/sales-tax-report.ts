@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
-import { branchLabel, todayIso } from '@core/models';
+import { branchLabel, placeName, todayIso } from '@core/models';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
@@ -66,6 +66,10 @@ export default class SalesTaxReportPage {
     const info = this.store.storeInfo();
     return info ? branchLabel(info) : '';
   });
+  protected readonly sellerPlace = computed(() => {
+    const info = this.store.storeInfo();
+    return info ? placeName(info) : '';
+  });
 
   constructor() {
     this.store.loadLookups();
@@ -90,7 +94,7 @@ export default class SalesTaxReportPage {
     if (!report || this.exporting()) return;
     this.exporting.set(true);
     try {
-      const blob = await salesTaxReportXlsx(report, this.store.storeInfo()?.name ?? '');
+      const blob = await salesTaxReportXlsx(report, this.store.storeInfo());
       saveBlob(blob, `sales-tax-${report.month}.xlsx`);
     } finally {
       this.exporting.set(false);

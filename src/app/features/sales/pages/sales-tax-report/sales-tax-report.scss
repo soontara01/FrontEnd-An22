@@ -33,6 +33,14 @@ header {
     font-size: 16px;
     font-weight: 700;
   }
+
+  .seller {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 24px;
+    margin-top: 6px;
+    text-align: left;
+  }
 }
 
 table {
@@ -49,6 +57,20 @@ table {
 
   th {
     text-align: center;
+  }
+
+  // Printed over several pages: the column headings repeat on every page, the total and the
+  // rows themselves are not split or repeated.
+  thead {
+    display: table-header-group;
+  }
+
+  tfoot {
+    display: table-row-group;
+  }
+
+  tr {
+    break-inside: avoid;
   }
 
   tfoot td {
