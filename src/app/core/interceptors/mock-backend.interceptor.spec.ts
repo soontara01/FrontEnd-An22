@@ -685,6 +685,16 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
 
     expect(await get<CreditNote[]>(`sales/${sale.id}/credit-notes`)).toHaveLength(2);
+    // the bill itself is unchanged; its return summary is derived on read (list and single)
+    const [listed] = await get<Sale[]>('sales?from=2026-10-04&to=2026-10-04');
+    expect(listed).toMatchObject({
+      id: sale.id,
+      status: 'paid',
+      returnStatus: 'partial',
+      creditedTotal: 24041,
+      creditNoteNos: ['CN-20261005-0001', 'CN-20261005-0002'],
+    });
+    expect((await get<Sale>(`sales/${sale.id}`)).returnStatus).toBe('partial');
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-04&to=2026-10-04')).toHaveLength(0);
   });

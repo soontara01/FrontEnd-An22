@@ -19,6 +19,14 @@ a.mono {
   color: var(--mat-sys-primary);
 }
 
+.refunded {
+  color: var(--mat-sys-error);
+}
+
+td .badge + .badge {
+  margin-left: 4px;
+}
+
 .status-filter {
   max-width: 180px;
 }

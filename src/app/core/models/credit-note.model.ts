@@ -123,6 +123,23 @@ const creditedLines = (notes: readonly CreditNote[], index: number): CreditNoteL
 export const creditedQty = (notes: readonly CreditNote[], index: number): number =>
   creditedLines(notes, index).reduce((n, l) => n + l.qty, 0);
 
+/**
+ * Return summary of a bill from its credit notes (server-derived `Sale` fields): 'full' once every
+ * unit of every line has come back, 'partial' when some have, else 'none'.
+ */
+export function returnSummary(
+  sale: Pick<Sale, 'lines'>,
+  notes: readonly CreditNote[],
+): Pick<Sale, 'returnStatus' | 'creditedTotal' | 'creditNoteNos'> {
+  if (!notes.length) return { returnStatus: 'none', creditedTotal: 0, creditNoteNos: [] };
+  const full = sale.lines.every((l, i) => creditedQty(notes, i) >= l.qty);
+  return {
+    returnStatus: full ? 'full' : 'partial',
+    creditedTotal: round2(notes.reduce((sum, n) => sum + n.total, 0)),
+    creditNoteNos: [...notes].sort((a, b) => a.date.localeCompare(b.date)).map((n) => n.cnNo),
+  };
+}
+
 /** Units of a sale line that can still be returned. */
 export const remainingQty = (sale: Sale, notes: readonly CreditNote[], index: number): number =>
   (sale.lines[index]?.qty ?? 0) - creditedQty(notes, index);

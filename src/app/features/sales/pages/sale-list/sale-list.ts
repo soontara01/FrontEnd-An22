@@ -21,6 +21,8 @@ import { Router, RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import {
   PAYMENT_TYPE_ICON,
+  RETURN_STATUS_BADGE,
+  RETURN_STATUS_LABEL,
   SALE_STATUS_BADGE,
   SALE_STATUS_LABEL,
   Sale,
@@ -103,7 +105,8 @@ export default class SaleList {
   protected readonly statusLabel = SALE_STATUS_LABEL;
 
   protected readonly filterText = signal('');
-  protected readonly statusFilter = signal<SaleStatus | 'all'>('all');
+  /** A bill status, or 'returned' = bills with credit notes */
+  protected readonly statusFilter = signal<SaleStatus | 'all' | 'returned'>('all');
 
   /** Effective range from the URL; no params → today. */
   protected readonly range = computed<DateRange>(() => {
@@ -136,7 +139,11 @@ export default class SaleList {
     const text = this.filterText().trim().toLowerCase();
     const status = this.statusFilter();
     return this.rows()
-      .filter((s) => status === 'all' || s.status === status)
+      .filter(
+        (s) =>
+          status === 'all' ||
+          (status === 'returned' ? s.returnStatus !== 'none' : s.status === status),
+      )
       .filter(
         (s) =>
           !text ||
@@ -179,6 +186,25 @@ export default class SaleList {
 
   protected statusBadge(sale: Sale): string {
     return SALE_STATUS_BADGE[sale.status];
+  }
+
+  /** Second badge next to the status: goods returned by credit notes ('' = none). */
+  protected returnText(sale: Sale): string {
+    return RETURN_STATUS_LABEL[sale.returnStatus];
+  }
+
+  protected returnBadge(sale: Sale): string {
+    return RETURN_STATUS_BADGE[sale.returnStatus];
+  }
+
+  protected returnTooltip(sale: Sale): string {
+    return `${sale.creditNoteNos.join(', ')} · คืนเงิน ${sale.creditedTotal.toLocaleString(
+      'th-TH',
+      {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      },
+    )}`;
   }
 
   protected methodNames(sale: Sale): string {

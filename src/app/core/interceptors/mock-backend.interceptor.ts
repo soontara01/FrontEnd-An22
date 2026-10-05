@@ -83,6 +83,7 @@ import {
   normalizeStoreInfo,
   creditNoteError,
   draftCreditNote,
+  returnSummary,
   toRefunds,
   normalizeBuyer,
   taxInvoiceError,
@@ -1764,6 +1765,14 @@ function handleSales(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   const { sales } = db;
+  // Return summary is derived from the credit notes on every read (never stored).
+  const withReturns = (s: Sale): Sale => ({
+    ...s,
+    ...returnSummary(
+      s,
+      db.creditNotes.filter((n) => n.saleId === s.id),
+    ),
+  });
   if (path === 'sales' && req.method === 'GET') {
     // Optional local-date range on the day of sale; newest first.
     const from = req.params.get('from') || null;
@@ -1774,7 +1783,8 @@ function handleSales(
     return ok(
       sales
         .filter((s) => (!from || saleDay(s) >= from) && (!to || saleDay(s) <= to))
-        .sort((a, b) => b.date.localeCompare(a.date)),
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map(withReturns),
     );
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
@@ -1789,7 +1799,7 @@ function handleSales(
   const sale = sales[index];
   const action = idMatch[2];
 
-  if (!action && req.method === 'GET') return ok(sale);
+  if (!action && req.method === 'GET') return ok(withReturns(sale));
   if (action === 'void' && req.method === 'POST') {
     const { reason } = req.body as { reason: string };
     return voidSale(sale, (reason ?? '').trim(), db);
@@ -1900,6 +1910,9 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     voidedAt: null,
     voidReason: '',
     taxInvoiceNo: null,
+    returnStatus: 'none',
+    creditedTotal: 0,
+    creditNoteNos: [],
   };
   db.sales.push(sale);
   // Full tax invoice requested at the POS: issued with the sale, same date.
