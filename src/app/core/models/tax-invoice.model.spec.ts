@@ -3,6 +3,7 @@ import {
   buyerError,
   invoiceTotals,
   currentInvoice,
+  invoiceRefState,
   normalizeBuyer,
   reissueError,
   taxInvoiceError,
@@ -79,6 +80,28 @@ describe('tax invoice model', () => {
     expect(currentInvoice([a, b])).toBe(b);
     expect(currentInvoice([a])).toBe(a);
     expect(currentInvoice([])).toBeNull();
+  });
+
+  it('follows a cancelled invoice quoted by an earlier document to its valid replacement', () => {
+    const inv = (invoiceNo: string, cancelledAt: string | null, replacedByNo: string | null) => ({
+      invoiceNo,
+      cancelledAt,
+      replacedByNo,
+    });
+    const list = [
+      inv('INV-1', 'x', 'INV-2'),
+      inv('INV-2', 'x', 'INV-3'),
+      inv('INV-3', null, null),
+      inv('INV-9', 'x', null),
+    ];
+    expect(invoiceRefState('INV-3', list)).toBeNull();
+    expect(invoiceRefState('INV-404', list)).toBeNull();
+    expect(invoiceRefState('INV-1', list)).toEqual({ replacedBy: 'INV-3' });
+    expect(invoiceRefState('INV-2', list)).toEqual({ replacedBy: 'INV-3' });
+    expect(invoiceRefState('INV-9', list)).toEqual({ replacedBy: null });
+    expect(invoiceRefState('A', [inv('A', 'x', 'B'), inv('B', 'x', 'A')])).toEqual({
+      replacedBy: null,
+    });
   });
 
   it('issues once per paid POS bill of a VAT-registered store', () => {

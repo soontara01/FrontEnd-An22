@@ -293,6 +293,14 @@
                     <span class="text-muted">
                       · {{ cn.date | thaiDate: 'datetime' }} · {{ cn.reason }}</span
                     >
+                    @if (cn.taxInvoiceNo) {
+                      <div class="text-muted small">
+                        อ้างใบกำกับภาษี <span class="mono">{{ cn.taxInvoiceNo }}</span>
+                        @if (noteInvoiceState(cn); as state) {
+                          <span class="badge badge-warn">{{ state }}</span>
+                        }
+                      </div>
+                    }
                     <div class="text-muted small">
                       @for (l of cn.lines; track $index) {
                         {{ l.shortName }} × {{ l.qty }}{{ l.restock ? '' : ' (ชำรุด)'

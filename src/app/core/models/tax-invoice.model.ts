@@ -111,6 +111,27 @@ export function currentInvoice<T extends TaxInvoice>(invoices: readonly T[]): T 
 }
 
 /**
+ * State of an invoice number quoted by an earlier document (e.g. a credit note, which keeps the
+ * number valid when it was issued and is never changed): null = still valid or unknown; otherwise
+ * it was cancelled and `replacedBy` is the valid invoice at the end of the reissue chain (null =
+ * cancelled without a valid replacement).
+ */
+export function invoiceRefState(
+  invoiceNo: string,
+  invoices: readonly Pick<TaxInvoice, 'invoiceNo' | 'cancelledAt' | 'replacedByNo'>[],
+): { replacedBy: string | null } | null {
+  const byNo = new Map(invoices.map((i) => [i.invoiceNo, i]));
+  let inv = byNo.get(invoiceNo);
+  if (!inv?.cancelledAt) return null;
+  const seen = new Set<string>();
+  while (inv?.cancelledAt && inv.replacedByNo && !seen.has(inv.invoiceNo)) {
+    seen.add(inv.invoiceNo);
+    inv = byNo.get(inv.replacedByNo);
+  }
+  return { replacedBy: inv && !inv.cancelledAt ? inv.invoiceNo : null };
+}
+
+/**
  * Cancel-and-reissue rule (decided 2026-10-04; form + server): wrong buyer details are never edited
  * in place — the valid invoice is cancelled with a reason and a new one (new number, same sale day,
  * same amounts) refers to it. Admins only. `buyer` must be normalized.

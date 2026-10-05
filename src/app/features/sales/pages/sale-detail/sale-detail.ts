@@ -21,6 +21,7 @@ import {
   CreditNote,
   InvoicePaper,
   currentInvoice,
+  invoiceRefState,
   SALE_STATUS_BADGE,
   SALE_STATUS_LABEL,
   Sale,
@@ -203,6 +204,17 @@ export default class SaleDetail {
   /** Gross profit of a line: amount net of VAT − cost. */
   protected lineProfit(line: SaleLine): number {
     return round2(vatBreakdown(line.amount, line.vatType).net - line.cogs);
+  }
+
+  /**
+   * Note after a credit note's invoice number when that invoice was cancelled and reissued later
+   * (the credit note itself keeps the number it was issued with).
+   */
+  protected noteInvoiceState(cn: CreditNote): string {
+    const invoices = this.invoices.hasValue() ? this.invoices.value() : [];
+    const state = cn.taxInvoiceNo ? invoiceRefState(cn.taxInvoiceNo, invoices) : null;
+    if (!state) return '';
+    return state.replacedBy ? `ยกเลิกแล้ว แทนด้วย ${state.replacedBy}` : 'ยกเลิกแล้ว';
   }
 
   protected returnedQty(index: number): number {
