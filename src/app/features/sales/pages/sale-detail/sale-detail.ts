@@ -19,6 +19,10 @@ import { Router, RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import {
   CreditNote,
+  Exchange,
+  STORE_INFO_DEFAULTS,
+  currentSerial,
+  exchangeBlocker,
   InvoicePaper,
   currentInvoice,
   invoiceRefState,
@@ -41,6 +45,7 @@ import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { CreditNoteReceipt } from '@shared/components/receipt/credit-note-receipt';
+import { ExchangeReceipt } from '@shared/components/receipt/exchange-receipt';
 import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
 import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip';
 import { Receipt } from '@shared/components/receipt/receipt';
@@ -64,6 +69,7 @@ import { VoidDialog } from '../../dialogs/void-dialog/void-dialog';
     LoadingSpinner,
     Receipt,
     CreditNoteReceipt,
+    ExchangeReceipt,
     TaxInvoiceDocument,
     TaxInvoiceSlip,
     MatButtonToggleModule,
@@ -87,9 +93,12 @@ export default class SaleDetail {
   readonly printCn = input<string>();
   /** Query param: print the full tax invoice (original) right away */
   readonly printInv = input<string>();
+  /** Query param: exchange slip to print right away */
+  readonly printEx = input<string>();
 
   private readonly receipt = viewChild('receipt', { read: ElementRef<HTMLElement> });
   private readonly noteSlips = viewChildren('noteSlip', { read: ElementRef<HTMLElement> });
+  private readonly exchangeSlips = viewChildren('exchangeSlip', { read: ElementRef<HTMLElement> });
   private readonly invOriginal = viewChild('invOriginal', { read: ElementRef<HTMLElement> });
   private readonly invCopy = viewChild('invCopy', { read: ElementRef<HTMLElement> });
 
@@ -105,6 +114,24 @@ export default class SaleDetail {
     this.notes.hasValue() ? this.notes.value() : [],
   );
   protected readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  protected readonly exchangesRes = rxResource({
+    params: () => Number(this.id()),
+    stream: ({ params }) => this.store.exchangesOf(params),
+  });
+  protected readonly exchanges = computed<Exchange[]>(() =>
+    this.exchangesRes.hasValue() ? this.exchangesRes.value() : [],
+  );
+  /** Why this bill cannot be exchanged now (null = it can; any staff member). */
+  protected readonly exchangeBlocker = computed(() => {
+    if (!this.sale.hasValue() || !this.isPos() || !this.notes.hasValue()) return 'loading';
+    return exchangeBlocker(this.sale.value(), {
+      creditNotes: this.creditNotes(),
+      exchanges: this.exchanges(),
+      store: this.store.storeInfo() ?? STORE_INFO_DEFAULTS,
+      isAdmin: this.isAdmin(),
+      today: todayIso(),
+    });
+  });
   /** Credit notes are for paid POS bills from the day after the sale, with units left. */
   protected readonly canCredit = computed(() => {
     if (!this.sale.hasValue() || !this.isPos()) return false;
@@ -147,6 +174,7 @@ export default class SaleDetail {
   );
   private printed = false;
   private invoicePrinted = false;
+  private exchangePrinted = false;
   /** Paper for printing the full tax invoice here (null = the store's default). */
   private readonly paperChoice = signal<InvoicePaper | null>(null);
   protected readonly paper = computed<InvoicePaper>(
@@ -190,6 +218,25 @@ export default class SaleDetail {
       this.printed = true;
       setTimeout(() => printElement(slip.nativeElement));
     });
+    // Print an exchange slip just saved by the exchange page (once).
+    effect(() => {
+      const id = Number(this.printEx());
+      const index = this.exchanges().findIndex((x) => x.id === id);
+      const slip = this.exchangeSlips()[index];
+      if (this.exchangePrinted || index < 0 || !slip) return;
+      this.exchangePrinted = true;
+      setTimeout(() => printElement(slip.nativeElement));
+    });
+  }
+
+  /** Serial the customer holds now (after exchanges). */
+  protected serialOf(index: number): string | null {
+    return this.sale.hasValue() ? currentSerial(this.sale.value(), index, this.exchanges()) : null;
+  }
+
+  protected printExchange(index: number): void {
+    const slip = this.exchangeSlips()[index];
+    if (slip) printElement(slip.nativeElement);
   }
 
   protected statusText(sale: Sale): string {

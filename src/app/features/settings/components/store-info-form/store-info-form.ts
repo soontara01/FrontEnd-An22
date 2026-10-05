@@ -40,6 +40,7 @@ export class StoreInfoForm {
     posId: '',
     receiptFooter: '',
     taxInvoicePaper: STORE_INFO_DEFAULTS.taxInvoicePaper,
+    exchangeDays: STORE_INFO_DEFAULTS.exchangeDays,
   });
 
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });

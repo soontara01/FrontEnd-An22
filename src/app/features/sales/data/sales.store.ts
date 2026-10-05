@@ -1,9 +1,12 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, forkJoin } from 'rxjs';
+import { Observable, forkJoin, map, of } from 'rxjs';
 import {
   CreditNote,
   CreditNotePayload,
+  Exchange,
+  ExchangePayload,
   PaymentMethod,
+  Product,
   Promotion,
   Sale,
   SaleStatus,
@@ -44,17 +47,43 @@ export class SalesStore {
     return this.api.get(id);
   }
 
-  /** A bill with its credit notes. */
-  withCreditNotes(id: number): Observable<{ sale: Sale; notes: CreditNote[] }> {
-    return forkJoin({ sale: this.api.get(id), notes: this.api.creditNotesOf(id) });
-  }
-
   creditNotesOf(saleId: number): Observable<CreditNote[]> {
     return this.api.creditNotesOf(saleId);
   }
 
   creditNotes(from: string | null, to: string | null): Observable<CreditNote[]> {
     return this.api.creditNotes(from, to);
+  }
+
+  /** A bill with its credit notes and exchanges (credit-note and exchange forms). */
+  withReturnsAndExchanges(
+    id: number,
+  ): Observable<{ sale: Sale; notes: CreditNote[]; exchanges: Exchange[] }> {
+    return forkJoin({
+      sale: this.api.get(id),
+      notes: this.api.creditNotesOf(id),
+      exchanges: this.api.exchangesOf(id),
+    });
+  }
+
+  exchangesOf(saleId: number): Observable<Exchange[]> {
+    return this.api.exchangesOf(saleId);
+  }
+
+  createExchange(saleId: number, payload: ExchangePayload): Observable<Exchange> {
+    return this.api.createExchange(saleId, payload);
+  }
+
+  /** In-stock serials of a SKU, for picking the replacement unit. */
+  inStockSerials(productId: number): Observable<string[]> {
+    return this.api
+      .serialsOf(productId)
+      .pipe(map((list) => list.filter((s) => s.status === 'in_stock').map((s) => s.serial)));
+  }
+
+  /** Current stock of some SKUs (the exchange form checks replacements are in stock). */
+  productsOf(ids: readonly number[]): Observable<Product[]> {
+    return ids.length ? forkJoin(ids.map((id) => this.api.product(id))) : of([]);
   }
 
   /** Receipt header, promotions and payment methods, loaded once per page load. */

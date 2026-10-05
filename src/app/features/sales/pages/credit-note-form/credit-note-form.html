@@ -41,7 +41,7 @@
                 <div class="text-muted small">
                   <span class="mono">{{ l.sku }}</span>
                   @if (l.serial) {
-                    · SN <span class="mono">{{ l.serial }}</span>
+                    · SN <span class="mono">{{ serialOf(row.index) }}</span>
                   }
                 </div>
               </td>

@@ -1,0 +1,62 @@
+@let x = exchange();
+@let shop = store();
+<div class="receipt">
+  <header>
+    <div class="shop">{{ shop.name }}</div>
+    @if (shop.address) {
+      <div>{{ shop.address }}</div>
+    }
+    @if (shop.taxId) {
+      <div>เลขประจำตัวผู้เสียภาษี {{ shop.taxId }} ({{ branch() }})</div>
+    }
+    <div class="title">ใบเปลี่ยนสินค้า</div>
+  </header>
+
+  <div class="meta">
+    <div>
+      <span>เลขที่</span><span>{{ x.exNo }}</span>
+    </div>
+    <div>
+      <span>วันที่</span><span>{{ x.date | thaiDate: 'datetime' }}</span>
+    </div>
+    <div>
+      <span>อ้างอิงบิล</span><span>{{ x.orderNo }}</span>
+    </div>
+    <div>
+      <span>วันที่บิล</span><span>{{ x.saleDate | thaiDate: 'datetime' }}</span>
+    </div>
+    <div>
+      <span>เหตุผล</span><span>{{ x.reason }}</span>
+    </div>
+  </div>
+
+  <div class="lines">
+    @for (line of x.lines; track $index) {
+      <div class="line">
+        <div class="row">
+          <span class="name">{{ line.shortName }}</span>
+          <span>× {{ line.qty }} {{ line.unit }}</span>
+        </div>
+        @if (line.newSerial) {
+          <div class="sub">คืน SN {{ line.oldSerial }}</div>
+          <div class="sub">รับ SN {{ line.newSerial }}</div>
+        }
+        <div class="sub">ของเดิม: {{ line.restock ? 'รับเข้าคลัง' : 'ชำรุด' }}</div>
+        @if (warrantyUntil(line.saleLineIndex); as until) {
+          <div class="sub">รับประกันถึง {{ until | thaiDate }} (นับจากวันขายเดิม)</div>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="totals">
+    <div class="row sub"><span>เปลี่ยนสินค้าเดิม ราคาไม่เปลี่ยนแปลง</span></div>
+  </div>
+
+  <footer>
+    <div>ลงชื่อลูกค้า ......................</div>
+    @if (x.cashier) {
+      <div>พนักงาน {{ x.cashier }}</div>
+    }
+  </footer>
+</div>

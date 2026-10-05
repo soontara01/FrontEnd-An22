@@ -4,10 +4,14 @@ import { ApiService } from '@core/http/api.service';
 import {
   CreditNote,
   CreditNotePayload,
+  Exchange,
+  ExchangePayload,
   PaymentMethod,
+  Product,
   Promotion,
   Sale,
   SaleStatus,
+  SerialNumber,
   StoreInfo,
   TaxInvoice,
   TaxInvoiceBuyer,
@@ -79,6 +83,23 @@ export class SalesApi {
   /** Buyer details last used with this tax ID (null = never). */
   buyerByTaxId(taxId: string): Observable<TaxInvoiceBuyer | null> {
     return this.api.get<TaxInvoiceBuyer | null>('tax-invoices/buyer', { taxId });
+  }
+
+  exchangesOf(saleId: number): Observable<Exchange[]> {
+    return this.api.get<Exchange[]>(`sales/${saleId}/exchanges`);
+  }
+
+  createExchange(saleId: number, payload: ExchangePayload): Observable<Exchange> {
+    return this.api.post<Exchange>(`sales/${saleId}/exchanges`, payload);
+  }
+
+  product(id: number): Observable<Product> {
+    return this.api.get<Product>(`products/${id}`);
+  }
+
+  /** Serials of a SKU (the exchange form offers the in-stock ones). */
+  serialsOf(productId: number): Observable<SerialNumber[]> {
+    return this.api.get<SerialNumber[]>(`products/${productId}/serials`);
   }
 
   storeInfo(): Observable<StoreInfo> {

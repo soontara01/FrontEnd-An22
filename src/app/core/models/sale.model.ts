@@ -1,3 +1,4 @@
+import type { Exchange } from './exchange.model';
 import type { PaymentType } from './payment-method.model';
 import { toIsoDate } from './price.model';
 import type { ItemType, VatType } from './product.model';
@@ -124,6 +125,8 @@ export interface Sale {
   creditedTotal: number;
   /** Credit note numbers, oldest first */
   creditNoteNos: string[];
+  /** Read-only, server-derived: exchange numbers (same-SKU swaps), oldest first */
+  exchangeNos: string[];
 }
 
 /** Defaults for fields missing from older stored sales (before the POS existed). */
@@ -146,10 +149,26 @@ export const SALE_DEFAULTS: Omit<
   returnStatus: 'none',
   creditedTotal: 0,
   creditNoteNos: [],
+  exchangeNos: [],
 };
 
 /** Local calendar day ('YYYY-MM-DD') a sale was made. */
 export const saleDay = (sale: Pick<Sale, 'date'>): string => toIsoDate(new Date(sale.date));
+
+/**
+ * Serial the customer holds now for a sale line: the latest exchange's new serial, else the one
+ * sold. Credit notes and void return this one.
+ */
+export function currentSerial(
+  sale: Pick<Sale, 'lines'>,
+  index: number,
+  exchanges: readonly Pick<Exchange, 'date' | 'lines'>[],
+): string | null {
+  const swaps = [...exchanges]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .flatMap((x) => x.lines.filter((l) => l.saleLineIndex === index && l.newSerial));
+  return swaps.at(-1)?.newSerial ?? sale.lines[index]?.serial ?? null;
+}
 
 /**
  * Void rule (decided 2026-10-04), shared by the sales menu and the server: a paid bill can be

@@ -6,6 +6,7 @@ import CreditNoteForm from './pages/credit-note-form/credit-note-form';
 import SaleDetail from './pages/sale-detail/sale-detail';
 import SaleList from './pages/sale-list/sale-list';
 import SalesTaxReportPage from './pages/sales-tax-report/sales-tax-report';
+import ExchangeForm from './pages/exchange-form/exchange-form';
 import TaxInvoiceForm from './pages/tax-invoice-form/tax-invoice-form';
 
 export default [
@@ -20,6 +21,7 @@ export default [
       { path: 'tax-report', title: 'รายงานภาษีขาย', component: SalesTaxReportPage },
       { path: ':id', title: 'บิลขาย', component: SaleDetail },
       { path: ':id/credit-note', title: 'ออกใบลดหนี้', component: CreditNoteForm },
+      { path: ':id/exchange', title: 'เปลี่ยนสินค้า', component: ExchangeForm },
       { path: ':id/tax-invoice', title: 'ใบกำกับภาษีเต็มรูป', component: TaxInvoiceForm },
     ],
   },

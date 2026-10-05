@@ -175,6 +175,9 @@
               text
             }}</span>
           }
+          @if (s.exchangeNos?.length) {
+            <span class="badge" [matTooltip]="s.exchangeNos.join(', ')">เปลี่ยนสินค้า</span>
+          }
         </td>
       </ng-container>
 
