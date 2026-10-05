@@ -1,6 +1,8 @@
 import {
   EMPTY_BUYER,
+  buyerBranchLabel,
   buyerError,
+  defaultBuyerBranch,
   invoiceTotals,
   currentInvoice,
   invoiceRefState,
@@ -27,6 +29,23 @@ describe('tax invoice model', () => {
       branchNo: '',
       address: 'กรุงเทพฯ',
     });
+  });
+
+  it('keeps "no branch" for buyers who are not VAT registrants', () => {
+    const person = normalizeBuyer({ ...buyer, branchType: 'none', branchNo: '00001' });
+    expect(person.branchType).toBe('none');
+    expect(person.branchNo).toBe('');
+    expect(buyerError(person)).toBeNull();
+    expect(buyerBranchLabel(person)).toBe('');
+    expect(buyerBranchLabel(buyer)).toBe('สำนักงานใหญ่');
+    expect(buyerBranchLabel({ branchType: 'branch', branchNo: '00002' })).toBe('สาขา 00002');
+    expect(EMPTY_BUYER.branchType).toBe('none');
+  });
+
+  it('suggests head office for a company tax ID and no branch for a national ID', () => {
+    expect(defaultBuyerBranch('0-1055-50123-45-1')).toBe('head');
+    expect(defaultBuyerBranch('1101700230708')).toBe('none');
+    expect(defaultBuyerBranch('')).toBe('none');
   });
 
   it('validates the buyer', () => {

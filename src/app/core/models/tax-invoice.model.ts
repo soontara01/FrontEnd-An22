@@ -1,5 +1,5 @@
 import { STORE_INFO_DEFAULTS, StoreInfo } from './store-info.model';
-import { BranchType, isValidThaiTaxId } from './supplier.model';
+import { BranchType, branchLabel, isValidThaiTaxId } from './supplier.model';
 import { round2 } from './costing.model';
 import type { Sale } from './sale.model';
 
@@ -12,11 +12,17 @@ import type { Sale } from './sale.model';
  * on the invoice (no customer master yet); amounts always come from the bill. One per bill;
  * voiding the bill cancels it.
  */
+/**
+ * Buyer's head office / branch — required on the invoice only for VAT-registered buyers;
+ * 'none' = not a VAT registrant (e.g. an ordinary individual), nothing is printed.
+ */
+export type BuyerBranchType = BranchType | 'none';
+
 export interface TaxInvoiceBuyer {
   name: string;
   /** 13-digit tax ID (companies) or national ID (individuals) */
   taxId: string;
-  branchType: BranchType;
+  branchType: BuyerBranchType;
   /** 5 digits when branchType = 'branch' */
   branchNo: string;
   address: string;
@@ -73,16 +79,28 @@ export function invoiceTotals(sale: Pick<Sale, 'lines' | 'total' | 'vat'>): Invo
 export const EMPTY_BUYER: TaxInvoiceBuyer = {
   name: '',
   taxId: '',
-  branchType: 'head',
+  branchType: 'none',
   branchNo: '',
   address: '',
 };
+
+/** Suggested branch for a typed tax ID: juristic person (starts with 0) → head office, else none. */
+export function defaultBuyerBranch(taxId: string): BuyerBranchType {
+  return /^0\d{12}$/.test(taxId.replace(/[\s-]/g, '')) ? 'head' : 'none';
+}
+
+/** 'สำนักงานใหญ่' / 'สาขา 00001', or '' when the buyer is not a VAT registrant. */
+export function buyerBranchLabel(b: Pick<TaxInvoiceBuyer, 'branchType' | 'branchNo'>): string {
+  return b.branchType === 'none'
+    ? ''
+    : branchLabel({ branchType: b.branchType, branchNo: b.branchNo });
+}
 
 export function normalizeBuyer(b: TaxInvoiceBuyer): TaxInvoiceBuyer {
   return {
     name: (b.name ?? '').trim(),
     taxId: (b.taxId ?? '').replace(/[\s-]/g, ''),
-    branchType: b.branchType === 'branch' ? 'branch' : 'head',
+    branchType: b.branchType === 'branch' || b.branchType === 'none' ? b.branchType : 'head',
     branchNo: b.branchType === 'branch' ? (b.branchNo ?? '').trim() : '',
     address: (b.address ?? '').trim(),
   };

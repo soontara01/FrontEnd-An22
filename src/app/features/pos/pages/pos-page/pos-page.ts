@@ -18,7 +18,7 @@ import {
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { filter, tap } from 'rxjs';
-import { PricedLine, Product, TaxInvoiceBuyer, branchLabel, stockInPacks } from '@core/models';
+import { PricedLine, Product, TaxInvoiceBuyer, buyerBranchLabel, stockInPacks } from '@core/models';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -221,9 +221,9 @@ export default class PosPage {
       });
   }
 
-  /** 'สาขา 00001' / 'สำนักงานใหญ่' of the requested buyer. */
+  /** 'สาขา 00001' / 'สำนักงานใหญ่' of the requested buyer ('' = not a VAT registrant). */
   protected buyerBranch(buyer: TaxInvoiceBuyer): string {
-    return branchLabel(buyer);
+    return buyerBranchLabel(buyer);
   }
 
   /** Buyer details for a full tax invoice issued with this sale. */

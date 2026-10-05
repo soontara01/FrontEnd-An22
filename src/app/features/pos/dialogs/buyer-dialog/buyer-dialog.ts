@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -8,6 +8,7 @@ import {
   EMPTY_BUYER,
   TaxInvoiceBuyer,
   buyerError,
+  defaultBuyerBranch,
   isValidThaiTaxId,
   normalizeBuyer,
 } from '@core/models';
@@ -82,6 +83,17 @@ export class BuyerDialog {
     ),
     { initialValue: false },
   );
+
+  constructor() {
+    // New buyer: suggest head office for a company tax ID, none for a national ID, until the
+    // cashier picks one.
+    if (this.initial === EMPTY_BUYER) {
+      const branch = this.form.controls.branchType;
+      this.form.controls.taxId.valueChanges
+        .pipe(takeUntilDestroyed())
+        .subscribe((id) => branch.dirty || branch.setValue(defaultBuyerBranch(id)));
+    }
+  }
 
   protected save(): void {
     if (!this.problem()) this.dialogRef.close(this.buyer());

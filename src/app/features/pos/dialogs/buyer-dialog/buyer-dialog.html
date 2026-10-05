@@ -13,8 +13,10 @@
       <mat-label>ชื่อผู้ซื้อ / ชื่อบริษัท</mat-label>
       <input matInput formControlName="name" />
     </mat-form-field>
+    <div class="text-muted small">สำนักงานใหญ่ / สาขา — ระบุเฉพาะผู้ซื้อที่จดทะเบียน VAT</div>
     <div class="row">
       <mat-button-toggle-group formControlName="branchType" aria-label="ประเภทสาขา">
+        <mat-button-toggle value="none">ไม่ระบุ (บุคคลธรรมดา)</mat-button-toggle>
         <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
         <mat-button-toggle value="branch">สาขา</mat-button-toggle>
       </mat-button-toggle-group>

@@ -28,7 +28,12 @@
       <div class="label">ผู้ซื้อ</div>
       <div class="strong">{{ inv.buyer.name }}</div>
       <div>{{ inv.buyer.address }}</div>
-      <div>เลขประจำตัวผู้เสียภาษี {{ inv.buyer.taxId }} ({{ buyerBranch() }})</div>
+      <div>
+        เลขประจำตัวผู้เสียภาษี {{ inv.buyer.taxId }}
+        @if (buyerBranch(); as b) {
+          ({{ b }})
+        }
+      </div>
     </div>
     <div class="meta">
       <div>

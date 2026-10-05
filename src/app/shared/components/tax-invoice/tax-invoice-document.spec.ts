@@ -108,6 +108,15 @@ describe('TaxInvoiceDocument', () => {
     expect(atSale).not.toContain('POS-20261004-0001');
   });
 
+  it('prints no branch for a buyer who is not a VAT registrant', () => {
+    const text = render(false, {
+      ...invoice,
+      buyer: { ...invoice.buyer, taxId: '1101700230708', branchType: 'none', branchNo: '' },
+    });
+    expect(text).toContain('เลขประจำตัวผู้เสียภาษี1101700230708');
+    expect(text).not.toContain('1101700230708(');
+  });
+
   it('marks copies and cancelled invoices', () => {
     expect(render(true)).toContain('สำเนา');
     expect(render(false, { ...invoice, cancelledAt: sale.date })).toContain('ยกเลิกแล้ว');

@@ -7,7 +7,7 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { rxResource, toSignal } from '@angular/core/rxjs-interop';
+import { rxResource, takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Router, RouterLink } from '@angular/router';
@@ -16,6 +16,7 @@ import {
   EMPTY_BUYER,
   TaxInvoice,
   TaxInvoiceBuyer,
+  defaultBuyerBranch,
   isValidThaiTaxId,
   normalizeBuyer,
   reissueError,
@@ -134,6 +135,14 @@ export default class TaxInvoiceForm {
       this.prefilled = true;
       this.form.reset({ ...current.buyer });
     });
+    // New buyer: suggest head office for a company tax ID, none for a national ID, until the
+    // user picks one (reissue keeps the current choice).
+    const branch = this.form.controls.branchType;
+    this.form.controls.taxId.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(
+        (id) => this.isReissue() || branch.dirty || branch.setValue(defaultBuyerBranch(id)),
+      );
     // A known tax ID fills the rest from the last invoice issued to that buyer.
     this.form.controls.taxId.valueChanges
       .pipe(

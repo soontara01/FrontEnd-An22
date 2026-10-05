@@ -26,6 +26,8 @@ import {
   SALE_STATUS_LABEL,
   Sale,
   SaleLine,
+  TaxInvoiceBuyer,
+  buyerBranchLabel,
   creditedQty,
   round2,
   saleDay,
@@ -190,6 +192,12 @@ export default class SaleDetail {
 
   protected statusText(sale: Sale): string {
     return SALE_STATUS_LABEL[sale.status];
+  }
+
+  /** ' (สำนักงานใหญ่)' / ' (สาขา 00001)', '' when the buyer is not a VAT registrant. */
+  protected buyerBranch(buyer: TaxInvoiceBuyer): string {
+    const label = buyerBranchLabel(buyer);
+    return label ? ` (${label})` : '';
   }
 
   protected statusBadge(sale: Sale): string {

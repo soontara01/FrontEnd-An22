@@ -2,7 +2,7 @@ import {
   CreditNote,
   Sale,
   TaxInvoice,
-  branchLabel,
+  buyerBranchLabel,
   invoiceTotals,
   round2,
   saleDay,
@@ -130,7 +130,7 @@ export function buildSalesTaxReport(
       docNo: inv.invoiceNo,
       buyerName: inv.buyer.name,
       buyerTaxId: inv.buyer.taxId,
-      buyerBranch: branchLabel(inv.buyer),
+      buyerBranch: buyerBranchLabel(inv.buyer),
       net: zero ? 0 : t.net,
       vat: zero ? 0 : t.vat,
       exempt: zero ? 0 : t.exempt,
@@ -165,7 +165,7 @@ export function buildSalesTaxReport(
         ? {
             buyerName: n.buyer.name,
             buyerTaxId: n.buyer.taxId,
-            buyerBranch: branchLabel(n.buyer),
+            buyerBranch: buyerBranchLabel(n.buyer),
           }
         : { ...blank, buyerName: RETAIL }),
       net: -round2(n.total - n.vat - exempt),

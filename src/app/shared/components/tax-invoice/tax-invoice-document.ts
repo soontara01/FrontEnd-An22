@@ -1,6 +1,13 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { Sale, StoreInfo, TaxInvoice, branchLabel, invoiceTotals } from '@core/models';
+import {
+  Sale,
+  StoreInfo,
+  TaxInvoice,
+  branchLabel,
+  buyerBranchLabel,
+  invoiceTotals,
+} from '@core/models';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { bahtText } from '@shared/utils/baht-text';
 
@@ -24,7 +31,7 @@ export class TaxInvoiceDocument {
   readonly copy = input(false);
 
   protected readonly sellerBranch = computed(() => branchLabel(this.store()));
-  protected readonly buyerBranch = computed(() => branchLabel(this.invoice().buyer));
+  protected readonly buyerBranch = computed(() => buyerBranchLabel(this.invoice().buyer));
   protected readonly totals = computed(() => invoiceTotals(this.sale()));
   protected readonly words = computed(() => bahtText(this.sale().total));
 }
