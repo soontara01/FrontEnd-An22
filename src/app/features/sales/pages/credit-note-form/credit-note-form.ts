@@ -17,6 +17,7 @@ import {
   CreditNote,
   CreditNoteLineInput,
   CreditNotePayload,
+  Exchange,
   PAYMENT_TYPE_ICON,
   PaymentInput,
   RefundOption,
@@ -24,6 +25,7 @@ import {
   creditNoteError,
   draftCreditNote,
   refundOptions,
+  currentSerial,
   remainingQty,
   round2,
   todayIso,
@@ -77,7 +79,7 @@ export default class CreditNoteForm {
 
   protected readonly data = rxResource({
     params: () => Number(this.id()),
-    stream: ({ params }) => this.store.withCreditNotes(params),
+    stream: ({ params }) => this.store.withReturnsAndExchanges(params),
   });
 
   protected readonly rows = signal<Row[]>([]);
@@ -91,13 +93,22 @@ export default class CreditNoteForm {
   private readonly notes = computed<CreditNote[]>(() =>
     this.data.hasValue() ? this.data.value().notes : [],
   );
+  private readonly exchanges = computed<Exchange[]>(() =>
+    this.data.hasValue() ? this.data.value().exchanges : [],
+  );
   private readonly inputs = computed<CreditNoteLineInput[]>(() =>
     this.rows().map((r) => ({ saleLineIndex: r.index, qty: r.qty, restock: r.restock })),
   );
   protected readonly draft = computed(() => {
     const sale = this.sale();
     return sale
-      ? draftCreditNote(sale, this.notes(), this.inputs(), this.store.promotions())
+      ? draftCreditNote(
+          sale,
+          this.notes(),
+          this.inputs(),
+          this.store.promotions(),
+          this.exchanges(),
+        )
       : null;
   });
   protected readonly options = computed<RefundOption[]>(() => {
@@ -118,6 +129,7 @@ export default class CreditNoteForm {
       promotions: this.store.promotions(),
       methods: this.store.methods(),
       today: todayIso(),
+      exchanges: this.exchanges(),
     });
   });
   protected readonly refunded = computed(() =>
@@ -152,6 +164,11 @@ export default class CreditNoteForm {
 
   protected line(row: Row) {
     return this.sale()!.lines[row.index];
+  }
+
+  /** Serial the customer holds now (after same-SKU exchanges). */
+  protected serialOf(index: number): string | null {
+    return currentSerial(this.sale()!, index, this.exchanges());
   }
 
   protected setQty(row: Row, value: string | number): void {

@@ -66,6 +66,13 @@
       <textarea matInput formControlName="receiptFooter" rows="2"></textarea>
     </mat-form-field>
 
+    <mat-form-field appearance="outline">
+      <mat-label>เปลี่ยนสินค้า (SKU เดิม) ได้ภายใน</mat-label>
+      <input matInput type="number" min="0" max="365" formControlName="exchangeDays" />
+      <span matTextSuffix>วัน</span>
+      <mat-hint>นับจากวันขาย · 0 = ไม่จำกัด · เกินกำหนดให้ admin ทำรายการ</mat-hint>
+    </mat-form-field>
+
     @if (editable()) {
       <div class="actions">
         @if (problem(); as message) {

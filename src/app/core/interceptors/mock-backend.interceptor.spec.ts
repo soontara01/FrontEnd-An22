@@ -5,6 +5,7 @@ import {
   CartItem,
   CreditNote,
   CreditNoteLineInput,
+  Exchange,
   Category,
   PRODUCT_DEFAULTS,
   PaymentInput,
@@ -697,7 +698,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await get<Sale>(`sales/${sale.id}`)).returnStatus).toBe('partial');
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-04&to=2026-10-04')).toHaveLength(0);
-  });
+  }, 15000); // ~17 requests × the mock's 300 ms latency
 
   it('issues one full tax invoice per bill and cancels it with the bill', async () => {
     const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
@@ -870,6 +871,91 @@ describe('mockBackendInterceptor – POS sales', () => {
     });
     expect(await get('tax-invoices/buyer?taxId=AB1234567')).toMatchObject({ name: 'John Smith' });
   });
+
+  it('swaps a serial for another of the same SKU; a later credit note returns the new one', async () => {
+    const [unit, other] = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    const sale = await sell([item(NOTEBOOK, 1, unit.serial)], 24600, [
+      pay(CARD, 20000, 'A1'),
+      pay(CASH, 4600),
+    ]);
+    const swap = (newSerial: string) => ({
+      lines: [{ saleLineIndex: 0, qty: 1, newSerial, restock: false }],
+      reason: 'เครื่องเปิดไม่ติด',
+    });
+    expect(await errorOf(post(`sales/${sale.id}/exchanges`, swap('NOPE')))).toBe(
+      'ซีเรียล NOPE ไม่อยู่ในคลังของ NB-001',
+    );
+
+    const ex = await post<Exchange>(`sales/${sale.id}/exchanges`, swap(other.serial));
+    expect(ex).toMatchObject({ exNo: 'EX-20261004-0001', orderNo: sale.orderNo });
+    expect(ex.lines[0]).toMatchObject({
+      oldSerial: unit.serial,
+      newSerial: other.serial,
+      restock: false,
+      costIn: unit.cost,
+      costOut: other.cost,
+    });
+    const serials = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    expect(serials.find((s) => s.id === unit.id)?.status).toBe('damaged');
+    expect(serials.find((s) => s.id === other.id)?.status).toBe('sold');
+    // the bill itself is unchanged apart from the derived exchange numbers
+    const read = await get<Sale>(`sales/${sale.id}`);
+    expect(read).toMatchObject({ total: 24600, exchangeNos: ['EX-20261004-0001'] });
+    expect(read.lines[0].serial).toBe(unit.serial);
+
+    vi.setSystemTime(new Date(2026, 9, 5, 11, 0));
+    const cn = await post<CreditNote>(`sales/${sale.id}/credit-notes`, {
+      lines: [0, 1, 2].map((i) => ({ saleLineIndex: i, qty: 1, restock: true })),
+      refunds: [pay(CARD, 20000, 'R1'), pay(CASH, 4600)],
+      reason: 'คืนทั้งบิล',
+      expectedTotal: 24600,
+    });
+    expect(cn.lines[0].serial).toBe(other.serial);
+    const after = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    expect(after.find((s) => s.id === other.id)?.status).toBe('in_stock');
+    expect(after.find((s) => s.id === unit.id)?.status).toBe('damaged');
+  }, 15000);
+
+  it('exchanges non-serial goods through stock and voids with the serial now held', async () => {
+    const mouse = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    await post(`sales/${mouse.id}/exchanges`, {
+      lines: [{ saleLineIndex: 0, qty: 1, newSerial: null, restock: true }],
+      reason: 'ลูกค้าขอเปลี่ยน',
+    });
+    expect((await product(MOUSE)).stock).toBe(2); // out 1 from the shelf, the old one back
+    const card = (await get<StockCardResult>(`products/${MOUSE}/movements`)).movements;
+    expect(card.slice(-2).map((m) => [m.type, m.qty, m.balanceQty, m.note])).toEqual([
+      ['issue', -1, 1, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS-20261004-0001)'],
+      ['receive', 1, 2, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS-20261004-0001)'],
+    ]);
+
+    // the last 2 sold too: nothing on the shelf to hand out, even if the old one is fine
+    const rest = await sell([item(MOUSE, 2)], 1062, [pay(CASH, 1062)]);
+    expect(
+      await errorOf(
+        post(`sales/${rest.id}/exchanges`, {
+          lines: [{ saleLineIndex: 0, qty: 1, newSerial: null, restock: true }],
+          reason: 'ลูกค้าขอเปลี่ยน',
+        }),
+      ),
+    ).toBe('MS-010 สต็อกไม่พอเปลี่ยน (คงเหลือ 0 ชิ้น)');
+    expect((await product(MOUSE)).stock).toBe(0);
+
+    // a serial swapped the same day: voiding the bill takes back the serial now held
+    const [unit, other] = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    const nb = await sell([item(NOTEBOOK, 1, unit.serial)], 24600, [
+      pay(CARD, 20000, 'A1'),
+      pay(CASH, 4600),
+    ]);
+    await post(`sales/${nb.id}/exchanges`, {
+      lines: [{ saleLineIndex: 0, qty: 1, newSerial: other.serial, restock: true }],
+      reason: 'หยิบผิด',
+    });
+    await post(`sales/${nb.id}/void`, { reason: 'ลูกค้ายกเลิก' });
+    const serials = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
+    expect(serials.find((s) => s.id === unit.id)?.status).toBe('in_stock');
+    expect(serials.find((s) => s.id === other.id)?.status).toBe('in_stock');
+  }, 15000);
 
   it('keeps payment methods and SKUs that sales refer to', async () => {
     await sell([item(ESIM)], 199, [pay(QR, 199)]);

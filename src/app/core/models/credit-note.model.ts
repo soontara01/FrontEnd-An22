@@ -4,7 +4,8 @@ import { freeSets } from './pos-pricing.model';
 import { VatType, vatBreakdown } from './product.model';
 import type { Promotion } from './promotion.model';
 import type { TaxInvoiceBuyer } from './tax-invoice.model';
-import { PaymentInput, Sale, SaleLine, SalePayment, saleDay } from './sale.model';
+import type { Exchange } from './exchange.model';
+import { PaymentInput, Sale, SaleLine, SalePayment, currentSerial, saleDay } from './sale.model';
 
 /**
  * Credit notes (ใบลดหนี้, decided 2026-10-04): goods returned from a paid bill from the day
@@ -168,6 +169,8 @@ export function draftCreditNote(
   notes: readonly CreditNote[],
   inputs: readonly CreditNoteLineInput[],
   promotions: readonly Promotion[],
+  /** Exchanges of the bill: a serial line returns the serial the customer holds now */
+  exchanges: readonly Exchange[] = [],
 ): CreditNoteDraft {
   const empty = { lines: [], deductions: [], subtotal: 0, deduction: 0, total: 0, vat: 0 };
   const fail = (error: string): CreditNoteDraft => ({ ...empty, error });
@@ -196,7 +199,7 @@ export function draftCreditNote(
       qty: input.qty,
       ...lineShare(line, notes, input.saleLineIndex, input.qty),
       vatType: line.vatType,
-      serial: line.serial,
+      serial: currentSerial(sale, input.saleLineIndex, exchanges),
       free: line.freeOfPromotionId !== null,
       restock: line.itemType === 'service' ? false : input.restock,
     });
@@ -295,13 +298,18 @@ export function creditNoteError(
   sale: Sale,
   notes: readonly CreditNote[],
   payload: CreditNotePayload,
-  ctx: { promotions: readonly Promotion[]; methods: readonly PaymentMethod[]; today: string },
+  ctx: {
+    promotions: readonly Promotion[];
+    methods: readonly PaymentMethod[];
+    today: string;
+    exchanges?: readonly Exchange[];
+  },
 ): string | null {
   if (sale.status !== 'paid' || !sale.lines.length) {
     return 'ออกใบลดหนี้ได้เฉพาะบิลขายหน้าร้านที่ชำระแล้ว';
   }
   if (saleDay(sale) === ctx.today) return 'บิลของวันนี้ให้ยกเลิกบิลแทนการออกใบลดหนี้';
-  const draft = draftCreditNote(sale, notes, payload.lines, ctx.promotions);
+  const draft = draftCreditNote(sale, notes, payload.lines, ctx.promotions, ctx.exchanges);
   if (draft.error) return draft.error;
   if (!payload.reason.trim()) return 'กรุณาระบุเหตุผลการลดหนี้';
   if (round2(payload.expectedTotal) !== draft.total) {

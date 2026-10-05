@@ -26,6 +26,9 @@ import {
   PromotionPayload,
   CreditNote,
   CreditNotePayload,
+  Exchange,
+  ExchangeLine,
+  ExchangePayload,
   TaxInvoice,
   TaxInvoiceBuyer,
   SALE_DEFAULTS,
@@ -92,6 +95,9 @@ import {
   currentInvoice,
   reissueError,
   storeInfoError,
+  currentSerial,
+  exchangeError,
+  exchangeNos,
 } from '../models';
 import { StorageService } from '../services/storage.service';
 
@@ -126,6 +132,8 @@ interface MockDb {
   storeInfo: StoreInfo;
   /** Credit notes (returns after the day of sale). */
   creditNotes: CreditNote[];
+  /** Same-SKU exchanges (stock only, no money). */
+  exchanges: Exchange[];
   /** Full tax invoices (one per bill, on request). */
   taxInvoices: TaxInvoice[];
 }
@@ -722,6 +730,7 @@ const seedDb = (): MockDb => ({
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
   storeInfo: { ...SEED_STORE_INFO },
   creditNotes: [],
+  exchanges: [],
   taxInvoices: [],
 });
 
@@ -1765,13 +1774,15 @@ function handleSales(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   const { sales } = db;
-  // Return summary is derived from the credit notes on every read (never stored).
+  // Return summary / exchange numbers are derived from the credit notes and exchanges on every
+  // read (never stored).
   const withReturns = (s: Sale): Sale => ({
     ...s,
     ...returnSummary(
       s,
       db.creditNotes.filter((n) => n.saleId === s.id),
     ),
+    exchangeNos: exchangeNos(db.exchanges.filter((x) => x.saleId === s.id)),
   });
   if (path === 'sales' && req.method === 'GET') {
     // Optional local-date range on the day of sale; newest first.
@@ -1790,7 +1801,7 @@ function handleSales(
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
 
   const idMatch =
-    /^sales\/(\d+)(?:\/(status|void|credit-notes|tax-invoice|tax-invoices|tax-invoice\/reissue))?$/.exec(
+    /^sales\/(\d+)(?:\/(status|void|credit-notes|exchanges|tax-invoice|tax-invoices|tax-invoice\/reissue))?$/.exec(
       path,
     );
   if (!idMatch) return notFound(req, path);
@@ -1835,6 +1846,12 @@ function handleSales(
   }
   if (action === 'credit-notes' && req.method === 'POST') {
     return createCreditNote(sale, req.body as CreditNotePayload, db);
+  }
+  if (action === 'exchanges' && req.method === 'GET') {
+    return ok(db.exchanges.filter((x) => x.saleId === sale.id)); // oldest first
+  }
+  if (action === 'exchanges' && req.method === 'POST') {
+    return createExchange(sale, req.body as ExchangePayload, db);
   }
   if (action === 'status' && req.method === 'PUT') {
     if (sale.lines.length) return error(400, 'บิลขายหน้าร้านเปลี่ยนสถานะไม่ได้ (ใช้การยกเลิกบิล)');
@@ -1913,6 +1930,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     returnStatus: 'none',
     creditedTotal: 0,
     creditNoteNos: [],
+    exchangeNos: [],
   };
   db.sales.push(sale);
   // Full tax invoice requested at the POS: issued with the sale, same date.
@@ -1979,13 +1997,15 @@ function createCreditNote(
     reason: (body.reason ?? '').trim(),
     expectedTotal: body.expectedTotal,
   };
+  const exchanges = db.exchanges.filter((x) => x.saleId === sale.id);
   const problem = creditNoteError(sale, notes, payload, {
     promotions: db.promotions,
     methods: db.paymentMethods,
     today,
+    exchanges,
   });
   if (problem) return error(400, problem);
-  const draft = draftCreditNote(sale, notes, payload.lines, db.promotions);
+  const draft = draftCreditNote(sale, notes, payload.lines, db.promotions, exchanges);
   for (const line of draft.lines) {
     if (!db.products.some((p) => p.id === line.productId)) {
       return error(400, `ไม่พบ SKU ${line.sku} รับคืนไม่ได้`);
@@ -2065,6 +2085,137 @@ function createCreditNote(
   return ok(created);
 }
 
+/**
+ * POST /sales/:id/exchanges: same-SKU swap, validated by `exchangeError()` (replacements must be
+ * in stock before the exchange) and the serial stock before anything changes. The new unit is
+ * issued first, like a sale (serial: its own cost; others: the current average); then the old one
+ * goes back into stock (serial: its own cost; others: the line's sale COGS share) or is written
+ * off (serial → damaged). No money, the bill is unchanged.
+ */
+function createExchange(
+  sale: Sale,
+  body: ExchangePayload,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const today = todayIso();
+  const exchanges = db.exchanges.filter((x) => x.saleId === sale.id);
+  const payload: ExchangePayload = {
+    lines: (body.lines ?? [])
+      .filter((l) => l.qty > 0)
+      .map((l) => ({ ...l, newSerial: l.newSerial?.trim() || null })),
+    reason: (body.reason ?? '').trim(),
+  };
+  const problem = exchangeError(sale, payload, {
+    creditNotes: db.creditNotes.filter((n) => n.saleId === sale.id),
+    exchanges,
+    store: db.storeInfo,
+    // The real server takes the role from the token; the mock only knows the admin login.
+    isAdmin: true,
+    today,
+    products: db.products,
+  });
+  if (problem) return error(400, problem);
+  for (const input of payload.lines) {
+    const line = sale.lines[input.saleLineIndex];
+    if (!db.products.some((p) => p.id === line.productId)) {
+      return error(400, `ไม่พบ SKU ${line.sku} เปลี่ยนไม่ได้`);
+    }
+    if (!line.serial) continue;
+    const old = currentSerial(sale, input.saleLineIndex, exchanges)!;
+    const oldUnit = db.serials.find((s) => s.serial === old);
+    if (oldUnit?.productId !== line.productId || oldUnit.status !== 'sold') {
+      return error(400, `ซีเรียล ${old} ไม่อยู่ในสถานะขายแล้ว เปลี่ยนไม่ได้`);
+    }
+    const newUnit = db.serials.find((s) => s.serial === input.newSerial);
+    if (newUnit?.productId !== line.productId || newUnit.status !== 'in_stock') {
+      return error(400, `ซีเรียล ${input.newSerial} ไม่อยู่ในคลังของ ${line.sku}`);
+    }
+  }
+
+  const now = new Date();
+  const prefix = `EX-${today.replaceAll('-', '')}-`;
+  const last = db.exchanges
+    .filter((x) => x.exNo.startsWith(prefix))
+    .reduce((max, x) => Math.max(max, Number(x.exNo.slice(prefix.length))), 0);
+  const exNo = prefix + String(last + 1).padStart(4, '0');
+  const note = `เปลี่ยนสินค้า ${exNo} (บิล ${sale.orderNo})`;
+
+  const lines: ExchangeLine[] = payload.lines.map((input) => {
+    const line = sale.lines[input.saleLineIndex];
+    const index = db.products.findIndex((p) => p.id === line.productId);
+    const baseQty = input.qty * line.factor;
+    const oldSerial = line.serial ? currentSerial(sale, input.saleLineIndex, exchanges) : null;
+    // The replacement comes off the shelf first (checked to be in stock), at the current
+    // average; only then does the old unit come back, so it can never be handed straight out.
+    const costOut = issueStock(db, { ...line, qty: input.qty, serial: input.newSerial }, now, note);
+    let costIn: number;
+    if (oldSerial) {
+      const unit = db.serials.find((s) => s.serial === oldSerial)!;
+      costIn = round2(unit.cost);
+      Object.assign(
+        unit,
+        input.restock
+          ? { status: 'in_stock', removedAt: null, receivedAt: now.toISOString(), note }
+          : { status: 'damaged', removedAt: now.toISOString(), note: `${note} · ชำรุด` },
+      );
+      if (input.restock) {
+        db.products[index] = withSerialStock(db.products[index], db);
+        recordMovement(
+          db,
+          db.products[index],
+          'receive',
+          1,
+          unit.cost,
+          unit.cost,
+          [oldSerial],
+          note,
+        );
+      }
+    } else {
+      const unitCost = line.cogs / (line.qty * line.factor);
+      costIn = round2(unitCost * baseQty);
+      if (input.restock) {
+        const product = db.products[index];
+        db.products[index] = {
+          ...product,
+          stock: product.stock + baseQty,
+          avgCost: movingAverage(product.stock, product.avgCost, baseQty, unitCost),
+        };
+        recordMovement(db, db.products[index], 'receive', baseQty, unitCost, costIn, [], note);
+      }
+    }
+    return {
+      saleLineIndex: input.saleLineIndex,
+      productId: line.productId,
+      sku: line.sku,
+      name: line.name,
+      shortName: line.shortName,
+      unit: line.unit,
+      factor: line.factor,
+      qty: input.qty,
+      oldSerial,
+      newSerial: line.serial ? input.newSerial : null,
+      restock: input.restock,
+      costIn,
+      costOut,
+    };
+  });
+
+  const created: Exchange = {
+    id: Math.max(0, ...db.exchanges.map((x) => x.id)) + 1,
+    exNo,
+    saleId: sale.id,
+    orderNo: sale.orderNo,
+    saleDate: sale.date,
+    date: now.toISOString(),
+    cashier: db.users[0]?.name ?? '',
+    reason: payload.reason,
+    lines,
+  };
+  db.exchanges.push(created);
+  return ok(created);
+}
+
 /** POST /sales/:id/tax-invoice { buyer } — one full tax invoice per paid POS bill. */
 function issueTaxInvoice(
   sale: Sale,
@@ -2119,23 +2270,28 @@ function createTaxInvoice(
 function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpResponse<unknown>> {
   const problem = voidError(sale, reason, todayIso());
   if (problem) return error(400, problem);
-  for (const line of sale.lines) {
+  // A same-day exchange swapped serials: the customer hands back the one they hold now.
+  const exchanges = db.exchanges.filter((x) => x.saleId === sale.id);
+  const serialOf = (i: number) => currentSerial(sale, i, exchanges);
+  for (const [i, line] of sale.lines.entries()) {
     const product = db.products.find((p) => p.id === line.productId);
     if (!product) return error(400, `ไม่พบ SKU ${line.sku} คืนสต็อกไม่ได้`);
-    const unit = line.serial ? db.serials.find((s) => s.serial === line.serial) : undefined;
-    if (line.serial && (unit?.productId !== line.productId || unit.status !== 'sold')) {
-      return error(400, `ซีเรียล ${line.serial} ไม่อยู่ในสถานะขายแล้ว คืนสต็อกไม่ได้`);
+    const serial = serialOf(i);
+    const unit = serial ? db.serials.find((s) => s.serial === serial) : undefined;
+    if (serial && (unit?.productId !== line.productId || unit.status !== 'sold')) {
+      return error(400, `ซีเรียล ${serial} ไม่อยู่ในสถานะขายแล้ว คืนสต็อกไม่ได้`);
     }
   }
   const now = new Date().toISOString();
   const note = `ยกเลิกบิล ${sale.orderNo}`;
-  for (const line of sale.lines) {
+  for (const [i, line] of sale.lines.entries()) {
     const index = db.products.findIndex((p) => p.id === line.productId);
     const product = db.products[index];
     const baseQty = line.qty * line.factor;
     if (isService(product)) continue;
-    if (line.serial) {
-      const unit = db.serials.find((s) => s.serial === line.serial)!;
+    const serial = serialOf(i);
+    if (serial) {
+      const unit = db.serials.find((s) => s.serial === serial)!;
       Object.assign(unit, { status: 'in_stock', removedAt: null, receivedAt: now, note });
       db.products[index] = withSerialStock(product, db);
       recordMovement(

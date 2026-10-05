@@ -27,6 +27,8 @@ export interface StoreInfo {
   receiptFooter: string;
   /** Default paper for full tax invoices (the POS prints on it; the bill page can switch) */
   taxInvoicePaper: InvoicePaper;
+  /** Days after the sale day staff may exchange goods for the same SKU (0 = no limit; admins any time) */
+  exchangeDays: number;
 }
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {
@@ -41,6 +43,7 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
   posId: '',
   receiptFooter: 'ขอบคุณที่ใช้บริการ',
   taxInvoicePaper: 'A4',
+  exchangeDays: 7,
 };
 
 /** Receipt title by VAT registration. */
@@ -68,6 +71,9 @@ export function storeInfoError(s: StoreInfo): string | null {
   if (s.taxInvoicePaper !== 'A4' && s.taxInvoicePaper !== '80mm') {
     return 'ขนาดกระดาษใบกำกับภาษีไม่ถูกต้อง';
   }
+  if (!Number.isInteger(s.exchangeDays) || s.exchangeDays < 0 || s.exchangeDays > 365) {
+    return 'จำนวนวันเปลี่ยนสินค้าต้องเป็นจำนวนเต็ม 0–365';
+  }
   return null;
 }
 
@@ -84,5 +90,6 @@ export function normalizeStoreInfo(s: StoreInfo): StoreInfo {
     phone: s.phone.trim(),
     posId: s.posId.trim(),
     receiptFooter: s.receiptFooter.trim(),
+    exchangeDays: Number(s.exchangeDays ?? STORE_INFO_DEFAULTS.exchangeDays),
   };
 }

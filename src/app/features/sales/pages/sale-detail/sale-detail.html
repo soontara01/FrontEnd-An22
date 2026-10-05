@@ -23,6 +23,12 @@
         ออกใบลดหนี้
       </a>
     }
+    @if (!exchangeBlocker()) {
+      <a mat-stroked-button [routerLink]="['/sales', s.id, 'exchange']">
+        <mat-icon>swap_horiz</mat-icon>
+        เปลี่ยนสินค้า
+      </a>
+    }
     @if (isPos() && s.status === 'paid' && !voidBlocker()) {
       <button mat-stroked-button class="danger" (click)="voidSale(s)">
         <mat-icon>cancel</mat-icon>
@@ -95,7 +101,11 @@
                       <div class="text-muted small">
                         <span class="mono">{{ l.sku }}</span>
                         @if (l.serial) {
-                          · SN <span class="mono">{{ l.serial }}</span>
+                          · SN <span class="mono">{{ serialOf(n) }}</span>
+                          @if (serialOf(n) !== l.serial) {
+                            (เปลี่ยนจาก <span class="mono">{{ l.serial }}</span
+                            >)
+                          }
                         }
                         @if (l.warrantyMonths) {
                           · รับประกัน {{ l.warrantyMonths }} เดือน
@@ -322,6 +332,42 @@
             </mat-card-content>
           </mat-card>
         }
+        @if (exchanges().length) {
+          <mat-card appearance="outlined">
+            <mat-card-header><mat-card-title>การเปลี่ยนสินค้า</mat-card-title></mat-card-header>
+            <mat-card-content class="notes">
+              @for (x of exchanges(); track x.id; let i = $index) {
+                <div class="note">
+                  <div>
+                    <strong class="mono">{{ x.exNo }}</strong>
+                    <span class="text-muted">
+                      · {{ x.date | thaiDate: 'datetime' }} · {{ x.reason }}</span
+                    >
+                    <div class="text-muted small">
+                      @for (l of x.lines; track $index) {
+                        {{ l.shortName }} × {{ l.qty }}
+                        @if (l.newSerial) {
+                          (SN {{ l.oldSerial }} → {{ l.newSerial }})
+                        }
+                        {{ l.restock ? '' : ' · ของเดิมชำรุด' }}{{ $last ? '' : ', ' }}
+                      }
+                    </div>
+                  </div>
+                  <span></span>
+                  @if (store.storeInfo()) {
+                    <button
+                      mat-icon-button
+                      matTooltip="พิมพ์ใบเปลี่ยนสินค้า"
+                      (click)="printExchange(i)"
+                    >
+                      <mat-icon>print</mat-icon>
+                    </button>
+                  }
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        }
       } @else {
         <mat-card appearance="outlined">
           <mat-card-content class="text-muted">
@@ -344,6 +390,9 @@
     <div class="print-stage" aria-hidden="true">
       @for (cn of creditNotes(); track cn.id) {
         <app-credit-note-receipt #noteSlip [note]="cn" [store]="info" />
+      }
+      @for (x of exchanges(); track x.id) {
+        <app-exchange-receipt #exchangeSlip [exchange]="x" [sale]="s" [store]="info" />
       }
       @if (taxInvoice(); as inv) {
         @if (paper() === '80mm') {

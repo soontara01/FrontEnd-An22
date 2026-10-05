@@ -1,0 +1,164 @@
+@if (data.hasValue()) {
+  @let s = data.value().sale;
+  <app-page-header
+    title="เปลี่ยนสินค้า (SKU เดิม)"
+    [subtitle]="'อ้างอิงบิล ' + s.orderNo + ' · ' + ((s.date | thaiDate: 'datetime') ?? '')"
+  >
+    <a mat-button [routerLink]="['/sales', s.id]">
+      <mat-icon>arrow_back</mat-icon>
+      กลับไปบิล
+    </a>
+  </app-page-header>
+
+  <p class="text-muted small">
+    เปลี่ยนเป็นสินค้า SKU และหน่วยเดียวกัน ราคาเท่าเดิม — ไม่มีการรับ/คืนเงิน ไม่ออกใบลดหนี้
+    บิลเดิมไม่เปลี่ยน ประกันนับต่อจากวันขายเดิม
+    @if (deadline(); as last) {
+      · เปลี่ยนได้ถึง {{ last | thaiDate }}
+    }
+  </p>
+
+  @if (blocker(); as message) {
+    <mat-card appearance="outlined">
+      <mat-card-content class="problem">{{ message }}</mat-card-content>
+    </mat-card>
+  } @else {
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>สินค้าที่เปลี่ยน</mat-card-title></mat-card-header>
+      <mat-card-content class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>สินค้า</th>
+              <th class="num">ลูกค้าถืออยู่</th>
+              <th class="num">เปลี่ยน</th>
+              <th>เครื่องใหม่</th>
+              <th>ของเดิม</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.index) {
+              @let l = line(row);
+              <tr [class.done]="!row.held">
+                <td>
+                  {{ l.name }}
+                  @if (l.freeOfPromotionId !== null) {
+                    <span class="badge badge-success">ของแถม</span>
+                  }
+                  <div class="text-muted small">
+                    <span class="mono">{{ l.sku }}</span>
+                    @if (row.serial) {
+                      · SN <span class="mono">{{ row.serial }}</span>
+                    }
+                  </div>
+                </td>
+                <td class="num">{{ row.held }} {{ l.unit }}</td>
+                <td class="num">
+                  @if (l.itemType === 'service') {
+                    <span class="text-muted">บริการ</span>
+                  } @else if (!row.held) {
+                    <span class="text-muted">คืนแล้ว</span>
+                  } @else if (row.held === 1) {
+                    <mat-checkbox
+                      [checked]="row.qty === 1"
+                      (change)="setQty(row, $event.checked ? 1 : 0)"
+                      aria-label="เปลี่ยน"
+                    />
+                  } @else {
+                    <input
+                      class="qty"
+                      type="number"
+                      min="0"
+                      [max]="row.held"
+                      aria-label="จำนวนที่เปลี่ยน"
+                      [value]="row.qty"
+                      (change)="setQty(row, $any($event.target).value)"
+                    />
+                  }
+                </td>
+                <td>
+                  @if (row.qty && row.serial) {
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>สแกน/เลือกซีเรียลใหม่</mat-label>
+                      <input
+                        matInput
+                        [attr.list]="'sn-' + row.index"
+                        [value]="row.newSerial"
+                        (input)="patch(row, { newSerial: $any($event.target).value })"
+                      />
+                      <datalist [id]="'sn-' + row.index">
+                        @for (sn of serialOptions(row); track sn) {
+                          <option [value]="sn"></option>
+                        }
+                      </datalist>
+                    </mat-form-field>
+                    @if (!serialOptions(row).length) {
+                      <div class="text-muted small">ไม่มีเครื่องในคลัง</div>
+                    }
+                  } @else if (l.itemType !== 'service' && row.held) {
+                    @if (shelfStock(row); as shelf) {
+                      <span
+                        class="small"
+                        [class.text-muted]="shelf.stock"
+                        [class.problem]="!shelf.stock"
+                      >
+                        @if (row.qty) {
+                          {{ row.qty }} {{ l.unit }} จากคลัง ·
+                        }
+                        คงเหลือในคลัง {{ shelf.stock }} {{ shelf.unit }}
+                      </span>
+                    }
+                  }
+                </td>
+                <td>
+                  @if (row.qty) {
+                    <mat-slide-toggle
+                      [checked]="row.restock"
+                      (change)="patch(row, { restock: $event.checked })"
+                    >
+                      {{ row.restock ? 'สภาพดี กลับเข้าคลัง' : 'ชำรุด ตัดออก' }}
+                    </mat-slide-toggle>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <div class="quick">
+          @for (q of quickReasons; track q) {
+            <button mat-stroked-button type="button" (click)="reason.set(q)">{{ q }}</button>
+          }
+        </div>
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>เหตุผล (จำเป็น)</mat-label>
+          <textarea
+            matInput
+            rows="2"
+            [value]="reason()"
+            (input)="reason.set($any($event.target).value)"
+          ></textarea>
+        </mat-form-field>
+        @if (problem(); as message) {
+          <div class="problem">{{ message }}</div>
+        }
+        <div class="actions">
+          <button
+            mat-flat-button
+            [disabled]="!!problem() || saving() || !products.hasValue()"
+            (click)="save()"
+          >
+            <mat-icon>swap_horiz</mat-icon>
+            บันทึกการเปลี่ยนสินค้า
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+}
