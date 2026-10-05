@@ -95,3 +95,12 @@
 .mono {
   font-family: ui-monospace, monospace;
 }
+
+.full-invoice {
+  margin-right: auto;
+}
+
+.invoice-note {
+  margin: -8px 0 16px;
+  color: var(--mat-sys-primary);
+}

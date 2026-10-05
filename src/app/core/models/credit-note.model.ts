@@ -3,6 +3,7 @@ import { PaymentMethod, allowsChange } from './payment-method.model';
 import { freeSets } from './pos-pricing.model';
 import { VatType, vatBreakdown } from './product.model';
 import type { Promotion } from './promotion.model';
+import type { TaxInvoiceBuyer } from './tax-invoice.model';
 import { PaymentInput, Sale, SaleLine, SalePayment, saleDay } from './sale.model';
 
 /**
@@ -59,6 +60,10 @@ export interface CreditNote {
   cnNo: string;
   saleId: number;
   orderNo: string;
+  /** Full tax invoice of the bill, if one was issued (printed as the reference) */
+  taxInvoiceNo: string | null;
+  /** Buyer of that invoice when the note was issued (server-set; null = abbreviated invoice only) */
+  buyer: TaxInvoiceBuyer | null;
   saleDate: string;
   /** ISO timestamp */
   date: string;
@@ -117,6 +122,23 @@ const creditedLines = (notes: readonly CreditNote[], index: number): CreditNoteL
 /** Units of a sale line already returned by earlier credit notes. */
 export const creditedQty = (notes: readonly CreditNote[], index: number): number =>
   creditedLines(notes, index).reduce((n, l) => n + l.qty, 0);
+
+/**
+ * Return summary of a bill from its credit notes (server-derived `Sale` fields): 'full' once every
+ * unit of every line has come back, 'partial' when some have, else 'none'.
+ */
+export function returnSummary(
+  sale: Pick<Sale, 'lines'>,
+  notes: readonly CreditNote[],
+): Pick<Sale, 'returnStatus' | 'creditedTotal' | 'creditNoteNos'> {
+  if (!notes.length) return { returnStatus: 'none', creditedTotal: 0, creditNoteNos: [] };
+  const full = sale.lines.every((l, i) => creditedQty(notes, i) >= l.qty);
+  return {
+    returnStatus: full ? 'full' : 'partial',
+    creditedTotal: round2(notes.reduce((sum, n) => sum + n.total, 0)),
+    creditNoteNos: [...notes].sort((a, b) => a.date.localeCompare(b.date)).map((n) => n.cnNo),
+  };
+}
 
 /** Units of a sale line that can still be returned. */
 export const remainingQty = (sale: Sale, notes: readonly CreditNote[], index: number): number =>

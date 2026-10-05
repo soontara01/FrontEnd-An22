@@ -5,9 +5,14 @@ import { BranchType, isValidThaiTaxId } from './supplier.model';
  * A VAT-registered store prints "ใบกำกับภาษีอย่างย่อ/ใบเสร็จรับเงิน" with its tax ID, branch and
  * POS registration number (Revenue Department requirements); otherwise a plain receipt.
  */
+/** Paper of the full tax invoice: A4 sheet or the 80 mm receipt printer. */
+export type InvoicePaper = 'A4' | '80mm';
+
 export interface StoreInfo {
-  /** Registered business name */
+  /** Registered business name (ชื่อผู้ประกอบการ) */
   name: string;
+  /** Name of the business place (ชื่อสถานประกอบการ, e.g. shop / branch name); '' = same as `name` */
+  placeName: string;
   vatRegistered: boolean;
   /** 13-digit Thai tax ID (required when VAT-registered) */
   taxId: string;
@@ -20,10 +25,13 @@ export interface StoreInfo {
   posId: string;
   /** Printed at the bottom of every receipt, e.g. return policy */
   receiptFooter: string;
+  /** Default paper for full tax invoices (the POS prints on it; the bill page can switch) */
+  taxInvoicePaper: InvoicePaper;
 }
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {
   name: '',
+  placeName: '',
   vatRegistered: true,
   taxId: '',
   branchType: 'head',
@@ -32,15 +40,21 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
   phone: '',
   posId: '',
   receiptFooter: 'ขอบคุณที่ใช้บริการ',
+  taxInvoicePaper: 'A4',
 };
 
 /** Receipt title by VAT registration. */
 export const receiptTitle = (s: Pick<StoreInfo, 'vatRegistered'>): string =>
   s.vatRegistered ? 'ใบกำกับภาษีอย่างย่อ/ใบเสร็จรับเงิน' : 'ใบเสร็จรับเงิน';
 
+/** Name of the business place for tax reports (falls back to the business name). */
+export const placeName = (s: Pick<StoreInfo, 'name' | 'placeName'>): string =>
+  s.placeName || s.name;
+
 /** The single rule for the settings form and the server. Thai message or null. */
 export function storeInfoError(s: StoreInfo): string | null {
   if (!s.name.trim()) return 'กรุณากรอกชื่อร้าน';
+  if (s.placeName.length > 100) return 'ชื่อสถานประกอบการต้องไม่เกิน 100 ตัวอักษร';
   if (s.vatRegistered && !isValidThaiTaxId(s.taxId)) {
     return 'เลขประจำตัวผู้เสียภาษีต้องเป็น 13 หลักที่ถูกต้อง';
   }
@@ -51,6 +65,9 @@ export function storeInfoError(s: StoreInfo): string | null {
   if (!s.address.trim()) return 'กรุณากรอกที่อยู่';
   if (s.posId.length > 30) return 'หมายเลขเครื่อง POS ต้องไม่เกิน 30 ตัวอักษร';
   if (s.receiptFooter.length > 200) return 'ข้อความท้ายใบเสร็จต้องไม่เกิน 200 ตัวอักษร';
+  if (s.taxInvoicePaper !== 'A4' && s.taxInvoicePaper !== '80mm') {
+    return 'ขนาดกระดาษใบกำกับภาษีไม่ถูกต้อง';
+  }
   return null;
 }
 
@@ -60,6 +77,7 @@ export function normalizeStoreInfo(s: StoreInfo): StoreInfo {
     ...STORE_INFO_DEFAULTS,
     ...s,
     name: s.name.trim(),
+    placeName: (s.placeName ?? '').trim(),
     taxId: s.taxId.replace(/[\s-]/g, ''),
     branchNo: s.branchType === 'branch' ? s.branchNo.trim() : '',
     address: s.address.trim(),

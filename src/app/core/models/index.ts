@@ -12,4 +12,5 @@ export * from './sale.model';
 export * from './serial.model';
 export * from './store-info.model';
 export * from './supplier.model';
+export * from './tax-invoice.model';
 export * from './user.model';

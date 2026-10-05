@@ -30,6 +30,7 @@ export class StoreInfoForm {
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     name: '',
+    placeName: '',
     vatRegistered: true,
     taxId: '',
     branchType: STORE_INFO_DEFAULTS.branchType,
@@ -38,6 +39,7 @@ export class StoreInfoForm {
     phone: '',
     posId: '',
     receiptFooter: '',
+    taxInvoicePaper: STORE_INFO_DEFAULTS.taxInvoicePaper,
   });
 
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });

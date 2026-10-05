@@ -11,6 +11,7 @@ import {
   Product,
   Sale,
   StoreInfo,
+  TaxInvoice,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
@@ -684,8 +685,158 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
 
     expect(await get<CreditNote[]>(`sales/${sale.id}/credit-notes`)).toHaveLength(2);
+    // the bill itself is unchanged; its return summary is derived on read (list and single)
+    const [listed] = await get<Sale[]>('sales?from=2026-10-04&to=2026-10-04');
+    expect(listed).toMatchObject({
+      id: sale.id,
+      status: 'paid',
+      returnStatus: 'partial',
+      creditedTotal: 24041,
+      creditNoteNos: ['CN-20261005-0001', 'CN-20261005-0002'],
+    });
+    expect((await get<Sale>(`sales/${sale.id}`)).returnStatus).toBe('partial');
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-04&to=2026-10-04')).toHaveLength(0);
+  });
+
+  it('issues one full tax invoice per bill and cancels it with the bill', async () => {
+    const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'branch',
+      branchNo: '00002',
+      address: 'เชียงใหม่',
+    };
+    expect(await get<TaxInvoice | null>(`sales/${sale.id}/tax-invoice`)).toBeNull();
+    expect(
+      await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer: { ...buyer, name: '' } })),
+    ).toBe('กรุณากรอกชื่อผู้ซื้อ');
+    const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
+    expect(invoice).toMatchObject({ invoiceNo: 'INV-20261004-0001', orderNo: sale.orderNo, buyer });
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0001');
+    expect(await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer }))).toBe(
+      'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-20261004-0001)',
+    );
+    expect(await get('tax-invoices/buyer?taxId=0105550123451')).toEqual(buyer);
+    expect(await get('tax-invoices/buyer?taxId=1111111111119')).toBeNull();
+
+    await post(`sales/${sale.id}/void`, { reason: 'คีย์ผิด' });
+    expect((await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`)).cancelledAt).not.toBeNull();
+
+    // a store that is not VAT-registered issues none
+    const info = await get<StoreInfo>('settings/store');
+    await put('settings/store', { ...info, vatRegistered: false });
+    const other = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    expect(await errorOf(post(`sales/${other.id}/tax-invoice`, { buyer }))).toBe(
+      'ร้านไม่ได้จดทะเบียน VAT ออกใบกำกับภาษีไม่ได้',
+    );
+  });
+
+  it('cancels a full tax invoice with wrong buyer details and issues a corrected one', async () => {
+    const buyer = {
+      name: 'บริษัท ผิดชื่อ จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const sale = await post<Sale>('sales', {
+      items: [item(MOUSE)],
+      freeSerials: [],
+      payments: [pay(CASH, 531)],
+      customer: '',
+      expectedTotal: 531,
+      buyer,
+    });
+    vi.setSystemTime(new Date(2026, 9, 6, 9, 0));
+    const fixed = { ...buyer, name: 'บริษัท ถูกชื่อ จำกัด' };
+    expect(
+      await errorOf(post(`sales/${sale.id}/tax-invoice/reissue`, { buyer: fixed, reason: '' })),
+    ).toBe('กรุณาระบุเหตุผลที่ยกเลิกใบเดิม');
+
+    const next = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice/reissue`, {
+      buyer: fixed,
+      reason: 'ชื่อผู้ซื้อผิด',
+    });
+    expect(next).toMatchObject({
+      invoiceNo: 'INV-20261004-0002',
+      date: sale.date,
+      atSale: true,
+      replacesInvoiceNo: 'INV-20261004-0001',
+      buyer: fixed,
+    });
+    expect(next.issuedAt).toBe(new Date(2026, 9, 6, 9, 0).toISOString());
+    const all = await get<TaxInvoice[]>(`sales/${sale.id}/tax-invoices`);
+    expect(all[0]).toMatchObject({
+      invoiceNo: 'INV-20261004-0001',
+      cancelReason: 'ชื่อผู้ซื้อผิด',
+      replacedByNo: 'INV-20261004-0002',
+    });
+    expect(all[0].cancelledAt).not.toBeNull();
+    expect((await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`)).invoiceNo).toBe(
+      'INV-20261004-0002',
+    );
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0002');
+    // the cancelled one cannot be reissued again; the valid one can
+    expect(
+      (await post<TaxInvoice>(`sales/${sale.id}/tax-invoice/reissue`, { buyer, reason: 'กลับ' }))
+        .replacesInvoiceNo,
+    ).toBe('INV-20261004-0002');
+  });
+
+  it('dates a full tax invoice requested later on the day of sale', async () => {
+    const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    vi.setSystemTime(new Date(2026, 10, 3, 9, 0)); // next month
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
+    expect(invoice).toMatchObject({
+      invoiceNo: 'INV-20261004-0001',
+      date: sale.date,
+      atSale: false,
+    });
+    expect(invoice.issuedAt).toBe(new Date(2026, 10, 3, 9, 0).toISOString());
+    // listed with the sale's month
+    expect(await get<TaxInvoice[]>('tax-invoices?from=2026-10-01&to=2026-10-31')).toHaveLength(1);
+  });
+
+  it('issues the full tax invoice together with the sale when a buyer is given', async () => {
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const body = (b: unknown) => ({
+      items: [item(MOUSE)],
+      freeSerials: [],
+      payments: [pay(CASH, 531)],
+      customer: '',
+      expectedTotal: 531,
+      buyer: b,
+    });
+    expect(await errorOf(post('sales', body({ ...buyer, taxId: '123' })))).toBe(
+      'เลขประจำตัวผู้เสียภาษีผู้ซื้อต้องเป็น 13 หลักที่ถูกต้อง',
+    );
+    expect((await product(MOUSE)).stock).toBe(3); // nothing sold
+
+    const sale = await post<Sale>('sales', body(buyer));
+    expect(sale.taxInvoiceNo).toBe('INV-20261004-0001');
+    const invoice = await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`);
+    expect(invoice).toMatchObject({
+      atSale: true,
+      orderNo: sale.orderNo,
+      buyer,
+      cancelledAt: null,
+    });
+    expect(invoice.date).toBe(sale.date);
   });
 
   it('keeps payment methods and SKUs that sales refer to', async () => {

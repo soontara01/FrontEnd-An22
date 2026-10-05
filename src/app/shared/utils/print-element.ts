@@ -4,12 +4,16 @@ const CHAIN_CLASS = 'print-chain';
 const PX_PER_MM = 96 / 25.4;
 
 /**
- * Prints one element on its own page sized to it (e.g. an 80 mm receipt) instead of the A4 page:
+ * Prints one element on its own page sized to it (e.g. an 80 mm receipt; `'A4'` = normal A4
+ * pages, for documents that may run over several pages):
  * every sibling along its ancestor chain is hidden, the ancestors lose their padding / margins
  * (`.print-chain`) and an `@page` rule with the element's measured size is added. Everything is undone after
  * printing. The element must have layout on screen (e.g. kept off-screen, not `display: none`).
  */
-export function printElement(element: HTMLElement): void {
+export function printElement(
+  element: HTMLElement,
+  page: 'fit' | 'A4' | 'A4-landscape' = 'fit',
+): void {
   const doc = element.ownerDocument;
   const win = doc.defaultView;
   if (!win) return;
@@ -33,7 +37,10 @@ export function printElement(element: HTMLElement): void {
   // A little extra so the last line never spills onto a second page.
   const height = Math.ceil(rect.height / PX_PER_MM) + 5;
   const style = doc.createElement('style');
-  style.textContent = `@page { size: ${width}mm ${height}mm; margin: 0; }`;
+  style.textContent =
+    page === 'fit'
+      ? `@page { size: ${width}mm ${height}mm; margin: 0; }`
+      : `@page { size: A4${page === 'A4-landscape' ? ' landscape' : ''}; margin: 0; }`;
   doc.head.appendChild(style);
   doc.documentElement.classList.add(MODE_CLASS);
 

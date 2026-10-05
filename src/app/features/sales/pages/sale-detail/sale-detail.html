@@ -11,6 +11,12 @@
         พิมพ์สำเนาใบเสร็จ
       </button>
     }
+    @if (canInvoice()) {
+      <a mat-stroked-button [routerLink]="['/sales', s.id, 'tax-invoice']">
+        <mat-icon>receipt_long</mat-icon>
+        ออกใบกำกับภาษีเต็มรูป
+      </a>
+    }
     @if (canCredit() && isAdmin()) {
       <a mat-stroked-button [routerLink]="['/sales', s.id, 'credit-note']">
         <mat-icon>assignment_return</mat-icon>
@@ -199,6 +205,80 @@
             </mat-card-content>
           </mat-card>
         </div>
+        @if (taxInvoice(); as inv) {
+          <mat-card appearance="outlined">
+            <mat-card-header><mat-card-title>ใบกำกับภาษีเต็มรูป</mat-card-title></mat-card-header>
+            <mat-card-content class="notes">
+              <div class="note">
+                <div>
+                  <strong class="mono">{{ inv.invoiceNo }}</strong>
+                  <span class="text-muted"> · ลงวันที่ {{ inv.date | thaiDate }}</span>
+                  @if (!inv.atSale) {
+                    <span class="text-muted">
+                      · ออกใบเมื่อ {{ inv.issuedAt | thaiDate: 'datetime' }}</span
+                    >
+                  }
+                  @if (inv.cancelledAt) {
+                    <span class="badge badge-error">ยกเลิกแล้ว</span>
+                  }
+                  @if (inv.replacesInvoiceNo) {
+                    <span class="text-muted small"> · ออกแทน {{ inv.replacesInvoiceNo }}</span>
+                  }
+                  <div class="text-muted small">
+                    {{ inv.buyer.name }} · เลขผู้เสียภาษี {{ inv.buyer.taxId
+                    }}{{ buyerBranch(inv.buyer) }}
+                  </div>
+                </div>
+                <span></span>
+                @if (store.storeInfo()) {
+                  <span class="print-buttons">
+                    @if (canReissue()) {
+                      <a
+                        mat-button
+                        [routerLink]="['/sales', s.id, 'tax-invoice']"
+                        [queryParams]="{ reissue: 1 }"
+                        matTooltip="ข้อมูลผู้ซื้อผิด: ยกเลิกใบนี้และออกใบใหม่"
+                      >
+                        <mat-icon>edit_document</mat-icon>
+                        ยกเลิกและออกใบใหม่
+                      </a>
+                    }
+                    <mat-button-toggle-group
+                      hideSingleSelectionIndicator
+                      aria-label="กระดาษ"
+                      [value]="paper()"
+                      (change)="setPaper($event.value)"
+                    >
+                      <mat-button-toggle value="A4">A4</mat-button-toggle>
+                      <mat-button-toggle value="80mm">80 มม.</mat-button-toggle>
+                    </mat-button-toggle-group>
+                    <button mat-button (click)="printInvoice(false)">
+                      <mat-icon>print</mat-icon>
+                      ต้นฉบับ
+                    </button>
+                    <button mat-button (click)="printInvoice(true)">
+                      <mat-icon>print</mat-icon>
+                      สำเนา
+                    </button>
+                  </span>
+                }
+              </div>
+              @for (old of replacedInvoices(); track old.id) {
+                <div class="text-muted small replaced">
+                  <span class="mono">{{ old.invoiceNo }}</span> ยกเลิกเมื่อ
+                  {{ old.cancelledAt | thaiDate: 'datetime' }}
+                  @if (old.cancelReason) {
+                    — {{ old.cancelReason }}
+                  }
+                  @if (old.replacedByNo) {
+                    · แทนด้วย {{ old.replacedByNo }}
+                  }
+                  · {{ old.buyer.name }} ({{ old.buyer.taxId }})
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        }
         @if (creditNotes().length) {
           <mat-card appearance="outlined">
             <mat-card-header><mat-card-title>ใบลดหนี้</mat-card-title></mat-card-header>
@@ -210,6 +290,14 @@
                     <span class="text-muted">
                       · {{ cn.date | thaiDate: 'datetime' }} · {{ cn.reason }}</span
                     >
+                    @if (cn.taxInvoiceNo) {
+                      <div class="text-muted small">
+                        อ้างใบกำกับภาษี <span class="mono">{{ cn.taxInvoiceNo }}</span>
+                        @if (noteInvoiceState(cn); as state) {
+                          <span class="badge badge-warn">{{ state }}</span>
+                        }
+                      </div>
+                    }
                     <div class="text-muted small">
                       @for (l of cn.lines; track $index) {
                         {{ l.shortName }} × {{ l.qty }}{{ l.restock ? '' : ' (ชำรุด)'
@@ -257,6 +345,21 @@
     <div class="print-stage" aria-hidden="true">
       @for (cn of creditNotes(); track cn.id) {
         <app-credit-note-receipt #noteSlip [note]="cn" [store]="info" />
+      }
+      @if (taxInvoice(); as inv) {
+        @if (paper() === '80mm') {
+          <app-tax-invoice-slip #invOriginal [sale]="s" [invoice]="inv" [store]="info" />
+          <app-tax-invoice-slip #invCopy [sale]="s" [invoice]="inv" [store]="info" [copy]="true" />
+        } @else {
+          <app-tax-invoice-document #invOriginal [sale]="s" [invoice]="inv" [store]="info" />
+          <app-tax-invoice-document
+            #invCopy
+            [sale]="s"
+            [invoice]="inv"
+            [store]="info"
+            [copy]="true"
+          />
+        }
       }
     </div>
   }

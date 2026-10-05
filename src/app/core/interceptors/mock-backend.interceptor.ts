@@ -26,6 +26,8 @@ import {
   PromotionPayload,
   CreditNote,
   CreditNotePayload,
+  TaxInvoice,
+  TaxInvoiceBuyer,
   SALE_DEFAULTS,
   Sale,
   SaleLine,
@@ -71,6 +73,7 @@ import {
   hasStarted,
   serialFormatError,
   todayIso,
+  toIsoDate,
   cartError,
   paymentError,
   paymentSummary,
@@ -80,7 +83,14 @@ import {
   normalizeStoreInfo,
   creditNoteError,
   draftCreditNote,
+  returnSummary,
   toRefunds,
+  normalizeBuyer,
+  taxInvoiceError,
+  checkoutBuyerError,
+  TAX_INVOICE_DEFAULTS,
+  currentInvoice,
+  reissueError,
   storeInfoError,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -116,6 +126,8 @@ interface MockDb {
   storeInfo: StoreInfo;
   /** Credit notes (returns after the day of sale). */
   creditNotes: CreditNote[];
+  /** Full tax invoices (one per bill, on request). */
+  taxInvoices: TaxInvoice[];
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -680,6 +692,7 @@ function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
 const SEED_STORE_INFO: StoreInfo = {
   ...STORE_INFO_DEFAULTS,
   name: 'บริษัท ไอทีดี คอมพิวเตอร์ จำกัด',
+  placeName: 'ร้านไอทีดี คอมพิวเตอร์',
   taxId: '0105550123451',
   address: '99/9 ถนนพหลโยธิน แขวงสามเสนใน เขตพญาไท กรุงเทพฯ 10400',
   phone: '02-123-4567',
@@ -709,6 +722,7 @@ const seedDb = (): MockDb => ({
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
   storeInfo: { ...SEED_STORE_INFO },
   creditNotes: [],
+  taxInvoices: [],
 });
 
 const LATENCY_MS = 300;
@@ -738,6 +752,21 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
+  db.taxInvoices = db.taxInvoices.map((t) => ({
+    ...TAX_INVOICE_DEFAULTS,
+    ...t,
+    atSale: t.atSale ?? false,
+    issuedAt: t.issuedAt ?? t.date,
+  }));
+  // Notes stored before the buyer snapshot existed take it from the invoice they quote.
+  db.creditNotes = db.creditNotes.map((n) => ({
+    ...n,
+    taxInvoiceNo: n.taxInvoiceNo ?? null,
+    buyer:
+      n.buyer !== undefined
+        ? n.buyer
+        : (db.taxInvoices.find((t) => t.invoiceNo === n.taxInvoiceNo)?.buyer ?? null),
+  }));
   migrateLegacyPrices(db);
   migrateLegacySkuFields(db);
   refreshCurrentPrices(db);
@@ -780,6 +809,23 @@ function handle(
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
   if (path === 'credit-notes' && req.method === 'GET') return listCreditNotes(req, db);
+  if (path === 'tax-invoices' && req.method === 'GET') {
+    // Full tax invoices issued within a local-date range (oldest first, for the tax report).
+    const from = req.params.get('from') || null;
+    const to = req.params.get('to') || null;
+    const day = (t: TaxInvoice) => toIsoDate(new Date(t.date));
+    return ok(
+      db.taxInvoices
+        .filter((t) => (!from || day(t) >= from) && (!to || day(t) <= to))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    );
+  }
+  if (path === 'tax-invoices/buyer' && req.method === 'GET') {
+    // Last buyer details used with this tax ID (+ branch), to fill the form.
+    const taxId = req.params.get('taxId') ?? '';
+    const found = [...db.taxInvoices].reverse().find((t) => t.buyer.taxId === taxId);
+    return ok(found?.buyer ?? null);
+  }
   return notFound(req, path);
 }
 
@@ -1719,6 +1765,14 @@ function handleSales(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   const { sales } = db;
+  // Return summary is derived from the credit notes on every read (never stored).
+  const withReturns = (s: Sale): Sale => ({
+    ...s,
+    ...returnSummary(
+      s,
+      db.creditNotes.filter((n) => n.saleId === s.id),
+    ),
+  });
   if (path === 'sales' && req.method === 'GET') {
     // Optional local-date range on the day of sale; newest first.
     const from = req.params.get('from') || null;
@@ -1729,22 +1783,52 @@ function handleSales(
     return ok(
       sales
         .filter((s) => (!from || saleDay(s) >= from) && (!to || saleDay(s) <= to))
-        .sort((a, b) => b.date.localeCompare(a.date)),
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map(withReturns),
     );
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
 
-  const idMatch = /^sales\/(\d+)(?:\/(status|void|credit-notes))?$/.exec(path);
+  const idMatch =
+    /^sales\/(\d+)(?:\/(status|void|credit-notes|tax-invoice|tax-invoices|tax-invoice\/reissue))?$/.exec(
+      path,
+    );
   if (!idMatch) return notFound(req, path);
   const index = sales.findIndex((s) => s.id === Number(idMatch[1]));
   if (index < 0) return error(404, 'ไม่พบบิลขาย');
   const sale = sales[index];
   const action = idMatch[2];
 
-  if (!action && req.method === 'GET') return ok(sale);
+  if (!action && req.method === 'GET') return ok(withReturns(sale));
   if (action === 'void' && req.method === 'POST') {
     const { reason } = req.body as { reason: string };
     return voidSale(sale, (reason ?? '').trim(), db);
+  }
+  const invoicesOfSale = () => db.taxInvoices.filter((t) => t.saleId === sale.id);
+  if (action === 'tax-invoice' && req.method === 'GET') {
+    // The valid one (else the latest); null instead of 404: "none yet" is a normal answer.
+    return ok(currentInvoice(invoicesOfSale()));
+  }
+  if (action === 'tax-invoices' && req.method === 'GET') {
+    return ok(invoicesOfSale()); // oldest first: cancelled ones, then the valid one
+  }
+  if (action === 'tax-invoice/reissue' && req.method === 'POST') {
+    const { buyer, reason } = req.body as { buyer: TaxInvoiceBuyer; reason: string };
+    const current = currentInvoice(invoicesOfSale());
+    const normalized = normalizeBuyer(buyer ?? ({} as TaxInvoiceBuyer));
+    const problem = reissueError(sale, current, normalized, reason ?? '');
+    if (problem || !current) return error(400, problem ?? 'ไม่พบใบกำกับภาษี');
+    const replacement = createTaxInvoice(db, sale, normalized, current.atSale, current);
+    Object.assign(current, {
+      cancelledAt: replacement.issuedAt,
+      cancelReason: reason.trim(),
+      replacedByNo: replacement.invoiceNo,
+    });
+    return ok(replacement);
+  }
+  if (action === 'tax-invoice' && req.method === 'POST') {
+    const { buyer } = req.body as { buyer: TaxInvoiceBuyer };
+    return issueTaxInvoice(sale, normalizeBuyer(buyer ?? ({} as TaxInvoiceBuyer)), db);
   }
   if (action === 'credit-notes' && req.method === 'GET') {
     return ok(db.creditNotes.filter((n) => n.saleId === sale.id));
@@ -1790,6 +1874,9 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   const paymentProblem = paymentError(cart.total, payments, db.paymentMethods);
   if (paymentProblem) return error(400, paymentProblem);
   const paid = paymentSummary(cart.total, payments, db.paymentMethods);
+  const buyer = body.buyer ? normalizeBuyer(body.buyer) : null;
+  const buyerProblem = buyer ? checkoutBuyerError(buyer, db.storeInfo) : null;
+  if (buyerProblem) return error(400, buyerProblem);
 
   const now = new Date();
   const orderNo = nextOrderNo(db, today);
@@ -1822,8 +1909,14 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     status: 'paid',
     voidedAt: null,
     voidReason: '',
+    taxInvoiceNo: null,
+    returnStatus: 'none',
+    creditedTotal: 0,
+    creditNoteNos: [],
   };
   db.sales.push(sale);
+  // Full tax invoice requested at the POS: issued with the sale, same date.
+  if (buyer) createTaxInvoice(db, sale, buyer, true);
   return ok(sale);
 }
 
@@ -1954,6 +2047,8 @@ function createCreditNote(
     cnNo,
     saleId: sale.id,
     orderNo: sale.orderNo,
+    taxInvoiceNo: sale.taxInvoiceNo,
+    buyer: db.taxInvoices.find((t) => t.invoiceNo === sale.taxInvoiceNo)?.buyer ?? null,
     saleDate: sale.date,
     date: now.toISOString(),
     cashier: db.users[0]?.name ?? '',
@@ -1968,6 +2063,53 @@ function createCreditNote(
   };
   db.creditNotes.push(created);
   return ok(created);
+}
+
+/** POST /sales/:id/tax-invoice { buyer } — one full tax invoice per paid POS bill. */
+function issueTaxInvoice(
+  sale: Sale,
+  buyer: TaxInvoiceBuyer,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const problem = taxInvoiceError(sale, buyer, db.storeInfo);
+  if (problem) return error(400, problem);
+  return ok(createTaxInvoice(db, sale, buyer, false));
+}
+
+/** Numbers and stores a full tax invoice for a bill (checked by the caller). */
+function createTaxInvoice(
+  db: MockDb,
+  sale: Sale,
+  buyer: TaxInvoiceBuyer,
+  atSale: boolean,
+  /** The cancelled invoice this one replaces */
+  replaces?: TaxInvoice,
+): TaxInvoice {
+  // Dated and numbered on the day of sale, even when issued later (accountant's decision).
+  const date = new Date(sale.date);
+  const prefix = `INV-${toIsoDate(date).replaceAll('-', '')}-`;
+  const last = db.taxInvoices
+    .filter((t) => t.invoiceNo.startsWith(prefix))
+    .reduce((max, t) => Math.max(max, Number(t.invoiceNo.slice(prefix.length))), 0);
+  const invoice: TaxInvoice = {
+    id: Math.max(0, ...db.taxInvoices.map((t) => t.id)) + 1,
+    invoiceNo: prefix + String(last + 1).padStart(4, '0'),
+    saleId: sale.id,
+    orderNo: sale.orderNo,
+    saleDate: sale.date,
+    date: sale.date,
+    issuedAt: atSale && !replaces ? sale.date : new Date().toISOString(),
+    buyer,
+    issuedBy: db.users[0]?.name ?? '',
+    cancelledAt: null,
+    cancelReason: '',
+    replacesInvoiceNo: replaces?.invoiceNo ?? null,
+    replacedByNo: null,
+    atSale,
+  };
+  db.taxInvoices.push(invoice);
+  sale.taxInvoiceNo = invoice.invoiceNo;
+  return invoice;
 }
 
 /**
@@ -2017,6 +2159,9 @@ function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpRespon
     recordMovement(db, db.products[index], 'receive', baseQty, unitCost, line.cogs, [], note);
   }
   Object.assign(sale, { status: 'cancelled', voidedAt: now, voidReason: reason });
+  // A full tax invoice of a voided bill is cancelled with it.
+  const invoice = db.taxInvoices.find((t) => t.saleId === sale.id && !t.cancelledAt);
+  if (invoice) Object.assign(invoice, { cancelledAt: now, cancelReason: `ยกเลิกบิล: ${reason}` });
   return ok(sale);
 }
 

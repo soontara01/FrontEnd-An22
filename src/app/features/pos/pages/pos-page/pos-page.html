@@ -149,6 +149,40 @@
           />
         </mat-form-field>
 
+        @if (store.storeInfo()?.vatRegistered) {
+          @if (store.buyer(); as buyer) {
+            <div class="buyer">
+              <mat-icon>receipt_long</mat-icon>
+              <div>
+                <div class="small"><strong>ใบกำกับภาษีเต็มรูป</strong></div>
+                <div>{{ buyer.name }}</div>
+                <div class="text-muted small">
+                  {{ buyer.taxId }}
+                  @if (buyerBranch(buyer); as b) {
+                    · {{ b }}
+                  }
+                </div>
+              </div>
+              <button mat-icon-button type="button" matTooltip="แก้ไข" (click)="requestInvoice()">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                type="button"
+                matTooltip="ไม่ต้องการใบกำกับเต็มรูป"
+                (click)="store.setBuyer(null)"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          } @else {
+            <button mat-button type="button" class="request-invoice" (click)="requestInvoice()">
+              <mat-icon>receipt_long</mat-icon>
+              ขอใบกำกับภาษีเต็มรูป
+            </button>
+          }
+        }
+
         <div class="totals">
           <div>
             <span>รวม {{ cart().itemCount }} ชิ้น</span>
@@ -248,7 +282,7 @@
             </span>
             <button mat-button type="button" [disabled]="!store.storeInfo()" (click)="printLast()">
               <mat-icon>print</mat-icon>
-              พิมพ์ใบเสร็จ
+              {{ sale.taxInvoiceNo ? 'พิมพ์ใบกำกับภาษี' : 'พิมพ์ใบเสร็จ' }}
             </button>
           </div>
         }
@@ -262,6 +296,15 @@
   @if (store.storeInfo(); as info) {
     <div class="print-stage" aria-hidden="true">
       <app-receipt #receipt [sale]="sale" [store]="info" />
+      @if (store.lastInvoice(); as inv) {
+        @if (inv.saleId === sale.id) {
+          @if (info.taxInvoicePaper === '80mm') {
+            <app-tax-invoice-slip #invoiceDoc [sale]="sale" [invoice]="inv" [store]="info" />
+          } @else {
+            <app-tax-invoice-document #invoiceDoc [sale]="sale" [invoice]="inv" [store]="info" />
+          }
+        }
+      }
     </div>
   }
 }

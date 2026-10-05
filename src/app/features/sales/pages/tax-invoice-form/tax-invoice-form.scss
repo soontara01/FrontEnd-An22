@@ -1,18 +1,17 @@
 .layout {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: 16px;
   align-items: flex-start;
 }
 
-form {
-  flex: 1 1 360px;
-  min-width: 0;
+.form-card {
+  flex: 1 1 340px;
+  max-width: 480px;
 }
 
-.toggle {
-  display: block;
-  margin-bottom: 16px;
+form {
+  padding-top: 8px;
 }
 
 .row {
@@ -21,13 +20,8 @@ form {
   align-items: flex-start;
   gap: 0 16px;
 
-  mat-form-field {
-    flex: 1 1 200px;
-  }
-
   mat-button-toggle-group {
-    margin-top: 4px;
-    margin-bottom: 20px;
+    margin: 4px 0 20px;
   }
 
   .branch-no {
@@ -35,19 +29,19 @@ form {
   }
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
-}
-
 .problem {
   color: var(--mat-sys-error);
   font: var(--mat-sys-body-small);
+  margin-bottom: 8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .preview {
+  flex: 1 1 600px;
   display: grid;
   gap: 8px;
   padding: 12px;
@@ -57,10 +51,13 @@ form {
   overflow-x: auto;
 }
 
-.paper {
+.quick {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  margin-bottom: 20px;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
 }

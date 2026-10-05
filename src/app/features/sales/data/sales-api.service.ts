@@ -9,6 +9,8 @@ import {
   Sale,
   SaleStatus,
   StoreInfo,
+  TaxInvoice,
+  TaxInvoiceBuyer,
 } from '@core/models';
 
 /** HTTP calls for the sales feature (provided in sales.routes.ts). */
@@ -44,6 +46,39 @@ export class SalesApi {
   /** Credit notes issued within a local-date range, newest first. */
   creditNotes(from: string | null, to: string | null): Observable<CreditNote[]> {
     return this.api.get<CreditNote[]>('credit-notes', rangeParams(from, to));
+  }
+
+  /** Full tax invoices issued within a local-date range, oldest first. */
+  taxInvoices(from: string | null, to: string | null): Observable<TaxInvoice[]> {
+    return this.api.get<TaxInvoice[]>('tax-invoices', rangeParams(from, to));
+  }
+
+  /** The bill's full tax invoice, or null when none was issued. */
+  taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {
+    return this.api.get<TaxInvoice | null>(`sales/${saleId}/tax-invoice`);
+  }
+
+  /** Every full tax invoice of the bill, oldest first (cancelled ones, then the valid one). */
+  taxInvoicesOf(saleId: number): Observable<TaxInvoice[]> {
+    return this.api.get<TaxInvoice[]>(`sales/${saleId}/tax-invoices`);
+  }
+
+  /** Cancels the valid invoice and issues a new one with corrected buyer details. */
+  reissueTaxInvoice(
+    saleId: number,
+    buyer: TaxInvoiceBuyer,
+    reason: string,
+  ): Observable<TaxInvoice> {
+    return this.api.post<TaxInvoice>(`sales/${saleId}/tax-invoice/reissue`, { buyer, reason });
+  }
+
+  issueTaxInvoice(saleId: number, buyer: TaxInvoiceBuyer): Observable<TaxInvoice> {
+    return this.api.post<TaxInvoice>(`sales/${saleId}/tax-invoice`, { buyer });
+  }
+
+  /** Buyer details last used with this tax ID (null = never). */
+  buyerByTaxId(taxId: string): Observable<TaxInvoiceBuyer | null> {
+    return this.api.get<TaxInvoiceBuyer | null>('tax-invoices/buyer', { taxId });
   }
 
   storeInfo(): Observable<StoreInfo> {

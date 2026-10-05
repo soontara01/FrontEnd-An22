@@ -5,6 +5,7 @@ import {
   ElementRef,
   Injector,
   computed,
+  effect,
   inject,
   signal,
   viewChild,
@@ -17,16 +18,19 @@ import {
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { filter, tap } from 'rxjs';
-import { PricedLine, Product, stockInPacks } from '@core/models';
+import { PricedLine, Product, TaxInvoiceBuyer, buyerBranchLabel, stockInPacks } from '@core/models';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { Receipt } from '@shared/components/receipt/receipt';
+import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
+import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
 import { printElement } from '@shared/utils/print-element';
 import { SellUnit, findByCode, searchProducts } from '../../data/product-lookup';
 import { PosStore } from '../../data/pos.store';
+import { BuyerDialog } from '../../dialogs/buyer-dialog/buyer-dialog';
 import { PaymentDialog, PaymentResult } from '../../dialogs/payment-dialog/payment-dialog';
 import {
   SerialPickData,
@@ -53,6 +57,8 @@ interface UnitOption extends SellUnit {
     EmptyState,
     LoadingSpinner,
     Receipt,
+    TaxInvoiceDocument,
+    TaxInvoiceSlip,
     AutofocusDirective,
     MATERIAL,
   ],
@@ -69,6 +75,9 @@ export default class PosPage {
   private readonly scanInput = viewChild.required<ElementRef<HTMLInputElement>>('scanInput');
   private readonly trigger = viewChild.required(MatAutocompleteTrigger);
   private readonly receipt = viewChild('receipt', { read: ElementRef<HTMLElement> });
+  private readonly invoiceDoc = viewChild('invoiceDoc', { read: ElementRef<HTMLElement> });
+  /** A full tax invoice print waits until the invoice of the last sale has loaded. */
+  private readonly invoicePrintPending = signal(false);
 
   protected readonly query = signal('');
   protected readonly scanError = signal('');
@@ -91,6 +100,13 @@ export default class PosPage {
 
   constructor() {
     this.store.load();
+    effect(() => {
+      const el = this.invoiceDoc()?.nativeElement;
+      if (!this.invoicePrintPending() || !el) return;
+      this.invoicePrintPending.set(false);
+      const paper = this.store.storeInfo()?.taxInvoicePaper === '80mm' ? 'fit' : 'A4';
+      setTimeout(() => printElement(el, paper));
+    });
   }
 
   protected stockText(product: Product): string {
@@ -205,8 +221,36 @@ export default class PosPage {
       });
   }
 
-  /** Prints the receipt of the last sale (rendered off-screen below the page). */
+  /** 'สาขา 00001' / 'สำนักงานใหญ่' of the requested buyer ('' = not a VAT registrant). */
+  protected buyerBranch(buyer: TaxInvoiceBuyer): string {
+    return buyerBranchLabel(buyer);
+  }
+
+  /** Buyer details for a full tax invoice issued with this sale. */
+  protected requestInvoice(): void {
+    this.dialog
+      .open<BuyerDialog, TaxInvoiceBuyer | null, TaxInvoiceBuyer>(BuyerDialog, {
+        data: this.store.buyer(),
+        injector: this.injector,
+        width: '480px',
+        maxWidth: '95vw',
+      })
+      .afterClosed()
+      .subscribe((buyer) => {
+        if (buyer) this.store.setBuyer(buyer);
+        this.focusScan();
+      });
+  }
+
+  /**
+   * Prints the last sale (rendered off-screen below the page): its full tax invoice (A4 or 80 mm
+   * per the store setting) when one was issued with it, else the 80 mm receipt.
+   */
   protected printLast(): void {
+    if (this.store.lastSale()?.taxInvoiceNo) {
+      this.invoicePrintPending.set(true);
+      return;
+    }
     // Let the dialog backdrop leave and the receipt render first.
     setTimeout(() => {
       const el = this.receipt()?.nativeElement;

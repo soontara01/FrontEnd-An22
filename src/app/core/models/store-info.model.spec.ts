@@ -31,6 +31,10 @@ describe('store info model', () => {
     );
     expect(storeInfoError({ ...valid, branchType: 'branch', branchNo: '00012' })).toBeNull();
     expect(storeInfoError({ ...valid, address: '' })).toBe('กรุณากรอกที่อยู่');
+    expect(storeInfoError({ ...valid, taxInvoicePaper: '80mm' })).toBeNull();
+    expect(storeInfoError({ ...valid, taxInvoicePaper: 'A5' as never })).toBe(
+      'ขนาดกระดาษใบกำกับภาษีไม่ถูกต้อง',
+    );
   });
 
   it('normalizes text and drops the branch number of a head office', () => {

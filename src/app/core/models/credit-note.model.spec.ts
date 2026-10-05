@@ -5,6 +5,7 @@ import {
   draftCreditNote,
   refundOptions,
   remainingQty,
+  returnSummary,
 } from './credit-note.model';
 import { PAYMENT_METHOD_DEFAULTS, PaymentMethod } from './payment-method.model';
 import { PROMOTION_DEFAULTS, Promotion } from './promotion.model';
@@ -154,6 +155,8 @@ const note = (over: Partial<CreditNote>): CreditNote => ({
   cnNo: 'CN-1',
   saleId: 1,
   orderNo: sale.orderNo,
+  taxInvoiceNo: null,
+  buyer: null,
   saleDate: sale.date,
   date: sale.date,
   cashier: '',
@@ -171,6 +174,39 @@ const note = (over: Partial<CreditNote>): CreditNote => ({
 const ret = (saleLineIndex: number, qty = 1, restock = true) => ({ saleLineIndex, qty, restock });
 
 describe('credit note model', () => {
+  it('summarises the returns of a bill: none, partial, then full', () => {
+    const bill = { lines: [{ qty: 1 }, { qty: 2 }] as SaleLine[] };
+    const cnLine = (saleLineIndex: number, qty: number) =>
+      ({ saleLineIndex, qty }) as CreditNote['lines'][number];
+    const a = note({
+      cnNo: 'CN-2',
+      date: '2026-10-06T03:00:00Z',
+      total: 100,
+      lines: [cnLine(1, 1)],
+    });
+    const b = note({
+      cnNo: 'CN-1',
+      date: '2026-10-05T03:00:00Z',
+      total: 250.5,
+      lines: [cnLine(0, 1), cnLine(1, 1)],
+    });
+    expect(returnSummary(bill, [])).toEqual({
+      returnStatus: 'none',
+      creditedTotal: 0,
+      creditNoteNos: [],
+    });
+    expect(returnSummary(bill, [a])).toEqual({
+      returnStatus: 'partial',
+      creditedTotal: 100,
+      creditNoteNos: ['CN-2'],
+    });
+    expect(returnSummary(bill, [a, b])).toEqual({
+      returnStatus: 'full',
+      creditedTotal: 350.5,
+      creditNoteNos: ['CN-1', 'CN-2'],
+    });
+  });
+
   it('refunds a share of what was paid and keeps the exact remainder for the last units', () => {
     const first = draftCreditNote(sale, [], [ret(1)], promotions);
     expect(first.error).toBeNull();

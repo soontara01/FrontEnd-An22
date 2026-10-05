@@ -1,0 +1,171 @@
+// A4 sheet. Paper look on screen (tokens, dark mode readable); black on white when printed.
+:host {
+  display: block;
+  width: fit-content;
+}
+
+.doc {
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  padding: 14mm 14mm 12mm;
+  font:
+    13px/1.5 'Sarabun',
+    system-ui,
+    sans-serif;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface-container-lowest);
+
+  @media print {
+    color: #000;
+    background: #fff;
+  }
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid currentColor;
+}
+
+.shop {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.title {
+  text-align: right;
+
+  .name {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .kind {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 0 12px;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+  }
+
+  .cancelled {
+    margin-top: 4px;
+    font-weight: 700;
+    color: var(--mat-sys-error);
+
+    @media print {
+      color: #000;
+    }
+  }
+}
+
+.parties {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 16px;
+  margin: 12px 0;
+}
+
+.buyer,
+.meta {
+  padding: 8px 12px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+
+.label {
+  font-weight: 700;
+}
+
+.strong {
+  font-weight: 700;
+}
+
+.meta > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 4px 6px;
+    border: 1px solid currentColor;
+    vertical-align: top;
+    text-align: left;
+  }
+
+  th {
+    text-align: center;
+  }
+
+  .no {
+    width: 36px;
+    text-align: center;
+  }
+
+  .num {
+    text-align: right;
+    white-space: nowrap;
+  }
+}
+
+.sub {
+  font-size: 11px;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.words {
+  align-self: end;
+  font-weight: 700;
+}
+
+.totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.grand {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 2px solid currentColor;
+  font-weight: 700;
+}
+
+.paid {
+  margin-top: 12px;
+}
+
+footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  margin-top: 48px;
+  text-align: center;
+}
+
+.line {
+  height: 32px;
+  border-bottom: 1px dotted currentColor;
+  margin-bottom: 4px;
+}
+
+.note {
+  margin-top: 24px;
+  font-size: 11px;
+}

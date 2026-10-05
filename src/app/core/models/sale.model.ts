@@ -1,6 +1,7 @@
 import type { PaymentType } from './payment-method.model';
 import { toIsoDate } from './price.model';
 import type { ItemType, VatType } from './product.model';
+import type { TaxInvoiceBuyer } from './tax-invoice.model';
 
 export type SaleStatus = 'pending' | 'paid' | 'cancelled';
 
@@ -15,6 +16,22 @@ export const SALE_STATUS_BADGE: Record<SaleStatus, string> = {
   pending: 'badge-warn',
   paid: 'badge-success',
   cancelled: 'badge-error',
+};
+
+/** Goods returned through credit notes (server-derived, see `returnSummary()`). */
+export type ReturnStatus = 'none' | 'partial' | 'full';
+
+export const RETURN_STATUS_LABEL: Record<ReturnStatus, string> = {
+  none: '',
+  partial: 'คืนบางส่วน',
+  full: 'คืนทั้งบิล',
+};
+
+/** Badge class per return status (global `.badge-*` classes). */
+export const RETURN_STATUS_BADGE: Record<ReturnStatus, string> = {
+  none: '',
+  partial: 'badge-warn',
+  full: 'badge-error',
 };
 
 /**
@@ -99,6 +116,14 @@ export interface Sale {
   status: SaleStatus;
   voidedAt: string | null;
   voidReason: string;
+  /** Full tax invoice issued for this bill (server-set), null = none */
+  taxInvoiceNo: string | null;
+  /** Read-only, server-derived from the bill's credit notes (any date): the bill itself never changes */
+  returnStatus: ReturnStatus;
+  /** Σ refunded by credit notes */
+  creditedTotal: number;
+  /** Credit note numbers, oldest first */
+  creditNoteNos: string[];
 }
 
 /** Defaults for fields missing from older stored sales (before the POS existed). */
@@ -117,6 +142,10 @@ export const SALE_DEFAULTS: Omit<
   billPromotionIds: [],
   voidedAt: null,
   voidReason: '',
+  taxInvoiceNo: null,
+  returnStatus: 'none',
+  creditedTotal: 0,
+  creditNoteNos: [],
 };
 
 /** Local calendar day ('YYYY-MM-DD') a sale was made. */
@@ -170,4 +199,6 @@ export interface SalePayload {
   payments: PaymentInput[];
   customer: string;
   expectedTotal: number;
+  /** Buyer for a full tax invoice issued together with the sale (null = abbreviated only) */
+  buyer: TaxInvoiceBuyer | null;
 }

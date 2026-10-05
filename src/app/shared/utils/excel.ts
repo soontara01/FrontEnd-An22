@@ -14,9 +14,16 @@ export function xlsxBlob(buffer: ArrayBuffer): Blob {
   });
 }
 
-/** Bold white header on blue; reference-only columns (1-based indexes in `infoCols`) in grey. */
-export function styleHeaderRow(sheet: Worksheet, infoCols: ReadonlySet<number> = new Set()): void {
-  const header = sheet.getRow(1);
+/**
+ * Bold white header on blue (row `rowNumber`, frozen with the rows above it); reference-only
+ * columns (1-based indexes in `infoCols`) in grey.
+ */
+export function styleHeaderRow(
+  sheet: Worksheet,
+  infoCols: ReadonlySet<number> = new Set(),
+  rowNumber = 1,
+): void {
+  const header = sheet.getRow(rowNumber);
   header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   header.alignment = { vertical: 'middle', wrapText: true };
   header.height = 30;
@@ -27,5 +34,5 @@ export function styleHeaderRow(sheet: Worksheet, infoCols: ReadonlySet<number> =
       fgColor: { argb: infoCols.has(col) ? 'FF9E9E9E' : 'FF1565C0' },
     };
   });
-  sheet.views = [{ state: 'frozen', ySplit: 1 }];
+  sheet.views = [{ state: 'frozen', ySplit: rowNumber }];
 }
