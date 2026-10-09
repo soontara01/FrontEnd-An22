@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs';
 import {
   AbstractControl,
   FormControl,
@@ -154,7 +155,12 @@ export default class SkuForm implements OnInit {
     return this.form.controls.packUnits;
   }
 
-  private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+  // Raw value: `serialControl` / `itemType` are disabled (locked) while the SKU has stock, and a
+  // form's value leaves disabled controls out — the serial fields would disappear.
+  private readonly value = toSignal(
+    this.form.valueChanges.pipe(map(() => this.form.getRawValue())),
+    { initialValue: this.form.getRawValue() },
+  );
 
   protected readonly serialControl = computed(() => !!this.value().serialControl);
   protected readonly isService = computed(() => this.value().itemType === 'service');

@@ -103,10 +103,18 @@
 
     @if (store.storeInfo(); as info) {
       @if (preview(); as inv) {
-        <div class="preview">
-          <div class="text-muted small">ตัวอย่าง (A4)</div>
-          <app-tax-invoice-document [sale]="s" [invoice]="inv" [store]="info" />
-        </div>
+        <!-- Same paper as the bill page prints on (Settings → taxInvoicePaper) -->
+        @if (info.taxInvoicePaper === '80mm') {
+          <div class="preview slip">
+            <div class="text-muted small">ตัวอย่าง (80 มม.)</div>
+            <app-tax-invoice-slip [sale]="s" [invoice]="inv" [store]="info" />
+          </div>
+        } @else {
+          <div class="preview">
+            <div class="text-muted small">ตัวอย่าง (A4)</div>
+            <app-tax-invoice-document [sale]="s" [invoice]="inv" [store]="info" />
+          </div>
+        }
       }
     }
   </div>
