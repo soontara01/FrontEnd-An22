@@ -15,8 +15,10 @@ import { RouterLink } from '@angular/router';
 import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
+import { firstValueFrom, forkJoin } from 'rxjs';
 import {
   Product,
+  SerialNumber,
   SKU_STATUS_BADGE,
   SKU_STATUS_LABEL,
   StockLevel,
@@ -32,6 +34,8 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { saveBlob, timestampedName } from '@shared/utils/download';
+import { STOCK_LEVEL_LABEL, inventoryXlsx } from '../../data/inventory-excel';
 import { InventoryStore } from '../../data/inventory.store';
 import { StockIssueDialog } from '../../dialogs/stock-issue-dialog/stock-issue-dialog';
 import { StockReceiveDialog } from '../../dialogs/stock-receive-dialog/stock-receive-dialog';
@@ -78,11 +82,8 @@ export default class ProductList {
   protected readonly filterText = signal('');
   protected readonly lowOnly = signal(false);
 
-  protected readonly levelLabel: Record<StockLevel, string> = {
-    ok: 'ปกติ',
-    low: 'ใกล้หมด',
-    out: 'หมด',
-  };
+  protected readonly levelLabel = STOCK_LEVEL_LABEL;
+  protected readonly exporting = signal(false);
   protected readonly levelClass: Record<StockLevel, string> = {
     ok: 'badge-success',
     low: 'badge-warn',
@@ -120,6 +121,22 @@ export default class ProductList {
       this.dataSource.paginator = this.paginator() ?? null;
       this.dataSource.sort = this.sort() ?? null;
     });
+  }
+
+  /** Exports the rows currently shown (search / filter applied) + their in-stock serials. */
+  protected async exportExcel(): Promise<void> {
+    this.exporting.set(true);
+    try {
+      const rows = this.dataSource.filteredData;
+      const serialIds = rows.filter((p) => p.serialControl && p.stock > 0).map((p) => p.id);
+      const serials: SerialNumber[] = serialIds.length
+        ? (await firstValueFrom(forkJoin(serialIds.map((id) => this.store.serials(id))))).flat()
+        : [];
+      const blob = await inventoryXlsx(rows, serials);
+      saveBlob(blob, `${timestampedName('inventory')}.xlsx`);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   protected statusText(p: Product): string {
