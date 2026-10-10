@@ -4,6 +4,8 @@ Angular 22 SPA (standalone, zoneless, signals) + Angular Material 3. Backend is 
 
 POS (sales screen, menu ขายหน้าร้าน `features/pos`, `PosStore` holds the cart + parked bills) plan + decisions: `docs/pos-plan.md` (in progress). Its rules live in `core/models/pos-pricing.model.ts` (`priceCart()` / `cartError()`) and `pos-payment.model.ts` (`paymentSummary()` / `paymentError()`) — shared by the POS screen and the mock; don't re-implement promotion or payment math elsewhere.
 
+SaaS direction (multi-company, many branches per company) plan + decisions: `docs/saas-plan.md` (decisions D1–D7 confirmed 2026-10-10, not started) — tenant comes only from the token, the working branch from the `X-Branch-Id` header (server-checked).
+
 Domain: front end of a **retail system for an IT / electrical-appliance store** (serial numbers, warranty, VAT-inclusive prices). SKU-master roadmap: round 1 done (VAT, categories, packs/barcodes, short name + image, sale status); round 2 done (suppliers + reorder); round 3 done (Excel import/export, label printing).
 
 ## Commands
