@@ -4,6 +4,7 @@ import {
   CartItem,
   Category,
   FreeSerial,
+  ManualDiscount,
   PaymentInput,
   PaymentMethod,
   PricedCart,
@@ -15,9 +16,11 @@ import {
   TaxInvoice,
   TaxInvoiceBuyer,
   cartError,
+  manualDiscountError,
   priceCart,
   todayIso,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { StorageService } from '@core/services/storage.service';
 import { PosApi } from './pos-api.service';
 
@@ -31,6 +34,9 @@ export interface HeldBill {
   freeSerials: FreeSerial[];
   /** Full tax invoice requested for the bill (missing in bills parked before it existed) */
   buyer?: TaxInvoiceBuyer | null;
+  /** Manual discount on the whole bill + its reason (missing in bills parked before it existed) */
+  billManual?: ManualDiscount | null;
+  manualReason?: string;
   /** Total when parked (display only; re-priced on resume) */
   total: number;
 }
@@ -46,6 +52,7 @@ const HOLDS_KEY = 'pos.holds';
 export class PosStore {
   private readonly api = inject(PosApi);
   private readonly storage = inject(StorageService);
+  private readonly auth = inject(AuthService);
 
   private readonly _products = signal<Product[]>([]);
   private readonly _promotions = signal<Promotion[]>([]);
@@ -57,6 +64,8 @@ export class PosStore {
   private readonly _freeSerials = signal<FreeSerial[]>([]);
   private readonly _customer = signal('');
   private readonly _buyer = signal<TaxInvoiceBuyer | null>(null);
+  private readonly _billManual = signal<ManualDiscount | null>(null);
+  private readonly _manualReason = signal('');
   private readonly _holds = signal<HeldBill[]>(this.storage.get<HeldBill[]>(HOLDS_KEY) ?? []);
   private readonly _lastSale = signal<Sale | null>(null);
   private readonly _lastInvoice = signal<TaxInvoice | null>(null);
@@ -69,6 +78,13 @@ export class PosStore {
   readonly customer = this._customer.asReadonly();
   /** Buyer of a full tax invoice issued with this bill (null = abbreviated receipt only) */
   readonly buyer = this._buyer.asReadonly();
+  /** Manual discount on the whole bill (ส่วนลดพิเศษท้ายบิล) */
+  readonly billManual = this._billManual.asReadonly();
+  /** Why manual discounts are given (one reason per bill) */
+  readonly manualReason = this._manualReason.asReadonly();
+  readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  /** Staff ceiling for manual discounts (% of a line after promotions) */
+  readonly manualMaxPercent = computed(() => this._storeInfo()?.manualDiscountMaxPercent ?? 0);
   readonly holds = this._holds.asReadonly();
   readonly lastSale = this._lastSale.asReadonly();
   /** Full tax invoice issued with the last sale, if any */
@@ -93,11 +109,21 @@ export class PosStore {
         date: todayIso(),
       },
       this._freeSerials(),
+      this._billManual(),
     ),
   );
 
+  /** Reason / staff-ceiling problem of the manual discounts (null = fine or none). */
+  readonly manualProblem = computed(() =>
+    manualDiscountError(this.cart(), {
+      reason: this._manualReason(),
+      isAdmin: this.isAdmin(),
+      maxPercent: this.manualMaxPercent(),
+    }),
+  );
+
   /** First reason the bill cannot be paid yet (null = ready). */
-  readonly blocker = computed(() => cartError(this.cart()));
+  readonly blocker = computed(() => cartError(this.cart()) ?? this.manualProblem());
 
   readonly promotionName = computed(
     () => new Map(this._promotions().map((p) => [p.id, `${p.code} ${p.name}`])),
@@ -161,6 +187,22 @@ export class PosStore {
     this._items.update((items) => items.map((i, n) => (n === index ? { ...i, qty } : i)));
   }
 
+  /** Manual discount on one cart line (null = none). */
+  setLineDiscount(index: number, discount: ManualDiscount | null): void {
+    this._items.update((items) =>
+      items.map((i, n) => (n === index ? { ...i, manualDiscount: discount } : i)),
+    );
+  }
+
+  /** Manual discount on the whole bill (null = none). */
+  setBillDiscount(discount: ManualDiscount | null): void {
+    this._billManual.set(discount);
+  }
+
+  setManualReason(reason: string): void {
+    this._manualReason.set(reason);
+  }
+
   remove(index: number): void {
     this._items.update((items) => items.filter((_, n) => n !== index));
   }
@@ -191,6 +233,8 @@ export class PosStore {
     this._freeSerials.set([]);
     this._customer.set('');
     this._buyer.set(null);
+    this._billManual.set(null);
+    this._manualReason.set('');
   }
 
   /** Parks the current bill and starts an empty one. */
@@ -204,6 +248,8 @@ export class PosStore {
       items: this._items(),
       freeSerials: this._freeSerials(),
       buyer: this._buyer(),
+      billManual: this._billManual(),
+      manualReason: this._manualReason(),
       total: this.cart().total,
     };
     this.saveHolds([...this._holds(), bill]);
@@ -220,6 +266,8 @@ export class PosStore {
     this._freeSerials.set(bill.freeSerials);
     this._customer.set(bill.customer);
     this._buyer.set(bill.buyer ?? null);
+    this._billManual.set(bill.billManual ?? null);
+    this._manualReason.set(bill.manualReason ?? '');
   }
 
   discardHold(id: string): void {
@@ -236,6 +284,8 @@ export class PosStore {
         customer: this._customer().trim() || (this._buyer()?.name ?? ''),
         expectedTotal: this.cart().total,
         buyer: this._buyer(),
+        billManualDiscount: this._billManual(),
+        manualDiscountReason: this._manualReason().trim(),
       })
       .pipe(
         tap({

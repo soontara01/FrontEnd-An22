@@ -55,6 +55,12 @@ form {
   overflow-x: auto;
 }
 
+// 80 mm slip: keep the box to the slip's own width instead of stretching like the A4 page.
+.preview.slip {
+  flex: 0 1 auto;
+  justify-items: start;
+}
+
 .quick {
   display: flex;
   flex-wrap: wrap;

@@ -429,6 +429,8 @@
               />
               @if (form.controls.serialPrefix.invalid) {
                 <mat-error>A-Z, 0-9, - ไม่เกิน 10 ตัว</mat-error>
+              } @else if (currentStock()) {
+                <mat-hint>ใช้กับ Serial ที่รับเข้าใหม่ — Serial เดิมไม่เปลี่ยน</mat-hint>
               }
             </mat-form-field>
 

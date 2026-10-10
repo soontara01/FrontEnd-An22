@@ -1,0 +1,64 @@
+<h2 mat-dialog-title>ส่วนลดพิเศษ · {{ data.title }}</h2>
+<mat-dialog-content>
+  <p class="text-muted small">
+    ลดต่อจากโปรโมชั่น จากยอด {{ data.base | number: '1.2-2' }} บาท
+    @if (!data.isAdmin) {
+      · พนักงานให้ได้ไม่เกิน {{ data.maxPercent }}%
+    }
+  </p>
+
+  <mat-button-toggle-group
+    class="kind"
+    aria-label="ประเภทส่วนลด"
+    [value]="kind()"
+    (change)="kind.set($event.value)"
+  >
+    <mat-button-toggle value="percent">เปอร์เซ็นต์ (%)</mat-button-toggle>
+    <mat-button-toggle value="amount">จำนวนเงิน (บาท)</mat-button-toggle>
+  </mat-button-toggle-group>
+
+  <mat-form-field appearance="outline" class="w-full">
+    <mat-label>{{ kind() === 'percent' ? 'ลดกี่ %' : 'ลดกี่บาท' }}</mat-label>
+    <input
+      matInput
+      appAutofocus
+      type="number"
+      min="0"
+      [attr.max]="kind() === 'percent' ? 100 : data.base"
+      step="0.01"
+      [value]="value() || ''"
+      (input)="setValue($any($event.target).value)"
+      (keydown.enter)="save()"
+    />
+    <span matTextSuffix>{{ kind() === 'percent' ? '%' : 'บาท' }}</span>
+  </mat-form-field>
+
+  <div class="preview">
+    <span>ลด {{ baht() | number: '1.2-2' }} บาท</span>
+    <strong>เหลือ {{ left() | number: '1.2-2' }} บาท</strong>
+  </div>
+
+  <div class="quick">
+    @for (q of quickReasons; track q) {
+      <button mat-stroked-button type="button" (click)="reason.set(q)">{{ q }}</button>
+    }
+  </div>
+  <mat-form-field appearance="outline" class="w-full">
+    <mat-label>เหตุผล (จำเป็น · ใช้ทั้งบิล)</mat-label>
+    <input matInput [value]="reason()" (input)="reason.set($any($event.target).value)" />
+  </mat-form-field>
+
+  @if (problem(); as message) {
+    <div class="problem">{{ message }}</div>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  @if (data.current) {
+    <button mat-button type="button" class="danger" (click)="removeDiscount()">ล้างส่วนลด</button>
+  }
+  <button mat-button mat-dialog-close>ยกเลิก</button>
+  <button mat-flat-button type="button" [disabled]="!!problem()" (click)="save()">
+    <mat-icon>check</mat-icon>
+    ใช้ส่วนลด
+  </button>
+</mat-dialog-actions>

@@ -16,6 +16,7 @@ describe('buildSalesTaxReport', () => {
     listPrice: amount,
     itemDiscount: 0,
     billDiscount: 0,
+    manualDiscount: 0,
     amount,
     vatType,
     itemType: 'stock',

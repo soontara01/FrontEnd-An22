@@ -64,8 +64,8 @@
         </div>
         <div class="sub">
           {{ line.qty }} {{ line.unit }} × {{ line.unitPrice | number: '1.2-2' }}
-          @if (line.itemDiscount + line.billDiscount) {
-            · ลด {{ line.itemDiscount + line.billDiscount | number: '1.2-2' }}
+          @if (line.itemDiscount + line.billDiscount + line.manualDiscount) {
+            · ลด {{ line.itemDiscount + line.billDiscount + line.manualDiscount | number: '1.2-2' }}
           }
           @if (line.freeOfPromotionId !== null) {
             · ของแถม

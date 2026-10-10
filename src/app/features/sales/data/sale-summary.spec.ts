@@ -14,6 +14,7 @@ describe('summarizeSales', () => {
     listPrice: amount,
     itemDiscount: 0,
     billDiscount: 0,
+    manualDiscount: 0,
     amount,
     vatType: 'vat7',
     itemType: 'stock',

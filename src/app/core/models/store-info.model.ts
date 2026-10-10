@@ -29,6 +29,8 @@ export interface StoreInfo {
   taxInvoicePaper: InvoicePaper;
   /** Days after the sale day staff may exchange goods for the same SKU (0 = no limit; admins any time) */
   exchangeDays: number;
+  /** Highest manual discount (% of a line after promotions) staff may give; 0 = none, admins any */
+  manualDiscountMaxPercent: number;
 }
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {
@@ -44,6 +46,7 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
   receiptFooter: 'ขอบคุณที่ใช้บริการ',
   taxInvoicePaper: 'A4',
   exchangeDays: 7,
+  manualDiscountMaxPercent: 5,
 };
 
 /** Receipt title by VAT registration. */
@@ -74,6 +77,10 @@ export function storeInfoError(s: StoreInfo): string | null {
   if (!Number.isInteger(s.exchangeDays) || s.exchangeDays < 0 || s.exchangeDays > 365) {
     return 'จำนวนวันเปลี่ยนสินค้าต้องเป็นจำนวนเต็ม 0–365';
   }
+  const max = s.manualDiscountMaxPercent;
+  if (!Number.isFinite(max) || max < 0 || max > 100) {
+    return 'เพดานส่วนลดพิเศษต้องอยู่ระหว่าง 0–100%';
+  }
   return null;
 }
 
@@ -91,5 +98,8 @@ export function normalizeStoreInfo(s: StoreInfo): StoreInfo {
     posId: s.posId.trim(),
     receiptFooter: s.receiptFooter.trim(),
     exchangeDays: Number(s.exchangeDays ?? STORE_INFO_DEFAULTS.exchangeDays),
+    manualDiscountMaxPercent: Number(
+      s.manualDiscountMaxPercent ?? STORE_INFO_DEFAULTS.manualDiscountMaxPercent,
+    ),
   };
 }

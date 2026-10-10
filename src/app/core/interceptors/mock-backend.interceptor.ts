@@ -81,6 +81,7 @@ import {
   paymentError,
   paymentSummary,
   priceCart,
+  manualDiscountError,
   voidError,
   saleDay,
   normalizeStoreInfo,
@@ -688,11 +689,12 @@ const SEED_SALES: Sale[] = (
 
 /** Fills POS fields missing from sales stored before the POS existed. */
 function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
-  // Lines stored before listPrice / itemType were snapshotted.
+  // Lines stored before listPrice / itemType / manual discounts existed.
   const lines = (s.lines ?? []).map((l) => ({
     ...l,
     listPrice: l.listPrice ?? l.unitPrice,
     itemType: l.itemType ?? 'stock',
+    manualDiscount: l.manualDiscount ?? 0,
   }));
   return { ...SALE_DEFAULTS, subtotal: s.total, ...s, lines } as Sale;
 }
@@ -735,6 +737,13 @@ const seedDb = (): MockDb => ({
 });
 
 const LATENCY_MS = 300;
+
+/** The user of the request being handled (set by the interceptor before `handle()`). */
+let actor: User | undefined;
+/** Name recorded as cashier / issuer on documents. */
+const actorName = (): string => actor?.name ?? '';
+/** Admin-only rules (exchange window, manual-discount ceiling) follow the logged-in user. */
+const actorIsAdmin = (): boolean => actor?.role === 'admin';
 
 /**
  * Fake backend for development without a real API.
@@ -785,6 +794,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const generated = syncSerials(db);
   const costed = migrateCosting(db);
   const path = req.url.slice(base.length + 1);
+  // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
+  actor = requestUser(req, db.users);
   const response$ = handle(req, path, db);
   if (generated || costed || req.method !== 'GET') storage.set(DB_KEY, db);
 
@@ -1874,9 +1885,17 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     body.items ?? [],
     { products: db.products, promotions: db.promotions, categories: db.categories, date: today },
     body.freeSerials ?? [],
+    body.billManualDiscount ?? null,
   );
   const cartProblem = cartError(cart);
   if (cartProblem) return error(400, cartProblem);
+  const manualReason = (body.manualDiscountReason ?? '').trim();
+  const manualProblem = manualDiscountError(cart, {
+    reason: manualReason,
+    isAdmin: actorIsAdmin(),
+    maxPercent: db.storeInfo.manualDiscountMaxPercent,
+  });
+  if (manualProblem) return error(400, manualProblem);
   for (const line of cart.lines) {
     if (!line.serial) continue;
     const unit = db.serials.find((s) => s.serial === line.serial);
@@ -1909,8 +1928,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     id: Math.max(0, ...db.sales.map((s) => s.id)) + 1,
     orderNo,
     date: now.toISOString(),
-    // The real server takes the cashier from the token; the mock only knows the admin login.
-    cashier: db.users[0]?.name ?? '',
+    cashier: actorName(),
     customer: (body.customer ?? '').trim(),
     lines,
     payments: paid.payments,
@@ -1931,6 +1949,9 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     creditedTotal: 0,
     creditNoteNos: [],
     exchangeNos: [],
+    manualDiscount: cart.manualDiscount,
+    manualDiscountReason: cart.manualDiscount > 0 ? manualReason : '',
+    manualDiscountBy: cart.manualDiscount > 0 ? actorName() : '',
   };
   db.sales.push(sale);
   // Full tax invoice requested at the POS: issued with the sale, same date.
@@ -2071,7 +2092,7 @@ function createCreditNote(
     buyer: db.taxInvoices.find((t) => t.invoiceNo === sale.taxInvoiceNo)?.buyer ?? null,
     saleDate: sale.date,
     date: now.toISOString(),
-    cashier: db.users[0]?.name ?? '',
+    cashier: actorName(),
     reason: payload.reason,
     lines: draft.lines,
     deductions: draft.deductions,
@@ -2109,8 +2130,7 @@ function createExchange(
     creditNotes: db.creditNotes.filter((n) => n.saleId === sale.id),
     exchanges,
     store: db.storeInfo,
-    // The real server takes the role from the token; the mock only knows the admin login.
-    isAdmin: true,
+    isAdmin: actorIsAdmin(),
     today,
     products: db.products,
   });
@@ -2208,7 +2228,7 @@ function createExchange(
     orderNo: sale.orderNo,
     saleDate: sale.date,
     date: now.toISOString(),
-    cashier: db.users[0]?.name ?? '',
+    cashier: actorName(),
     reason: payload.reason,
     lines,
   };
@@ -2251,7 +2271,7 @@ function createTaxInvoice(
     date: sale.date,
     issuedAt: atSale && !replaces ? sale.date : new Date().toISOString(),
     buyer,
-    issuedBy: db.users[0]?.name ?? '',
+    issuedBy: actorName(),
     cancelledAt: null,
     cancelReason: '',
     replacesInvoiceNo: replaces?.invoiceNo ?? null,
@@ -2338,14 +2358,39 @@ function handleStoreInfo(
   return notFound(req, path);
 }
 
+/**
+ * Mock logins: `admin` / `admin` (the first user), or any other user by e-mail (or the part before
+ * @) with `MOCK_USER_PASSWORD`; inactive users are refused. The token names the user so later
+ * requests know who is calling (`requestUser()`).
+ */
 function login(
   { username, password }: LoginRequest,
   users: User[],
 ): Observable<HttpResponse<LoginResponse>> {
   if (username === 'admin' && password === 'admin') {
-    return ok({ token: 'mock-jwt-token', user: users[0] });
+    return ok({ token: ADMIN_TOKEN, user: users[0] });
   }
-  return error(401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+  const name = (username ?? '').trim().toLowerCase();
+  const user = users.find(
+    (u) =>
+      u.id !== users[0]?.id && (u.email.toLowerCase() === name || u.email.split('@')[0] === name),
+  );
+  if (!user || password !== MOCK_USER_PASSWORD) {
+    return error(401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+  }
+  if (!user.active) return error(401, 'บัญชีนี้ถูกปิดใช้งาน');
+  return ok({ token: `${ADMIN_TOKEN}.u${user.id}`, user });
+}
+
+const ADMIN_TOKEN = 'mock-jwt-token';
+/** Password of every non-admin mock user. */
+const MOCK_USER_PASSWORD = '1234';
+
+/** Who sent the request: the user named by the token, else the admin (also specs without a token). */
+function requestUser(req: HttpRequest<unknown>, users: User[]): User | undefined {
+  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
+  const id = /^mock-jwt-token\.u(\d+)$/.exec(token)?.[1];
+  return (id && users.find((u) => u.id === Number(id))) || users[0];
 }
 
 function ok<T>(body: T): Observable<HttpResponse<T>> {

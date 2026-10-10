@@ -1,6 +1,6 @@
 import { Category } from './category.model';
-import { PricingContext, cartError, priceCart } from './pos-pricing.model';
-import { PRODUCT_DEFAULTS, Product } from './product.model';
+import { PricingContext, cartError, manualDiscountError, priceCart } from './pos-pricing.model';
+import { PRODUCT_DEFAULTS, Product, vatBreakdown } from './product.model';
 import { PROMOTION_DEFAULTS, Promotion } from './promotion.model';
 import { CartItem } from './sale.model';
 
@@ -291,5 +291,108 @@ describe('priceCart', () => {
 
   it('rejects an empty cart', () => {
     expect(cartError(priceCart([], ctx([])))).toBe('ยังไม่มีสินค้าในบิล');
+  });
+});
+
+describe('priceCart – manual discounts (ส่วนลดพิเศษ)', () => {
+  const tenPercent = promo(1, {
+    scope: { all: false, productIds: [1], categoryIds: [] },
+    discount: { kind: 'percent', value: 10, maxDiscount: null },
+  });
+
+  it('takes line discounts after the promotions, in percent or baht', () => {
+    const cart = priceCart(
+      [
+        item(1, 1, { manualDiscount: { kind: 'percent', value: 10 } }),
+        item(2, 1, { manualDiscount: { kind: 'amount', value: 50 } }),
+      ],
+      ctx([product(1, { currentPrice: 1000 }), product(2, { currentPrice: 500 })], [tenPercent]),
+    );
+    // 1000 − 10% promo = 900, then −10% manual = 810; 500 − 50 = 450
+    expect(cart.lines.map((l) => [l.itemDiscount, l.manualDiscount, l.amount])).toEqual([
+      [100, 90, 810],
+      [0, 50, 450],
+    ]);
+    expect(cart.manualDiscount).toBe(140);
+    expect(cart.total).toBe(1260);
+    for (const l of cart.lines) expect(l.vat).toBe(vatBreakdown(l.amount, 'vat7').vat);
+  });
+
+  it('spreads the bill discount pro rata over what is left, satang included', () => {
+    const cart = priceCart(
+      [item(1, 1, { manualDiscount: { kind: 'percent', value: 10 } }), item(2)],
+      ctx([product(1, { currentPrice: 1000 }), product(2, { currentPrice: 500 })], [tenPercent]),
+      [],
+      { kind: 'amount', value: 100 },
+    );
+    expect(cart.manualBillDiscount).toBe(100);
+    expect(cart.manualDiscount).toBe(190);
+    expect(cart.total).toBe(1210); // 810 + 500 − 100
+    const shares = cart.lines.map((l, i) => l.manualDiscount - [90, 0][i]);
+    expect(shares.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 2);
+    expect(shares[0]).toBeCloseTo((100 * 810) / 1310, 1);
+  });
+
+  it('never goes below zero and reports invalid values', () => {
+    const p = product(1, { currentPrice: 900 });
+    const capped = priceCart(
+      [item(1, 1, { manualDiscount: { kind: 'amount', value: 2000 } })],
+      ctx([p]),
+    );
+    expect(capped.lines[0]).toMatchObject({ manualDiscount: 900, amount: 0 });
+
+    const bad = priceCart(
+      [item(1, 1, { manualDiscount: { kind: 'percent', value: 150 } })],
+      ctx([p]),
+    );
+    expect(cartError(bad)).toBe('SKU-1: ส่วนลดพิเศษต้องมากกว่า 0 และไม่เกิน 100%');
+    const satang = priceCart([item(1)], ctx([p]), [], { kind: 'amount', value: 1.234 });
+    expect(cartError(satang)).toBe('ส่วนลดท้ายบิล: จำนวนเงินส่วนลดพิเศษไม่ถูกต้อง');
+  });
+
+  it('warns (without blocking) when the line ends up below cost', () => {
+    const p = product(1, { currentPrice: 1070, avgCost: 900 }); // net 1000, cost 900
+    const cart = priceCart(
+      [item(1, 1, { manualDiscount: { kind: 'percent', value: 20 } })],
+      ctx([p]),
+    );
+    expect(cart.issues).toEqual([
+      {
+        cartIndex: 0,
+        productId: 1,
+        message: 'SKU-1 ขายต่ำกว่าทุนหลังส่วนลดพิเศษ',
+        blocking: false,
+      },
+    ]);
+    expect(cartError(cart)).toBeNull();
+  });
+
+  it('leaves promotion eligibility alone', () => {
+    // 1000 reaches the bill promotion; a 50% manual discount does not take it away
+    const cart = priceCart(
+      [item(1, 1, { manualDiscount: { kind: 'percent', value: 50 } })],
+      ctx([product(1, { currentPrice: 1000 })], [billPromo(5)]),
+    );
+    expect(cart.billDiscount).toBe(100);
+    expect(cart.lines[0]).toMatchObject({ billDiscount: 100, manualDiscount: 450, amount: 450 });
+  });
+
+  it('needs a reason and keeps staff within the ceiling', () => {
+    const at = (value: number) =>
+      priceCart(
+        [item(1, 1, { manualDiscount: { kind: 'percent', value } })],
+        ctx([product(1, { currentPrice: 1000 })]),
+      );
+    const rule = { reason: 'ลูกค้าประจำ', isAdmin: false, maxPercent: 5 };
+    expect(
+      manualDiscountError(priceCart([item(1)], ctx([product(1)])), { ...rule, reason: '' }),
+    ).toBe(null);
+    expect(manualDiscountError(at(5), { ...rule, reason: ' ' })).toBe('กรุณาระบุเหตุผลส่วนลดพิเศษ');
+    expect(manualDiscountError(at(5), rule)).toBeNull();
+    expect(manualDiscountError(at(6), rule)).toBe(
+      'ส่วนลดพิเศษ SKU-1 เกิน 5% — ให้ผู้ดูแลระบบทำรายการ',
+    );
+    expect(manualDiscountError(at(6), { ...rule, isAdmin: true })).toBeNull();
+    expect(manualDiscountError(at(1), { ...rule, maxPercent: 0 })).not.toBeNull();
   });
 });

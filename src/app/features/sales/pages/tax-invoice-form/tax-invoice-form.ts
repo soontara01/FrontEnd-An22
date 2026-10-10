@@ -30,6 +30,7 @@ import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
+import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { SalesStore } from '../../data/sales.store';
@@ -49,6 +50,7 @@ import { SalesStore } from '../../data/sales.store';
     PageHeader,
     LoadingSpinner,
     TaxInvoiceDocument,
+    TaxInvoiceSlip,
     ThaiDatePipe,
     MATERIAL,
   ],

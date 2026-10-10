@@ -37,7 +37,7 @@
 
 .line {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto 110px 40px;
+  grid-template-columns: 32px minmax(0, 1fr) auto 110px auto;
   gap: 8px 12px;
   align-items: center;
   padding: 8px 12px;
@@ -52,7 +52,7 @@
   }
 
   @media (max-width: 599px) {
-    grid-template-columns: 24px minmax(0, 1fr) 40px;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
 
     .qty,
     .money {
@@ -197,4 +197,14 @@
   border-radius: 12px;
   background: var(--mat-sys-secondary-container);
   color: var(--mat-sys-on-secondary-container);
+}
+
+// Line actions: manual discount + remove side by side.
+.remove {
+  display: flex;
+  align-items: center;
+}
+
+.bill-discount {
+  margin: 4px 0 0 -12px;
 }

@@ -59,7 +59,9 @@ export interface SaleLine {
   itemDiscount: number;
   /** Share of the bill discount allocated to this line */
   billDiscount: number;
-  /** unitPrice × qty − itemDiscount − billDiscount */
+  /** Manual discount (ส่วนลดพิเศษ) after promotions: the line's own + its share of the bill's */
+  manualDiscount: number;
+  /** unitPrice × qty − itemDiscount − billDiscount − manualDiscount */
   amount: number;
   vatType: VatType;
   itemType: ItemType;
@@ -127,6 +129,12 @@ export interface Sale {
   creditNoteNos: string[];
   /** Read-only, server-derived: exchange numbers (same-SKU swaps), oldest first */
   exchangeNos: string[];
+  /** Σ manual discounts (lines + bill) given at the POS */
+  manualDiscount: number;
+  /** Why the manual discount was given ('' = none) */
+  manualDiscountReason: string;
+  /** Who gave it (server-set from the logged-in user) */
+  manualDiscountBy: string;
 }
 
 /** Defaults for fields missing from older stored sales (before the POS existed). */
@@ -150,6 +158,9 @@ export const SALE_DEFAULTS: Omit<
   creditedTotal: 0,
   creditNoteNos: [],
   exchangeNos: [],
+  manualDiscount: 0,
+  manualDiscountReason: '',
+  manualDiscountBy: '',
 };
 
 /** Local calendar day ('YYYY-MM-DD') a sale was made. */
@@ -194,6 +205,14 @@ export interface CartItem {
   qty: number;
   /** Required for serial SKUs (then qty = 1) */
   serial: string | null;
+  /** Manual discount on the whole line, after promotions (null / missing = none) */
+  manualDiscount?: ManualDiscount | null;
+}
+
+/** A discount typed by the cashier (ส่วนลดพิเศษ): percent of the price after promotions, or baht. */
+export interface ManualDiscount {
+  kind: 'percent' | 'amount';
+  value: number;
 }
 
 /** Serial scanned for a free item of a serial-controlled SKU. */
@@ -220,4 +239,8 @@ export interface SalePayload {
   expectedTotal: number;
   /** Buyer for a full tax invoice issued together with the sale (null = abbreviated only) */
   buyer: TaxInvoiceBuyer | null;
+  /** Manual discount on the whole bill, after promotions and line manual discounts */
+  billManualDiscount?: ManualDiscount | null;
+  /** Required whenever any manual discount is given */
+  manualDiscountReason?: string;
 }

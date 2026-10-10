@@ -19,11 +19,13 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { filter, tap } from 'rxjs';
 import {
+  ManualDiscount,
   PricedLine,
   Product,
   TaxInvoiceBuyer,
   buyerBranchLabel,
   buyerIdShort,
+  round2,
   stockInPacks,
 } from '@core/models';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
@@ -38,6 +40,11 @@ import { printElement } from '@shared/utils/print-element';
 import { SellUnit, findByCode, searchProducts } from '../../data/product-lookup';
 import { PosStore } from '../../data/pos.store';
 import { BuyerDialog } from '../../dialogs/buyer-dialog/buyer-dialog';
+import {
+  DiscountDialog,
+  DiscountDialogData,
+  DiscountDialogResult,
+} from '../../dialogs/discount-dialog/discount-dialog';
 import { PaymentDialog, PaymentResult } from '../../dialogs/payment-dialog/payment-dialog';
 import {
   SerialPickData,
@@ -236,6 +243,65 @@ export default class PosPage {
   /** Tax ID, or 'Passport AB1234567' for a foreign buyer. */
   protected buyerId(buyer: TaxInvoiceBuyer): string {
     return buyerIdShort(buyer);
+  }
+
+  /** Manual discount (ส่วนลดพิเศษ) on one paid line, after its promotions. */
+  protected lineDiscount(line: PricedLine): void {
+    const index = line.cartIndex;
+    if (index === null) return;
+    this.openDiscount(
+      {
+        title: line.shortName,
+        // Price after promotions = what the line costs before any manual discount.
+        base: round2(line.amount + line.manualDiscount),
+        current: this.store.items()[index]?.manualDiscount ?? null,
+        ...this.discountContext(),
+      },
+      (discount) => this.store.setLineDiscount(index, discount),
+    );
+  }
+
+  /** Manual discount on the whole bill, on what is left after line manual discounts. */
+  protected billDiscount(): void {
+    const cart = this.cart();
+    this.openDiscount(
+      {
+        title: 'ส่วนลดท้ายบิล',
+        base: round2(cart.total + cart.manualBillDiscount),
+        current: this.store.billManual(),
+        ...this.discountContext(),
+      },
+      (discount) => this.store.setBillDiscount(discount),
+    );
+  }
+
+  private discountContext() {
+    return {
+      reason: this.store.manualReason(),
+      maxPercent: this.store.manualMaxPercent(),
+      isAdmin: this.store.isAdmin(),
+    };
+  }
+
+  private openDiscount(
+    data: DiscountDialogData,
+    apply: (discount: ManualDiscount | null) => void,
+  ): void {
+    this.dialog
+      .open<DiscountDialog, DiscountDialogData, DiscountDialogResult>(DiscountDialog, {
+        data,
+        injector: this.injector,
+        width: '440px',
+        maxWidth: '95vw',
+      })
+      .afterClosed()
+      .subscribe((result) => {
+        if (result) {
+          apply(result.discount);
+          this.store.setManualReason(result.reason);
+        }
+        this.focusScan();
+      });
   }
 
   /** Buyer details for a full tax invoice issued with this sale. */
