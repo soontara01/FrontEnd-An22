@@ -95,6 +95,11 @@
         <span>ส่วนลดท้ายบิล</span><span>-{{ s.billDiscount | number: '1.2-2' }}</span>
       </div>
     }
+    @if (s.manualDiscount) {
+      <div class="row">
+        <span>ส่วนลดพิเศษ</span><span>-{{ s.manualDiscount | number: '1.2-2' }}</span>
+      </div>
+    }
     <div class="row grand">
       <span>ยอดสุทธิ</span><span>{{ s.total | number: '1.2-2' }}</span>
     </div>

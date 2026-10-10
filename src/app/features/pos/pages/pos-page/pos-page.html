@@ -116,10 +116,24 @@
               @if (line.itemDiscount) {
                 <div class="discount small">−{{ line.itemDiscount | number: '1.2-2' }}</div>
               }
+              @if (line.manualDiscount) {
+                <div class="discount small" matTooltip="ส่วนลดพิเศษ (รวมส่วนแบ่งท้ายบิล)">
+                  พิเศษ −{{ line.manualDiscount | number: '1.2-2' }}
+                </div>
+              }
             </div>
 
             <div class="remove">
               @if (line.cartIndex !== null) {
+                <button
+                  mat-icon-button
+                  type="button"
+                  matTooltip="ส่วนลดพิเศษ"
+                  aria-label="ส่วนลดพิเศษ"
+                  (click)="lineDiscount(line)"
+                >
+                  <mat-icon>percent</mat-icon>
+                </button>
                 <button
                   mat-icon-button
                   type="button"
@@ -201,6 +215,20 @@
               <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
             }
           }
+          @if (cart().manualDiscount) {
+            <div class="discount">
+              <span>ส่วนลดพิเศษ</span><span>−{{ cart().manualDiscount | number: '1.2-2' }}</span>
+            </div>
+            @if (store.manualReason()) {
+              <div class="text-muted small">เหตุผล: {{ store.manualReason() }}</div>
+            }
+          }
+          @if (cart().lines.length) {
+            <button mat-button type="button" class="bill-discount" (click)="billDiscount()">
+              <mat-icon>percent</mat-icon>
+              {{ store.billManual() ? 'แก้ส่วนลดพิเศษท้ายบิล' : 'ส่วนลดพิเศษท้ายบิล' }}
+            </button>
+          }
           <div class="text-muted small">
             <span>VAT ที่รวมอยู่</span><span>{{ cart().vat | number: '1.2-2' }}</span>
           </div>
@@ -212,6 +240,9 @@
 
         @for (issue of blocking(); track $index) {
           <div class="issue error"><mat-icon inline>error</mat-icon> {{ issue.message }}</div>
+        }
+        @if (store.manualProblem(); as message) {
+          <div class="issue error"><mat-icon inline>error</mat-icon> {{ message }}</div>
         }
         @for (issue of warnings(); track $index) {
           <div class="issue warn"><mat-icon inline>warning</mat-icon> {{ issue.message }}</div>

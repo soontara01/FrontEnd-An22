@@ -126,11 +126,34 @@ describe('PosStore', () => {
       customer: 'คุณบี',
       expectedTotal: 200,
       buyer: null,
+      billManualDiscount: null,
+      manualDiscountReason: '',
     });
     expect(result).toBe(sale);
     expect(store.lastSale()).toBe(sale);
     expect(store.items()).toEqual([]);
     expect(api.products).toHaveBeenCalledTimes(2); // stock reloaded
+  });
+
+  it('applies manual discounts within the staff ceiling and keeps them when parked', () => {
+    store.add(1, 1, 2); // 200
+    store.setLineDiscount(0, { kind: 'percent', value: 5 });
+    expect(store.cart().total).toBe(190);
+    expect(store.blocker()).toBe('กรุณาระบุเหตุผลส่วนลดพิเศษ');
+    store.setManualReason('ลูกค้าประจำ');
+    expect(store.blocker()).toBeNull();
+    // not logged in as admin: above the store ceiling (default 5%) is blocked
+    store.setBillDiscount({ kind: 'amount', value: 20 });
+    expect(store.cart().total).toBe(170);
+    expect(store.blocker()).toBe('ส่วนลดพิเศษ SKU-1 เกิน 5% — ให้ผู้ดูแลระบบทำรายการ');
+
+    store.hold();
+    expect(store.billManual()).toBeNull();
+    expect(store.manualReason()).toBe('');
+    store.resume(store.holds()[0].id);
+    expect(store.billManual()).toEqual({ kind: 'amount', value: 20 });
+    expect(store.manualReason()).toBe('ลูกค้าประจำ');
+    expect(store.items()[0].manualDiscount).toEqual({ kind: 'percent', value: 5 });
   });
 
   it('sends the full-tax-invoice buyer, keeps it when parked and loads the issued invoice', () => {

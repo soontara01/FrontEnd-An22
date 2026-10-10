@@ -23,6 +23,7 @@ const line = (over: Partial<SaleLine>): SaleLine => ({
   listPrice: 0,
   itemDiscount: 0,
   billDiscount: 0,
+  manualDiscount: 0,
   amount: 0,
   vatType: 'vat7',
   itemType: 'stock',

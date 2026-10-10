@@ -81,8 +81,8 @@
           <td class="num">{{ l.qty }} {{ l.unit }}</td>
           <td class="num">{{ l.unitPrice | number: '1.2-2' }}</td>
           <td class="num">
-            @if (l.itemDiscount + l.billDiscount) {
-              {{ l.itemDiscount + l.billDiscount | number: '1.2-2' }}
+            @if (l.itemDiscount + l.billDiscount + l.manualDiscount) {
+              {{ l.itemDiscount + l.billDiscount + l.manualDiscount | number: '1.2-2' }}
             }
           </td>
           <td class="num">{{ l.amount | number: '1.2-2' }}</td>

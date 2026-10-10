@@ -47,6 +47,15 @@
           </div>
           <div><span class="text-muted">ลูกค้า</span>{{ s.customer || 'ลูกค้าทั่วไป' }}</div>
           <div><span class="text-muted">พนักงาน</span>{{ s.cashier || '-' }}</div>
+          @if (s.manualDiscount) {
+            <div>
+              <span class="text-muted">ส่วนลดพิเศษ</span>
+              {{ s.manualDiscount | number: '1.2-2' }} บาท — {{ s.manualDiscountReason }}
+              @if (s.manualDiscountBy) {
+                <span class="text-muted small">(โดย {{ s.manualDiscountBy }})</span>
+              }
+            </div>
+          }
           @if (s.status === 'cancelled' && s.voidedAt) {
             <div class="voided">
               <span class="text-muted">ยกเลิกเมื่อ</span>
@@ -123,8 +132,8 @@
                     }
                     <td class="num">{{ l.unitPrice | number: '1.2-2' }}</td>
                     <td class="num">
-                      @if (l.itemDiscount + l.billDiscount) {
-                        -{{ l.itemDiscount + l.billDiscount | number: '1.2-2' }}
+                      @if (l.itemDiscount + l.billDiscount + l.manualDiscount) {
+                        -{{ l.itemDiscount + l.billDiscount + l.manualDiscount | number: '1.2-2' }}
                       }
                     </td>
                     <td class="num">{{ l.amount | number: '1.2-2' }}</td>
@@ -159,6 +168,11 @@
                 @for (name of promotionNames(s.billPromotionIds); track name) {
                   <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
                 }
+              }
+              @if (s.manualDiscount) {
+                <div>
+                  <span>ส่วนลดพิเศษ</span><span>-{{ s.manualDiscount | number: '1.2-2' }}</span>
+                </div>
               }
               <div class="grand">
                 <span>ยอดสุทธิ</span><span>{{ s.total | number: '1.2-2' }}</span>

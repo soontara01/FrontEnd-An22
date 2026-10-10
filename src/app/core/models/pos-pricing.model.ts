@@ -1,8 +1,8 @@
 import type { Category } from './category.model';
-import { round2 } from './costing.model';
+import { effectiveCost, round2 } from './costing.model';
 import { Product, canSell, isService, vatBreakdown } from './product.model';
 import { Promotion, discountAmount, inScope, promotionStatus } from './promotion.model';
-import type { CartItem, FreeSerial, SaleLine } from './sale.model';
+import type { CartItem, FreeSerial, ManualDiscount, SaleLine } from './sale.model';
 
 /**
  * POS pricing engine (decided 2026-10-04): the single rule for cart totals, shared by the POS
@@ -20,6 +20,9 @@ import type { CartItem, FreeSerial, SaleLine } from './sale.model';
  *    minAmount, compounding on the discounted total.
  * 5. the bill discount is allocated to paid lines pro rata (remainder to the largest line), so
  *    VAT is right for bills mixing vat7 and exempt SKUs.
+ * 6. manual discounts (ส่วนลดพิเศษ, % or baht) after every promotion: each line's own on its
+ *    amount, then the bill's on what is left, allocated pro rata; `manualDiscountError()` holds
+ *    the reason / staff-ceiling rule. Below cost after them is a warning only.
  */
 
 export interface PricingContext {
@@ -49,6 +52,10 @@ export interface PricedCart {
   subtotal: number;
   itemDiscount: number;
   billDiscount: number;
+  /** Σ manual discounts (lines' own + the bill's) */
+  manualDiscount: number;
+  /** The bill-level manual discount in baht (already inside `manualDiscount`) */
+  manualBillDiscount: number;
   total: number;
   vat: number;
   billPromotionIds: number[];
@@ -126,6 +133,8 @@ export function priceCart(
   items: readonly CartItem[],
   ctx: PricingContext,
   freeSerials: readonly FreeSerial[] = [],
+  /** Manual discount on the whole bill (after promotions and line manual discounts) */
+  billManual: ManualDiscount | null = null,
 ): PricedCart {
   const issues: CartIssue[] = [];
   const products = new Map(ctx.products.map((p) => [p.id, p]));
@@ -249,6 +258,7 @@ export function priceCart(
         listPrice: product.currentPrice ?? 0,
         itemDiscount: 0,
         billDiscount: 0,
+        manualDiscount: 0,
       };
       const extra = { amount: 0, vat: 0, promotionIds: [p.id], freeOfPromotionId: p.id };
       if (!product.serialControl) {
@@ -283,18 +293,39 @@ export function priceCart(
   const billDiscount = round2(afterItems - running);
 
   // 5. Allocate the bill discount pro rata to paid lines.
-  const shares = lines.map((l) =>
-    afterItems > 0 ? round2((billDiscount * (l.gross - l.itemDiscount)) / afterItems) : 0,
+  const shares = allocate(
+    billDiscount,
+    lines.map((l) => l.gross - l.itemDiscount),
   );
-  const remainder = round2(billDiscount - sum(shares));
-  if (remainder !== 0 && lines.length) {
-    const nets = lines.map((l) => l.gross - l.itemDiscount);
-    const largest = nets.indexOf(Math.max(...nets));
-    shares[largest] = round2(shares[largest] + remainder);
-  }
+  const afterPromos = lines.map((l, i) => round2(l.gross - l.itemDiscount - shares[i]));
+
+  // 6. Manual discounts (ส่วนลดพิเศษ) after every promotion: each line's own, then the bill's,
+  //    allocated pro rata like the promotion bill discount. Promotions are never re-checked.
+  const own = lines.map((l, i) =>
+    manualAmount(l.item.manualDiscount, afterPromos[i], `${l.product.sku}`, (message) =>
+      blocking(l.index, l.product.id, message),
+    ),
+  );
+  const rest = afterPromos.map((a, i) => round2(a - own[i]));
+  const manualBillDiscount = manualAmount(billManual, sum(rest), 'ส่วนลดท้ายบิล', (message) =>
+    blocking(null, 0, message),
+  );
+  const manualShares = allocate(manualBillDiscount, rest);
+  const manual = own.map((m, i) => round2(m + manualShares[i]));
 
   const paid: PricedLine[] = lines.map((l, i) => {
-    const amount = round2(l.gross - l.itemDiscount - shares[i]);
+    const amount = round2(afterPromos[i] - manual[i]);
+    if (manual[i] > 0 && !isService(l.product)) {
+      const cost = round2(effectiveCost(l.product) * l.baseQty);
+      if (vatBreakdown(amount, l.product.vatType).net < cost) {
+        issues.push({
+          cartIndex: l.index,
+          productId: l.product.id,
+          message: `${l.product.sku} ขายต่ำกว่าทุนหลังส่วนลดพิเศษ`,
+          blocking: false,
+        });
+      }
+    }
     return {
       ...snapshot(l.product, l.item.factor),
       qty: l.item.qty,
@@ -302,6 +333,7 @@ export function priceCart(
       listPrice: round2((l.product.currentPrice ?? 0) * l.item.factor),
       itemDiscount: l.itemDiscount,
       billDiscount: shares[i],
+      manualDiscount: manual[i],
       amount,
       vat: vatBreakdown(amount, l.product.vatType).vat,
       promotionIds: l.promos.map((p) => p.id),
@@ -316,12 +348,75 @@ export function priceCart(
     subtotal: sum(lines.map((l) => l.gross)),
     itemDiscount: sum(lines.map((l) => l.itemDiscount)),
     billDiscount,
+    manualDiscount: sum(manual),
+    manualBillDiscount,
     total: sum(paid.map((l) => l.amount)),
     vat: sum(paid.map((l) => l.vat)),
     billPromotionIds: billDiscount > 0 ? billPromos.map((p) => p.id) : [],
     itemCount: all.reduce((n, l) => n + l.qty * l.factor, 0),
     issues,
   };
+}
+
+/** Splits `total` over `weights` pro rata (satang), the remainder going to the largest weight. */
+function allocate(total: number, weights: readonly number[]): number[] {
+  const whole = sum([...weights]);
+  const shares = weights.map((w) => (whole > 0 ? round2((total * w) / whole) : 0));
+  const remainder = round2(total - sum(shares));
+  if (remainder !== 0 && weights.length) {
+    const largest = weights.indexOf(Math.max(...weights));
+    shares[largest] = round2(shares[largest] + remainder);
+  }
+  return shares;
+}
+
+/** Why a manual discount value is invalid (null = valid): percent 0 < v ≤ 100, baht > 0 in satang. */
+export function manualDiscountValueError(discount: ManualDiscount): string | null {
+  const { kind, value } = discount;
+  if (kind === 'percent') {
+    return value > 0 && value <= 100 ? null : 'ส่วนลดพิเศษต้องมากกว่า 0 และไม่เกิน 100%';
+  }
+  return value > 0 && round2(value) === value ? null : 'จำนวนเงินส่วนลดพิเศษไม่ถูกต้อง';
+}
+
+/** Baht of a valid manual discount on `base` (capped at it), as the pricing engine takes it. */
+export function manualDiscountBaht(discount: ManualDiscount, base: number): number {
+  const baht = discount.kind === 'percent' ? round2((base * discount.value) / 100) : discount.value;
+  return Math.min(baht, base);
+}
+
+/** Baht of a manual discount on `base`; an invalid value is reported and gives 0. */
+function manualAmount(
+  discount: ManualDiscount | null | undefined,
+  base: number,
+  label: string,
+  report: (message: string) => void,
+): number {
+  if (!discount) return 0;
+  const problem = manualDiscountValueError(discount);
+  if (problem) {
+    report(`${label}: ${problem}`);
+    return 0;
+  }
+  return manualDiscountBaht(discount, base);
+}
+
+/**
+ * Manual-discount rule (decided 2026-10-10, POS + server): a reason is always required, and staff
+ * may give at most `maxPercent` of each line's price after promotions (its own + its share of the
+ * bill's); above that only admins.
+ */
+export function manualDiscountError(
+  cart: Pick<PricedCart, 'lines' | 'manualDiscount'>,
+  ctx: { reason: string; isAdmin: boolean; maxPercent: number },
+): string | null {
+  if (cart.manualDiscount <= 0) return null;
+  if (!ctx.reason.trim()) return 'กรุณาระบุเหตุผลส่วนลดพิเศษ';
+  if (ctx.isAdmin) return null;
+  const over = cart.lines.find(
+    (l) => l.manualDiscount > round2(((l.amount + l.manualDiscount) * ctx.maxPercent) / 100),
+  );
+  return over ? `ส่วนลดพิเศษ ${over.sku} เกิน ${ctx.maxPercent}% — ให้ผู้ดูแลระบบทำรายการ` : null;
 }
 
 /** First blocking issue (Thai message) or null — the checkout rule for the POS and the server. */

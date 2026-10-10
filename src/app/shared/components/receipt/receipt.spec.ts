@@ -15,6 +15,7 @@ describe('Receipt', () => {
     listPrice: 107,
     itemDiscount: 0,
     billDiscount: 0,
+    manualDiscount: 0,
     amount: 107,
     vatType: 'vat7',
     itemType: 'stock',
@@ -93,6 +94,12 @@ describe('Receipt', () => {
     expect(text).toContain('มูลค่าสินค้ายกเว้นภาษี(E)50.00');
     expect(text).toContain('เงินทอน50.00');
     expect(text).not.toContain('สำเนา');
+  });
+
+  it('lists the manual discount (ส่วนลดพิเศษ) in the totals', () => {
+    const text = render({ sale: { ...sale, manualDiscount: 20, total: 130 } });
+    expect(text).toContain('ส่วนลดพิเศษ-20.00');
+    expect(render()).not.toContain('ส่วนลดพิเศษ');
   });
 
   it('becomes a plain receipt referring to the full tax invoice once one is issued', () => {

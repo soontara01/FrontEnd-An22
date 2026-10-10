@@ -16,6 +16,7 @@ describe('TaxInvoiceDocument', () => {
     listPrice: 10700,
     itemDiscount: 0,
     billDiscount: 0,
+    manualDiscount: 0,
     amount: 10700,
     vatType: 'vat7',
     itemType: 'stock',

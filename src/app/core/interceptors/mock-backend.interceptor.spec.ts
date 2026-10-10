@@ -957,6 +957,59 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(serials.find((s) => s.id === other.id)?.status).toBe('in_stock');
   }, 15000);
 
+  it('takes manual discounts after promotions, with a reason and who gave them', async () => {
+    const body = (reason: string) => ({
+      items: [{ ...item(MOUSE), manualDiscount: { kind: 'amount', value: 31 } }],
+      freeSerials: [],
+      payments: [pay(CASH, 450)],
+      customer: '',
+      // 590 − 10% promo = 531 → −31 = 500 → bill −10% = 450
+      expectedTotal: 450,
+      billManualDiscount: { kind: 'percent', value: 10 },
+      manualDiscountReason: reason,
+    });
+    expect(await errorOf(post('sales', body(' ')))).toBe('กรุณาระบุเหตุผลส่วนลดพิเศษ');
+    const sale = await post<Sale>('sales', body('ลูกค้าประจำ'));
+    expect(sale).toMatchObject({
+      total: 450,
+      itemDiscount: 59,
+      manualDiscount: 81,
+      manualDiscountReason: 'ลูกค้าประจำ',
+      manualDiscountBy: 'Admin',
+    });
+    expect(sale.lines[0]).toMatchObject({ itemDiscount: 59, manualDiscount: 81, amount: 450 });
+  });
+
+  it('logs staff in by e-mail and applies their name and role to the sale', async () => {
+    const login = (username: string, password: string) =>
+      post<{ token: string; user: { name: string } }>('auth/login', { username, password });
+    expect(await errorOf(login('somchai', 'wrong'))).toBe('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+    expect(await errorOf(login('somying@example.com', '1234'))).toBe('บัญชีนี้ถูกปิดใช้งาน');
+    const { token, user } = await login('Somchai@example.com', '1234');
+    expect(user.name).toBe('สมชาย ใจดี');
+
+    const round = (n: number) => Math.round(n * 100) / 100;
+    const asStaff = (percent: number) =>
+      firstValueFrom(
+        http.post<Sale>(
+          '/api/sales',
+          {
+            items: [{ ...item(MOUSE), manualDiscount: { kind: 'percent', value: percent } }],
+            freeSerials: [],
+            payments: [pay(CASH, 531)],
+            customer: '',
+            expectedTotal: round(531 * (1 - percent / 100)),
+            manualDiscountReason: 'ลูกค้าประจำ',
+          },
+          { headers: { Authorization: `Bearer ${token}` } },
+        ),
+      );
+    // store ceiling 5% for staff (the admin, without a token in these specs, has no ceiling)
+    expect(await errorOf(asStaff(10))).toBe('ส่วนลดพิเศษ MS-010 เกิน 5% — ให้ผู้ดูแลระบบทำรายการ');
+    const sale = await asStaff(5);
+    expect(sale).toMatchObject({ cashier: 'สมชาย ใจดี', manualDiscountBy: 'สมชาย ใจดี' });
+  });
+
   it('keeps payment methods and SKUs that sales refer to', async () => {
     await sell([item(ESIM)], 199, [pay(QR, 199)]);
     expect(await errorOf(del(`payment-methods/${QR}`))).toBe(

@@ -41,6 +41,7 @@ export class StoreInfoForm {
     receiptFooter: '',
     taxInvoicePaper: STORE_INFO_DEFAULTS.taxInvoicePaper,
     exchangeDays: STORE_INFO_DEFAULTS.exchangeDays,
+    manualDiscountMaxPercent: STORE_INFO_DEFAULTS.manualDiscountMaxPercent,
   });
 
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
