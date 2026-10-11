@@ -55,6 +55,15 @@ form {
   background: var(--mat-sys-surface-container);
   max-width: 100%;
   overflow-x: auto;
+
+  mat-button-toggle-group {
+    justify-self: start;
+  }
+}
+
+// The 210 mm sheet is scaled down so it fits beside the form.
+.a4 {
+  zoom: 0.6;
 }
 
 .paper {

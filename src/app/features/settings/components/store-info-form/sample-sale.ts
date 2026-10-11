@@ -1,4 +1,4 @@
-import { SALE_DEFAULTS, Sale } from '@core/models';
+import { SALE_DEFAULTS, Sale, TaxInvoice } from '@core/models';
 
 /** Fixed bill shown in the receipt preview of the store-info form. */
 export const SAMPLE_SALE: Sale = {
@@ -75,4 +75,29 @@ export const SAMPLE_SALE: Sale = {
   billPromotionIds: [2],
   itemCount: 2,
   status: 'paid',
+};
+
+/** Full tax invoice of `SAMPLE_SALE`, shown when previewing the selected invoice paper. */
+export const SAMPLE_INVOICE: TaxInvoice = {
+  id: 0,
+  invoiceNo: 'INV-20261004-0001',
+  saleId: SAMPLE_SALE.id,
+  orderNo: SAMPLE_SALE.orderNo,
+  saleDate: SAMPLE_SALE.date,
+  date: SAMPLE_SALE.date,
+  issuedAt: SAMPLE_SALE.date,
+  buyer: {
+    name: 'บริษัท ตัวอย่าง จำกัด',
+    idType: 'tax_id',
+    taxId: '0105561000001',
+    branchType: 'head',
+    branchNo: '',
+    address: '99 ถนนพหลโยธิน แขวงจตุจักร เขตจตุจักร กรุงเทพฯ 10900',
+  },
+  issuedBy: SAMPLE_SALE.cashier,
+  cancelledAt: null,
+  cancelReason: '',
+  replacesInvoiceNo: null,
+  replacedByNo: null,
+  atSale: true,
 };

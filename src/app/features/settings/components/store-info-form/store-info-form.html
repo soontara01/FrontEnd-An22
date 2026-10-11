@@ -54,7 +54,11 @@
     @if (info().vatRegistered) {
       <div class="paper">
         <span>กระดาษใบกำกับภาษีเต็มรูป</span>
-        <mat-button-toggle-group formControlName="taxInvoicePaper" aria-label="กระดาษใบกำกับภาษี">
+        <mat-button-toggle-group
+          formControlName="taxInvoicePaper"
+          aria-label="กระดาษใบกำกับภาษี"
+          (change)="previewPick.set('invoice')"
+        >
           <mat-button-toggle value="A4">A4</mat-button-toggle>
           <mat-button-toggle value="80mm">80 มม. (เครื่องพิมพ์ใบเสร็จ)</mat-button-toggle>
         </mat-button-toggle-group>
@@ -103,7 +107,29 @@
   </form>
 
   <div class="preview">
-    <div class="text-muted small">ตัวอย่างใบเสร็จ (80 มม.)</div>
-    <app-receipt [sale]="sample" [store]="info()" />
+    @if (info().vatRegistered) {
+      <mat-button-toggle-group
+        [value]="previewPick()"
+        (change)="previewPick.set($event.value)"
+        aria-label="ตัวอย่างเอกสาร"
+      >
+        <mat-button-toggle value="receipt">ใบเสร็จ (80 มม.)</mat-button-toggle>
+        <mat-button-toggle value="invoice"
+          >ใบกำกับภาษีเต็มรูป ({{ paperLabel() }})</mat-button-toggle
+        >
+      </mat-button-toggle-group>
+    }
+    @if (preview() === 'receipt') {
+      <div class="text-muted small">ตัวอย่างใบเสร็จ (80 มม.)</div>
+      <app-receipt [sale]="sample" [store]="info()" />
+    } @else if (info().taxInvoicePaper === 'A4') {
+      <div class="text-muted small">ตัวอย่างใบกำกับภาษีเต็มรูป (A4, ย่อขนาด)</div>
+      <div class="a4">
+        <app-tax-invoice-document [sale]="sample" [invoice]="sampleInvoice" [store]="info()" />
+      </div>
+    } @else {
+      <div class="text-muted small">ตัวอย่างใบกำกับภาษีเต็มรูป (80 มม.)</div>
+      <app-tax-invoice-slip [sale]="sample" [invoice]="sampleInvoice" [store]="info()" />
+    }
   </div>
 </div>
