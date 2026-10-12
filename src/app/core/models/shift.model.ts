@@ -504,6 +504,57 @@ export const shiftOpenTooLong = (
   shift.status === 'open' &&
   now.getTime() - new Date(shift.openedAt).getTime() > maxHours * 3_600_000;
 
+/** Variance per cashier over closed shifts (S3: spots small shortages that never hit the limit). */
+export interface VarianceReportRow {
+  cashier: string;
+  /** Closed shifts */
+  shifts: number;
+  /** Shifts with at least one method short / over */
+  shortCount: number;
+  overCount: number;
+  /** Σ shortages (positive) / Σ overages over all methods */
+  shortTotal: number;
+  overTotal: number;
+  /** Shifts still waiting for approval */
+  pending: number;
+}
+
+/** Closed shifts grouped by cashier, biggest shortage first. */
+export function varianceReport(
+  shifts: readonly (Pick<Shift, 'cashier' | 'status' | 'approvalStatus'> & {
+    counts: readonly Pick<ShiftCount, 'counted' | 'expected'>[];
+  })[],
+): VarianceReportRow[] {
+  const rows = new Map<string, VarianceReportRow>();
+  for (const shift of shifts) {
+    if (shift.status !== 'closed') continue;
+    const row = rows.get(shift.cashier) ?? {
+      cashier: shift.cashier,
+      shifts: 0,
+      shortCount: 0,
+      overCount: 0,
+      shortTotal: 0,
+      overTotal: 0,
+      pending: 0,
+    };
+    const diffs = shift.counts.map(variance);
+    const short = round2(diffs.filter((d) => d < 0).reduce((sum, d) => sum - d, 0));
+    const over = round2(diffs.filter((d) => d > 0).reduce((sum, d) => sum + d, 0));
+    rows.set(shift.cashier, {
+      ...row,
+      shifts: row.shifts + 1,
+      shortCount: row.shortCount + (short > 0 ? 1 : 0),
+      overCount: row.overCount + (over > 0 ? 1 : 0),
+      shortTotal: round2(row.shortTotal + short),
+      overTotal: round2(row.overTotal + over),
+      pending: row.pending + (shift.approvalStatus === 'pending' ? 1 : 0),
+    });
+  }
+  return [...rows.values()].sort(
+    (a, b) => b.shortTotal - a.shortTotal || a.cashier.localeCompare(b.cashier),
+  );
+}
+
 /** Shifts can be turned off only when no shift is open (otherwise its cash is never counted). */
 export function requireShiftChangeError(
   current: boolean,

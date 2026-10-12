@@ -1,6 +1,6 @@
 # แผนเปิด / ปิดกะ (Shift) + นับเงินตามช่องทางชำระเงิน
 
-สถานะ: **กำลังทำ** · ขั้นที่ 1 เสร็จ (2026-10-12: โมเดล + กติกา + spec) · ข้อตัดสินใจ S1–S6 ยืนยันครบแล้ว (2026-10-11) · `requireShift` อยู่ในรอบแรก
+สถานะ: **กำลังทำ** · ขั้นที่ 1–2 เสร็จ (2026-10-12: โมเดล + กติกา + mock) · ข้อตัดสินใจ S1–S6 ยืนยันครบแล้ว (2026-10-11) · `requireShift` อยู่ในรอบแรก
 
 ที่มา: `docs/pos-plan.md` ข้อตัดสินใจ 7 ("เปิด/ปิดกะ + นับเงินลิ้นชัก — รอบถัดไป")
 เป้าหมาย: เมื่อแคชเชียร์เปลี่ยนกะ ต้องนับเงินและยอดแต่ละช่องทางชำระเงินของกะนั้นได้ และรู้ว่าเงินขาด/เกินเป็นความรับผิดชอบของใคร
@@ -135,14 +135,15 @@ interface CashMovement {
 
 ## 6. API (เพิ่มใน mock ด้วย)
 
-- `GET /shifts/current?terminalId=` → `Shift | null`
+- เครื่อง POS = header **`X-Terminal-Id`** (ไม่มี / ไม่ถูกต้อง = 1); POS เริ่มส่งในขั้นที่ 3
+- `GET /shifts/current` (ของเครื่องนี้) → `Shift | null`
 - `POST /shifts/open { terminalId, openingFloat, openingDenominations }` (เครื่องนี้มีกะเปิดอยู่แล้ว → 400)
 - `POST /shifts/:id/cash-movements { type, amount, reason }` (`cashMovementError()`; เงินออกเกินเงินสดคาด → 400)
 - `GET /shifts/:id/summary` → X report (กะเปิด) / Z report (กะปิด); ผู้ใช้ไม่ใช่ admin ขณะกะเปิด → ได้แค่จำนวนบิล + ยอดขายรวม (ไม่มียอดตามช่องทาง / ยอดคาด)
-- `POST /shifts/:id/close { counts (+ เหตุผลต่อช่องทาง), cashDenominations, depositAmount, approval? }` (`closeShiftError()` → 400)
+- `POST /shifts/:id/close { counts (+ เหตุผลต่อช่องทาง), cashDenominations, depositAmount, approval? }` (`closeShiftError()` → 400) — mock ขั้น 2: admin ที่ปิดกะอนุมัติเอง, คนอื่นได้ `pending`; อนุมัติด้วยรหัสผ่าน admin ที่เครื่องทำในขั้น 4
 - `POST /shifts/:id/approve { note }` (admin; กะ `pending` → `approved`)
 - `GET /shifts/variance-report?from&to` → ส่วนต่างต่อแคชเชียร์ (S3)
-- `GET /shifts[?from&to]` (กรองตาม**วันที่เปิดกะ**; `?openOnly=1` = กะที่ยังเปิด), `GET /shifts/:id`
+- `GET /shifts[?from&to]` (กรองตาม**วันที่เปิดกะ**; `?openOnly=1` = กะที่ยังเปิด), `GET /shifts/:id`, `GET /shifts/:id/movements` (เงินเข้า / ออกของกะ)
 - `POST /sales`, `POST /sales/:id/void`, `POST /sales/:id/credit-notes` (คืนเงินทุกช่องทาง) → `requireShift` เปิดอยู่ + เครื่องนี้ไม่มีกะเปิด → 400; ขายโดยผู้ใช้ที่ไม่ใช่เจ้าของกะ → 400 (void / คืนเงินโดย admin ได้)
 
 ## 7. หน้าจอ
@@ -161,8 +162,9 @@ interface CashMovement {
 ## 8. ลำดับงาน (แต่ละขั้น build + test + lint ผ่าน แล้ว commit)
 
 1. ✅ โมเดล + ฟังก์ชันกติกา + spec (`shift.model.ts`) — เสร็จ 2026-10-12
-2. mock: `/shifts*`, `shiftId` ใน sale / void / credit note, บล็อกเมื่อไม่มีกะ (เฉพาะ `requireShift`), ปิด `requireShift` ไม่ได้ถ้ายังมีกะเปิด
-3. POS: แถบสถานะกะ, เปิดกะ, เงินเข้า / ออก, X report
+2. ✅ mock (เสร็จ 2026-10-12): `/shifts*`, `shiftId` ใน sale / void / credit note, บล็อกเมื่อไม่มีกะ (เฉพาะ `requireShift`), ปิด `requireShift` ไม่ได้ถ้ายังมีกะเปิด
+3. POS: แถบสถานะกะ, เปิดกะ, เงินเข้า / ออก, X report; ส่ง `X-Terminal-Id` (เลขเครื่องเก็บใน `StorageService`);
+   **เปลี่ยน `MOCK_REQUIRE_SHIFT` เป็น `true`** และย้ายข้อมูล mock ที่บันทึก `requireShift: false` ชั่วคราวไว้ (ขั้น 2 ตั้งปิดไว้ให้ POS ขายได้ระหว่างรอหน้าจอ)
 4. ปิดกะ + Z report + อนุมัติส่วนต่าง
 5. เมนูการขาย: รายการกะ / รายละเอียดกะ; Settings (`requireShift`, เกณฑ์ต่าง ๆ) + `closeCheck`
 6. อัปเดต `CLAUDE.md` + `pos-plan.md`

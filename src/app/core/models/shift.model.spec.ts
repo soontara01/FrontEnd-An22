@@ -18,6 +18,7 @@ import {
   shiftDay,
   shiftOpenTooLong,
   shiftSummary,
+  varianceReport,
 } from './shift.model';
 
 const method = (id: number, name: string, type: PaymentType, extra: Partial<PaymentMethod> = {}) =>
@@ -355,5 +356,40 @@ describe('shift model', () => {
     });
     expect(x.lines).toBeUndefined();
     expect(shiftSummary(shift, ctx, { detailed: true }).lines).toEqual(expected);
+  });
+
+  it('reports variances per cashier over closed shifts', () => {
+    const closed = (cashier: string, diffs: number[], approvalStatus = 'not_needed' as const) => ({
+      cashier,
+      status: 'closed' as const,
+      approvalStatus,
+      counts: diffs.map((d) => ({ counted: 1000 + d, expected: 1000 })),
+    });
+    const rows = varianceReport([
+      closed('somchai', [-50, 0]),
+      closed('somchai', [-50, 30]),
+      closed('suda', [-150], 'pending' as never),
+      { ...closed('suda', [-999]), status: 'open' as const },
+    ]);
+    expect(rows).toEqual([
+      {
+        cashier: 'suda',
+        shifts: 1,
+        shortCount: 1,
+        overCount: 0,
+        shortTotal: 150,
+        overTotal: 0,
+        pending: 1,
+      },
+      {
+        cashier: 'somchai',
+        shifts: 2,
+        shortCount: 2,
+        overCount: 1,
+        shortTotal: 100,
+        overTotal: 30,
+        pending: 0,
+      },
+    ]);
   });
 });

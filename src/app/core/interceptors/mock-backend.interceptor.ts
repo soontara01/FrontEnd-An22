@@ -98,6 +98,25 @@ import {
   storeInfoError,
   currentSerial,
   exchangeError,
+  CashMovement,
+  CashMovementPayload,
+  Shift,
+  ShiftAction,
+  ShiftClosePayload,
+  ShiftContext,
+  ShiftOpenPayload,
+  approvalStatusFor,
+  buildShiftCounts,
+  cashMovementError,
+  closeShiftError,
+  drawerExpected,
+  expectedByMethod,
+  openShiftError,
+  requireShiftChangeError,
+  shiftBlocker,
+  shiftDay,
+  shiftSummary,
+  varianceReport,
   exchangeNos,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -137,6 +156,9 @@ interface MockDb {
   exchanges: Exchange[];
   /** Full tax invoices (one per bill, on request). */
   taxInvoices: TaxInvoice[];
+  /** POS shifts (one open shift per terminal) and their cash in / out of the drawer. */
+  shifts: Shift[];
+  cashMovements: CashMovement[];
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -699,8 +721,15 @@ function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
   return { ...SALE_DEFAULTS, subtotal: s.total, ...s, lines } as Sale;
 }
 
+/**
+ * TEMPORARY (docs/shift-plan.md step 2 → 3): shifts stay off in the mock store until the POS has
+ * its open-shift screens; step 3 switches this to true and migrates stored data.
+ */
+const MOCK_REQUIRE_SHIFT = false;
+
 const SEED_STORE_INFO: StoreInfo = {
   ...STORE_INFO_DEFAULTS,
+  requireShift: MOCK_REQUIRE_SHIFT,
   name: 'บริษัท ไอทีดี คอมพิวเตอร์ จำกัด',
   placeName: 'ร้านไอทีดี คอมพิวเตอร์',
   taxId: '0105550123451',
@@ -734,6 +763,8 @@ const seedDb = (): MockDb => ({
   creditNotes: [],
   exchanges: [],
   taxInvoices: [],
+  shifts: [],
+  cashMovements: [],
 });
 
 const LATENCY_MS = 300;
@@ -744,6 +775,8 @@ let actor: User | undefined;
 const actorName = (): string => actor?.name ?? '';
 /** Admin-only rules (exchange window, manual-discount ceiling) follow the logged-in user. */
 const actorIsAdmin = (): boolean => actor?.role === 'admin';
+/** POS terminal (cash drawer) of the request: header `X-Terminal-Id`, default 1. */
+let terminalId = 1;
 
 /**
  * Fake backend for development without a real API.
@@ -769,7 +802,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
-  db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
+  db.storeInfo = {
+    ...STORE_INFO_DEFAULTS,
+    ...db.storeInfo,
+    requireShift: db.storeInfo.requireShift ?? MOCK_REQUIRE_SHIFT,
+  };
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
     ...t,
@@ -796,6 +833,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const path = req.url.slice(base.length + 1);
   // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
   actor = requestUser(req, db.users);
+  const terminal = Number(req.headers.get('X-Terminal-Id'));
+  terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : 1;
   const response$ = handle(req, path, db);
   if (generated || costed || req.method !== 'GET') storage.set(DB_KEY, db);
 
@@ -828,6 +867,7 @@ function handle(
     return handlePaymentMethods(req, path, db);
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
+  if (path === 'shifts' || path.startsWith('shifts/')) return handleShifts(req, path, db);
   if (path === 'credit-notes' && req.method === 'GET') return listCreditNotes(req, db);
   if (path === 'tax-invoices' && req.method === 'GET') {
     // Full tax invoices issued within a local-date range (oldest first, for the tax report).
@@ -1880,6 +1920,8 @@ function handleSales(
  * (serial: the unit's own cost, others: the current average, services: the standard cost).
  */
 function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknown>> {
+  const shift = moneyShift(db, 'sell');
+  if (shift.problem) return error(400, shift.problem);
   const today = todayIso();
   const cart = priceCart(
     body.items ?? [],
@@ -1952,6 +1994,8 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     manualDiscount: cart.manualDiscount,
     manualDiscountReason: cart.manualDiscount > 0 ? manualReason : '',
     manualDiscountBy: cart.manualDiscount > 0 ? actorName() : '',
+    shiftId: shift.shiftId,
+    voidShiftId: null,
   };
   db.sales.push(sale);
   // Full tax invoice requested at the POS: issued with the sale, same date.
@@ -2026,6 +2070,9 @@ function createCreditNote(
     exchanges,
   });
   if (problem) return error(400, problem);
+  // The refund is paid from the drawer / methods of the shift it is issued in.
+  const shift = moneyShift(db, 'refund');
+  if (shift.problem) return error(400, shift.problem);
   const draft = draftCreditNote(sale, notes, payload.lines, db.promotions, exchanges);
   for (const line of draft.lines) {
     if (!db.products.some((p) => p.id === line.productId)) {
@@ -2101,6 +2148,7 @@ function createCreditNote(
     total: draft.total,
     vat: draft.vat,
     refunds: toRefunds(payload.refunds, db.paymentMethods),
+    shiftId: shift.shiftId,
   };
   db.creditNotes.push(created);
   return ok(created);
@@ -2231,6 +2279,8 @@ function createExchange(
     cashier: actorName(),
     reason: payload.reason,
     lines,
+    // No money moves, so no shift is required; an open one counts it in its report.
+    shiftId: db.storeInfo.requireShift ? (openShiftOf(db, terminalId)?.id ?? null) : null,
   };
   db.exchanges.push(created);
   return ok(created);
@@ -2290,6 +2340,9 @@ function createTaxInvoice(
 function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpResponse<unknown>> {
   const problem = voidError(sale, reason, todayIso());
   if (problem) return error(400, problem);
+  // The money goes back out of the drawer of the shift the void is made in.
+  const shift = moneyShift(db, 'void');
+  if (shift.problem) return error(400, shift.problem);
   // A same-day exchange swapped serials: the customer hands back the one they hold now.
   const exchanges = db.exchanges.filter((x) => x.saleId === sale.id);
   const serialOf = (i: number) => currentSerial(sale, i, exchanges);
@@ -2334,11 +2387,211 @@ function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpRespon
     };
     recordMovement(db, db.products[index], 'receive', baseQty, unitCost, line.cogs, [], note);
   }
-  Object.assign(sale, { status: 'cancelled', voidedAt: now, voidReason: reason });
+  Object.assign(sale, {
+    status: 'cancelled',
+    voidedAt: now,
+    voidReason: reason,
+    voidShiftId: shift.shiftId,
+  });
   // A full tax invoice of a voided bill is cancelled with it.
   const invoice = db.taxInvoices.find((t) => t.saleId === sale.id && !t.cancelledAt);
   if (invoice) Object.assign(invoice, { cancelledAt: now, cancelReason: `ยกเลิกบิล: ${reason}` });
   return ok(sale);
+}
+
+/** The open shift of a terminal (at most one). */
+function openShiftOf(db: MockDb, terminal: number): Shift | undefined {
+  return db.shifts.find((s) => s.terminalId === terminal && s.status === 'open');
+}
+
+const shiftContext = (db: MockDb): ShiftContext => ({
+  sales: db.sales,
+  creditNotes: db.creditNotes,
+  movements: db.cashMovements,
+  methods: db.paymentMethods,
+  exchanges: db.exchanges,
+});
+
+/**
+ * Shift check of a money action at this request's terminal (`shiftBlocker()`): the shift to record
+ * it in, or null when shifts are off (`StoreInfo.requireShift`).
+ */
+function moneyShift(
+  db: MockDb,
+  action: ShiftAction,
+): { problem: string | null; shiftId: number | null } {
+  if (!db.storeInfo.requireShift) return { problem: null, shiftId: null };
+  const shift = openShiftOf(db, terminalId) ?? null;
+  const problem = shiftBlocker(action, {
+    requireShift: true,
+    shift,
+    user: actorName(),
+    isAdmin: actorIsAdmin(),
+  });
+  return { problem, shiftId: shift?.id ?? null };
+}
+
+/** 'SH-YYYYMMDD-NN', numbered per opening day. */
+function nextShiftNo(db: MockDb, day: string): string {
+  const prefix = `SH-${day.replaceAll('-', '')}-`;
+  const last = db.shifts
+    .filter((s) => s.shiftNo.startsWith(prefix))
+    .reduce((max, s) => Math.max(max, Number(s.shiftNo.slice(prefix.length))), 0);
+  return `${prefix}${String(last + 1).padStart(2, '0')}`;
+}
+
+/**
+ * /shifts (docs/shift-plan.md): open / cash in-out / X-Z summary / close / approve. The terminal
+ * comes from the `X-Terminal-Id` header; every rule is a `shift.model.ts` function.
+ */
+function handleShifts(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const user = actorName();
+  const isAdmin = actorIsAdmin();
+  if (path === 'shifts/current' && req.method === 'GET') {
+    return ok(openShiftOf(db, terminalId) ?? null);
+  }
+  if (path === 'shifts/open' && req.method === 'POST') {
+    const body = (req.body ?? {}) as Partial<ShiftOpenPayload>;
+    const payload: ShiftOpenPayload = {
+      terminalId: body.terminalId ?? terminalId,
+      openingFloat: Number(body.openingFloat),
+      openingDenominations: body.openingDenominations ?? [],
+    };
+    const problem = openShiftError(payload, {
+      terminalHasOpenShift: !!openShiftOf(db, payload.terminalId),
+      userHasOpenShift: db.shifts.some((s) => s.status === 'open' && s.cashier === user),
+    });
+    if (problem) return error(400, problem);
+    const now = new Date();
+    const shift: Shift = {
+      id: Math.max(0, ...db.shifts.map((s) => s.id)) + 1,
+      shiftNo: nextShiftNo(db, toIsoDate(now)),
+      terminalId: payload.terminalId,
+      cashier: user,
+      status: 'open',
+      openedAt: now.toISOString(),
+      openingFloat: payload.openingFloat,
+      openingDenominations: payload.openingDenominations,
+      closedAt: null,
+      closedBy: null,
+      counts: [],
+      cashDenominations: [],
+      depositAmount: 0,
+      floatLeft: 0,
+      approvalStatus: 'not_needed',
+      approvedBy: null,
+      approvedAt: null,
+      note: '',
+    };
+    db.shifts.push(shift);
+    return ok(shift);
+  }
+  if ((path === 'shifts' || path === 'shifts/variance-report') && req.method === 'GET') {
+    // Local-date range on the opening day of the shift (S5).
+    const from = req.params.get('from') || null;
+    const to = req.params.get('to') || null;
+    const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
+    if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
+    if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    const inRange = db.shifts.filter(
+      (s) => (!from || shiftDay(s) >= from) && (!to || shiftDay(s) <= to),
+    );
+    if (path === 'shifts/variance-report') return ok(varianceReport(inRange));
+    const openOnly = req.params.get('openOnly') === '1';
+    return ok(
+      inRange
+        .filter((s) => !openOnly || s.status === 'open')
+        .sort((a, b) => b.openedAt.localeCompare(a.openedAt)),
+    );
+  }
+
+  const match = /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|close|approve))?$/.exec(path);
+  if (!match) return notFound(req, path);
+  const shift = db.shifts.find((s) => s.id === Number(match[1]));
+  if (!shift) return error(404, 'ไม่พบกะ');
+  const action = match[2];
+  const now = new Date().toISOString();
+
+  if (!action && req.method === 'GET') return ok(shift);
+  if (action === 'movements' && req.method === 'GET') {
+    return ok(db.cashMovements.filter((m) => m.shiftId === shift.id));
+  }
+  if (action === 'summary' && req.method === 'GET') {
+    // Per-method expected amounts only for admins while the shift is open (blind count, S2).
+    const detailed = isAdmin || shift.status === 'closed';
+    return ok(shiftSummary(shift, shiftContext(db), { detailed }));
+  }
+  if (action === 'cash-movements' && req.method === 'POST') {
+    if (shift.status !== 'open') return error(400, 'กะนี้ปิดไปแล้ว');
+    if (shift.terminalId !== terminalId) return error(400, 'กะนี้ไม่ได้เปิดที่เครื่องนี้');
+    const body = (req.body ?? {}) as Partial<CashMovementPayload>;
+    const payload: CashMovementPayload = {
+      type: body.type as CashMovementPayload['type'],
+      amount: Number(body.amount),
+      reason: (body.reason ?? '').trim(),
+    };
+    const problem =
+      shiftBlocker('cash_movement', { requireShift: true, shift, user, isAdmin }) ??
+      cashMovementError(payload, drawerExpected(expectedByMethod(shift, shiftContext(db))));
+    if (problem) return error(400, problem);
+    const movement: CashMovement = {
+      id: Math.max(0, ...db.cashMovements.map((m) => m.id)) + 1,
+      shiftId: shift.id,
+      ...payload,
+      by: user,
+      at: now,
+    };
+    db.cashMovements.push(movement);
+    return ok(movement);
+  }
+  if (action === 'close' && req.method === 'POST') {
+    const body = (req.body ?? {}) as Partial<ShiftClosePayload>;
+    const payload: ShiftClosePayload = {
+      counts: body.counts ?? [],
+      cashDenominations: body.cashDenominations ?? [],
+      depositAmount: Number(body.depositAmount ?? 0),
+      note: (body.note ?? '').trim(),
+      approvedBy: null,
+    };
+    const expected = expectedByMethod(shift, shiftContext(db));
+    const problem = closeShiftError(shift, payload, expected, { user, isAdmin });
+    if (problem) return error(400, problem);
+    const counts = buildShiftCounts(expected, payload.counts, user);
+    const drawer = expected.find((l) => l.type === 'cash');
+    const cash = counts.find((c) => c.methodId === drawer?.methodId)?.counted ?? 0;
+    // An admin closing approves the variance; at-terminal approval with an admin's password is
+    // step 4 of the shift plan. Otherwise a variance above the limit waits as `pending`.
+    const approval = approvalStatusFor(
+      counts,
+      db.storeInfo.shiftVarianceLimit,
+      isAdmin ? user : null,
+    );
+    Object.assign(shift, {
+      status: 'closed',
+      closedAt: now,
+      closedBy: user,
+      counts,
+      cashDenominations: payload.cashDenominations,
+      depositAmount: payload.depositAmount,
+      floatLeft: round2(cash - payload.depositAmount),
+      approvalStatus: approval,
+      approvedBy: approval === 'approved' ? user : null,
+      approvedAt: approval === 'approved' ? now : null,
+      note: payload.note,
+    } satisfies Partial<Shift>);
+    return ok(shift);
+  }
+  if (action === 'approve' && req.method === 'POST') {
+    if (!isAdmin) return error(400, 'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ');
+    if (shift.approvalStatus !== 'pending') return error(400, 'กะนี้ไม่ได้รออนุมัติ');
+    Object.assign(shift, { approvalStatus: 'approved', approvedBy: user, approvedAt: now });
+    return ok(shift);
+  }
+  return notFound(req, path);
 }
 
 /** GET/PUT /settings/store (receipt header / footer) */
@@ -2350,7 +2603,13 @@ function handleStoreInfo(
   if (req.method === 'GET') return ok(db.storeInfo);
   if (req.method === 'PUT') {
     const payload = normalizeStoreInfo(req.body as StoreInfo);
-    const problem = storeInfoError(payload);
+    const problem =
+      storeInfoError(payload) ??
+      requireShiftChangeError(
+        db.storeInfo.requireShift,
+        payload.requireShift,
+        db.shifts.filter((s) => s.status === 'open').length,
+      );
     if (problem) return error(400, problem);
     db.storeInfo = payload;
     return ok(db.storeInfo);

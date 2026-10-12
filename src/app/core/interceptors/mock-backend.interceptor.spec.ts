@@ -1,4 +1,4 @@
-import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
+import { HttpClient, HttpHeaders, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -11,6 +11,9 @@ import {
   PaymentInput,
   Product,
   Sale,
+  Shift,
+  ShiftSummary,
+  VarianceReportRow,
   StoreInfo,
   TaxInvoice,
   SerialNumber,
@@ -1046,5 +1049,168 @@ describe('mockBackendInterceptor – store info', () => {
       (e: { error: { message: string } }) => e.error.message,
     );
     expect(bad).toBe('เลขประจำตัวผู้เสียภาษีต้องเป็น 13 หลักที่ถูกต้อง');
+  });
+});
+
+describe('mockBackendInterceptor – shifts', () => {
+  let http: HttpClient;
+  const MOUSE = 2; // 531 after promo 1, stock 3
+  const CASH = 1;
+  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+  interface As {
+    token?: string;
+    terminal?: number;
+  }
+
+  const call = <T>(method: string, url: string, body?: unknown, as: As = {}) => {
+    let headers = new HttpHeaders();
+    if (as.token) headers = headers.set('Authorization', `Bearer ${as.token}`);
+    if (as.terminal) headers = headers.set('X-Terminal-Id', String(as.terminal));
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+  const sellMouse = (as?: As) =>
+    call<Sale>(
+      'POST',
+      'sales',
+      {
+        items: [{ productId: MOUSE, factor: 1, qty: 1, serial: null }],
+        freeSerials: [],
+        payments: [{ methodId: CASH, amount: 531, reference: '', installmentMonths: null }],
+        customer: '',
+        expectedTotal: 531,
+      },
+      as,
+    );
+  const open = (openingFloat: number, as?: As) =>
+    call<Shift>('POST', 'shifts/open', { openingFloat, openingDenominations: [] }, as);
+  const setRequireShift = async (requireShift: boolean) => {
+    const info = await call<StoreInfo>('GET', 'settings/store');
+    return call<StoreInfo>('PUT', 'settings/store', { ...info, requireShift });
+  };
+  /** A blind count that matches the system (read as admin), with `cashOff` on the drawer. */
+  const countsFor = async (shift: Shift, cashOff = 0) => {
+    const x = await call<ShiftSummary>('GET', `shifts/${shift.id}/summary`);
+    return (x.lines ?? []).map((l) => ({
+      methodId: l.methodId,
+      counted: l.closeCheck === 'count' ? l.expected + (l.type === 'cash' ? cashOff : 0) : null,
+      firstCount: null,
+      confirmed: true,
+      reasonCode: l.type === 'cash' && cashOff ? 'unknown' : null,
+      reason: '',
+    }));
+  };
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+    await setRequireShift(true);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('blocks money actions without an open shift and records the shift', async () => {
+    expect(await errorOf(sellMouse())).toBe('ยังไม่ได้เปิดกะที่เครื่องนี้');
+    const shift = await open(1000);
+    expect(shift).toMatchObject({ shiftNo: 'SH-20261004-01', cashier: 'Admin', terminalId: 1 });
+    expect(await call<Shift>('GET', 'shifts/current')).toEqual(shift);
+    const sale = await sellMouse();
+    expect(sale.shiftId).toBe(shift.id);
+    const voided = await call<Sale>('POST', `sales/${sale.id}/void`, { reason: 'คีย์ผิด' });
+    expect(voided.voidShiftId).toBe(shift.id);
+  });
+
+  it('allows one open shift per terminal and per cashier', async () => {
+    await open(500, { token: STAFF });
+    expect(await errorOf(open(0))).toBe('เครื่องนี้มีกะที่เปิดอยู่แล้ว');
+    expect(await errorOf(open(0, { token: STAFF, terminal: 2 }))).toBe(
+      'คุณมีกะที่เปิดอยู่ที่เครื่องอื่น — ปิดกะนั้นก่อน',
+    );
+    const second = await open(0, { terminal: 2 });
+    expect(second.terminalId).toBe(2);
+    expect(await errorOf(sellMouse())).toBe(
+      'กะนี้เป็นของ สมชาย ใจดี — ต้องปิดกะนั้นก่อนจึงจะขายได้',
+    );
+    expect((await sellMouse({ terminal: 2 })).shiftId).toBe(second.id);
+  });
+
+  it('moves cash, hides the X-report lines from staff and closes a matching count', async () => {
+    const staff = { token: STAFF };
+    const shift = await open(1000, staff);
+    await sellMouse(staff);
+    const move = (amount: number) =>
+      call(
+        'POST',
+        `shifts/${shift.id}/cash-movements`,
+        { type: 'out', amount, reason: 'ค่าส่ง' },
+        staff,
+      );
+    expect(await errorOf(move(2000))).toBe('เงินสดในลิ้นชักไม่พอ (คาดว่ามี 1,531 บาท)');
+    await move(100);
+    const x = await call<ShiftSummary>('GET', `shifts/${shift.id}/summary`, undefined, staff);
+    expect(x).toMatchObject({ billCount: 1, salesTotal: 531, cashOut: 100 });
+    expect(x.lines).toBeUndefined();
+    const counts = await countsFor(shift);
+    expect(counts[0]).toMatchObject({ methodId: CASH, counted: 1431 });
+    const closed = await call<Shift>(
+      'POST',
+      `shifts/${shift.id}/close`,
+      { counts, cashDenominations: [], depositAmount: 1000, note: '' },
+      staff,
+    );
+    expect(closed).toMatchObject({
+      status: 'closed',
+      closedBy: 'สมชาย ใจดี',
+      approvalStatus: 'not_needed',
+      floatLeft: 431,
+    });
+  });
+
+  it('keeps a variance above the limit pending until an admin approves it', async () => {
+    const staff = { token: STAFF };
+    const shift = await open(1000, staff);
+    const counts = await countsFor(shift, -150);
+    const closed = await call<Shift>(
+      'POST',
+      `shifts/${shift.id}/close`,
+      { counts, cashDenominations: [], depositAmount: 0, note: '' },
+      staff,
+    );
+    expect(closed.approvalStatus).toBe('pending');
+    expect(await errorOf(call('POST', `shifts/${shift.id}/approve`, {}, staff))).toBe(
+      'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ',
+    );
+    const approved = await call<Shift>('POST', `shifts/${shift.id}/approve`, {});
+    expect(approved).toMatchObject({ approvalStatus: 'approved', approvedBy: 'Admin' });
+    expect(await call<VarianceReportRow[]>('GET', 'shifts/variance-report')).toEqual([
+      {
+        cashier: 'สมชาย ใจดี',
+        shifts: 1,
+        shortCount: 1,
+        overCount: 0,
+        shortTotal: 150,
+        overTotal: 0,
+        pending: 0,
+      },
+    ]);
+    expect(await call<Shift[]>('GET', 'shifts?from=2026-10-04&to=2026-10-04')).toHaveLength(1);
+  });
+
+  it('sells without a shift when shifts are off and keeps them on while one is open', async () => {
+    await setRequireShift(false);
+    expect((await sellMouse()).shiftId).toBeNull();
+    await setRequireShift(true);
+    await open(0);
+    expect(await errorOf(setRequireShift(false))).toBe(
+      'ยังมีกะที่เปิดอยู่ 1 กะ — ปิดกะทั้งหมดก่อนปิดการใช้ระบบกะ',
+    );
   });
 });
