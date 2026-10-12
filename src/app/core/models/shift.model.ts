@@ -141,8 +141,34 @@ export interface ShiftClosePayload {
   cashDenominations: DenominationCount[];
   depositAmount: number;
   note: string;
-  /** Admin who approved the variance at the terminal (credentials checked by the server) */
-  approvedBy: string | null;
+  /** An admin's login typed at the terminal to approve the variance; the server checks it */
+  approval: ApprovalCredentials | null;
+}
+
+export interface ApprovalCredentials {
+  username: string;
+  password: string;
+}
+
+/** What to check per method at close — no amounts, so the count stays blind (S2). */
+export type CloseChecklistItem = Pick<ExpectedLine, 'methodId' | 'name' | 'type' | 'closeCheck'>;
+
+/** One line revealed after a blind count (`countCheck()`). */
+export interface CountCheckLine {
+  methodId: number;
+  name: string;
+  type: PaymentType;
+  closeCheck: CloseCheck;
+  expected: number;
+  /** null = not counted (`confirm` / `none`) */
+  counted: number | null;
+  variance: number;
+}
+
+export interface CountCheckResult {
+  lines: CountCheckLine[];
+  /** Some method is off by more than `StoreInfo.shiftVarianceLimit` (S3) */
+  needsApproval: boolean;
 }
 
 /** System amount of one payment method in a shift. Cash methods share one drawer line. */
@@ -385,23 +411,17 @@ export function cashMovementError(p: CashMovementPayload, expectedCash: number):
   return null;
 }
 
-/**
- * Rule for closing a shift (POS + server): open shift, closed by its cashier or an admin, every
- * line checked per its `closeCheck`, a reason for every variance, deposit within the counted cash.
- * Approval is not an error: a variance above the limit without `approvedBy` closes as `pending`.
- */
-export function closeShiftError(
-  shift: Pick<Shift, 'status' | 'cashier'>,
-  p: ShiftClosePayload,
-  expected: readonly ExpectedLine[],
-  ctx: { user: string; isAdmin: boolean },
+/** Methods to check at close, without their amounts (blind count). */
+export const closeChecklist = (expected: readonly ExpectedLine[]): CloseChecklistItem[] =>
+  expected.map(({ methodId, name, type, closeCheck }) => ({ methodId, name, type, closeCheck }));
+
+/** Every `count` method has an amount (≥ 0, 2 decimals) and every `confirm` one is ticked. */
+export function countInputsError(
+  expected: readonly Pick<ExpectedLine, 'methodId' | 'name' | 'closeCheck'>[],
+  inputs: readonly ShiftCountInput[],
 ): string | null {
-  if (shift.status !== 'open') return 'กะนี้ปิดไปแล้ว';
-  if (ctx.user !== shift.cashier && !ctx.isAdmin) {
-    return 'ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ';
-  }
   for (const line of expected) {
-    const input = p.counts.find((c) => c.methodId === line.methodId);
+    const input = inputs.find((c) => c.methodId === line.methodId);
     if (line.closeCheck === 'none') continue;
     if (line.closeCheck === 'confirm') {
       if (!input?.confirmed) return `กรุณาตรวจยอด ${line.name} แล้วติ๊ก "ตรวจแล้ว"`;
@@ -411,7 +431,58 @@ export function closeShiftError(
     if (input.firstCount !== null && !isMoney(input.firstCount)) {
       return `ยอดนับครั้งแรกของ ${line.name} ไม่ถูกต้อง`;
     }
-    const diff = round2(input.counted - line.expected);
+  }
+  return null;
+}
+
+/**
+ * Reveals the expected amounts and variances after a blind count (server side, so the cashier
+ * never sees them before counting). Call only once `countInputsError()` passed.
+ */
+export function countCheck(
+  expected: readonly ExpectedLine[],
+  inputs: readonly ShiftCountInput[],
+  limit: number,
+): CountCheckResult {
+  const lines = expected.map((line) => {
+    const counted =
+      line.closeCheck === 'count'
+        ? (inputs.find((c) => c.methodId === line.methodId)?.counted ?? null)
+        : null;
+    return {
+      methodId: line.methodId,
+      name: line.name,
+      type: line.type,
+      closeCheck: line.closeCheck,
+      expected: line.expected,
+      counted,
+      variance: variance({ counted, expected: line.expected }),
+    };
+  });
+  return { lines, needsApproval: needsApproval(lines, limit) };
+}
+
+/**
+ * Rule for closing a shift (POS + server): open shift, closed by its cashier or an admin, every
+ * line checked per its `closeCheck`, a reason for every variance, deposit within the counted cash.
+ * Approval is not an error: a variance above the limit without `approvedBy` closes as `pending`.
+ */
+export function closeShiftError(
+  shift: Pick<Shift, 'status' | 'cashier'>,
+  p: ShiftClosePayload,
+  expected: readonly Pick<ExpectedLine, 'methodId' | 'name' | 'type' | 'closeCheck' | 'expected'>[],
+  ctx: { user: string; isAdmin: boolean },
+): string | null {
+  if (shift.status !== 'open') return 'กะนี้ปิดไปแล้ว';
+  if (ctx.user !== shift.cashier && !ctx.isAdmin) {
+    return 'ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ';
+  }
+  const countProblem = countInputsError(expected, p.counts);
+  if (countProblem) return countProblem;
+  for (const line of expected) {
+    if (line.closeCheck !== 'count') continue;
+    const input = p.counts.find((c) => c.methodId === line.methodId)!;
+    const diff = round2((input.counted ?? 0) - line.expected);
     if (diff === 0) continue;
     if (!input.reasonCode || !(input.reasonCode in VARIANCE_REASON_LABEL)) {
       return `${line.name} ${diff > 0 ? 'เกิน' : 'ขาด'} ${baht(Math.abs(diff))} บาท — กรุณาระบุสาเหตุ`;
@@ -454,6 +525,8 @@ export interface ShiftSummary {
   cashOut: number;
   /** salesTotal − voidTotal − refundTotal */
   netSales: number;
+  /** What to check per method at close (no amounts — for everyone) */
+  checklist: CloseChecklistItem[];
   /** Per method (expected amounts) — admins only while the shift is open (S2) */
   lines?: ExpectedLine[];
 }
@@ -473,6 +546,7 @@ export function shiftSummary(
   const salesTotal = sum(sold, (s) => s.total);
   const voidTotal = sum(voided, (s) => s.total);
   const refundTotal = sum(notes, (n) => n.total);
+  const expected = expectedByMethod(shift, ctx);
   return {
     billCount: sold.length,
     salesTotal,
@@ -491,7 +565,8 @@ export function shiftSummary(
       (m) => m.amount,
     ),
     netSales: round2(salesTotal - voidTotal - refundTotal),
-    ...(opts.detailed ? { lines: expectedByMethod(shift, ctx) } : {}),
+    checklist: closeChecklist(expected),
+    ...(opts.detailed ? { lines: expected } : {}),
   };
 }
 

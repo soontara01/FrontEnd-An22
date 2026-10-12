@@ -29,6 +29,14 @@
           <mat-icon>summarize</mat-icon>
           <span>X report (ยอดระหว่างกะ)</span>
         </button>
+        <button mat-menu-item [disabled]="!!store.shiftProblem()" (click)="lockScreen()">
+          <mat-icon>screen_lock_portrait</mat-icon>
+          <span>พักหน้าจอ</span>
+        </button>
+        <a mat-menu-item routerLink="shift-close" [disabled]="!store.canCloseShift()">
+          <mat-icon>lock</mat-icon>
+          <span>ปิดกะ</span>
+        </a>
       </mat-menu>
     } @else {
       <mat-icon>lock</mat-icon>
@@ -39,6 +47,57 @@
         เปิดกะ
       </button>
     }
+  </div>
+}
+
+@if (store.locked()) {
+  <div class="lock-overlay" role="dialog" aria-modal="true" aria-label="หน้าจอถูกพัก">
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <form class="unlock" (submit)="$event.preventDefault(); unlock()">
+          <mat-icon class="lock-icon">lock</mat-icon>
+          <h2>หน้าจอถูกพัก</h2>
+          <p class="text-muted">
+            กะ {{ store.shift()?.shiftNo }} · {{ store.shift()?.cashier }} —
+            ปลดล็อกด้วยรหัสผ่านของเจ้าของกะ หรือผู้ดูแลระบบ
+          </p>
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>ชื่อผู้ใช้</mat-label>
+            <input
+              matInput
+              name="username"
+              autocomplete="username"
+              [value]="unlockName()"
+              (input)="unlockName.set($any($event.target).value)"
+            />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="w-full">
+            <mat-label>รหัสผ่าน</mat-label>
+            <input
+              matInput
+              appAutofocus
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              [value]="unlockPassword()"
+              (input)="unlockPassword.set($any($event.target).value)"
+            />
+          </mat-form-field>
+          @if (unlockError()) {
+            <div class="scan-error">{{ unlockError() }}</div>
+          }
+          <button
+            mat-flat-button
+            type="submit"
+            class="w-full"
+            [disabled]="unlocking() || !unlockPassword()"
+          >
+            <mat-icon>lock_open</mat-icon>
+            ปลดล็อก
+          </button>
+        </form>
+      </mat-card-content>
+    </mat-card>
   </div>
 }
 

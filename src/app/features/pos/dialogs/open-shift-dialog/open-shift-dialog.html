@@ -37,25 +37,7 @@
     นับตามชนิดแบงก์ / เหรียญ
   </mat-slide-toggle>
   @if (counting()) {
-    <div class="notes">
-      @for (value of denominations; track value) {
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
-          <mat-label>{{ value | number: '1.0-2' }} บาท</mat-label>
-          <input
-            matInput
-            type="number"
-            min="0"
-            step="1"
-            [value]="qtyOf(value) || ''"
-            (input)="setQty(value, $any($event.target).value)"
-          />
-          <span matTextSuffix>×</span>
-        </mat-form-field>
-      }
-    </div>
-    <p>
-      รวมที่นับได้ <strong>{{ countTotal() | number: '1.2-2' }}</strong> บาท
-    </p>
+    <app-denomination-counter [(counts)]="counted" />
   }
 
   @if (problem(); as message) {

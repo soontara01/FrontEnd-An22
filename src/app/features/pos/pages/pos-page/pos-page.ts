@@ -17,6 +17,7 @@ import {
 } from '@angular/material/autocomplete';
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
+import { RouterLink } from '@angular/router';
 import { filter, switchMap, tap } from 'rxjs';
 import {
   CashMovementPayload,
@@ -78,6 +79,7 @@ interface UnitOption extends SellUnit {
     DecimalPipe,
     MatAutocompleteModule,
     MatMenuModule,
+    RouterLink,
     EmptyState,
     LoadingSpinner,
     Receipt,
@@ -98,6 +100,12 @@ export default class PosPage {
   private readonly notify = inject(NotificationService);
   /** The open-shift dialog pops up by itself only once per page load. */
   private shiftPrompted = false;
+
+  /** Lock screen login (prefilled with the user's own username) */
+  protected readonly unlockName = signal(this.store.loginHint());
+  protected readonly unlockPassword = signal('');
+  protected readonly unlockError = signal('');
+  protected readonly unlocking = signal(false);
 
   private readonly scanInput = viewChild.required<ElementRef<HTMLInputElement>>('scanInput');
   private readonly trigger = viewChild.required(MatAutocompleteTrigger);
@@ -186,6 +194,34 @@ export default class PosPage {
         const kind = m.type === 'in' ? 'นำเงินเข้า' : 'นำเงินออก';
         this.notify.success(`${kind} ${m.amount.toLocaleString('en-US')} บาทแล้ว`);
         this.focusScan();
+      });
+  }
+
+  /** Locks the screen until the shift cashier (or an admin) logs in again (S1). */
+  protected lockScreen(): void {
+    this.unlockName.set(this.store.loginHint());
+    this.unlockPassword.set('');
+    this.unlockError.set('');
+    this.store.lock();
+  }
+
+  protected unlock(): void {
+    if (this.unlocking()) return;
+    this.unlocking.set(true);
+    this.store
+      .unlock({ username: this.unlockName().trim(), password: this.unlockPassword() })
+      .subscribe({
+        next: (problem) => {
+          this.unlocking.set(false);
+          this.unlockError.set(problem ?? '');
+          this.unlockPassword.set('');
+          if (!problem) this.focusScan();
+        },
+        // Wrong login: the error interceptor shows the message.
+        error: () => {
+          this.unlocking.set(false);
+          this.unlockPassword.set('');
+        },
       });
   }
 
@@ -439,7 +475,7 @@ export default class PosPage {
   }
 
   protected onShortcut(event: KeyboardEvent): void {
-    if (this.dialog.openDialogs.length) return;
+    if (this.dialog.openDialogs.length || this.store.locked()) return;
     const actions: Record<string, () => void> = {
       F2: () => this.focusScan(),
       F8: () => this.hold(),

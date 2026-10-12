@@ -1,10 +1,12 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, finalize, forkJoin, map, tap } from 'rxjs';
+import { Observable, finalize, forkJoin, map, tap, throwError } from 'rxjs';
 import {
+  ApprovalCredentials,
   CartItem,
   CashMovement,
   CashMovementPayload,
   Category,
+  CountCheckResult,
   FreeSerial,
   ManualDiscount,
   PaymentInput,
@@ -15,6 +17,8 @@ import {
   Sale,
   SerialNumber,
   Shift,
+  ShiftClosePayload,
+  ShiftCountInput,
   ShiftOpenPayload,
   ShiftSummary,
   StoreInfo,
@@ -50,6 +54,8 @@ export interface HeldBill {
 }
 
 const HOLDS_KEY = 'pos.holds';
+/** Id of the shift whose screen is locked (survives reloads / menu switches). */
+const LOCK_KEY = 'pos.locked';
 
 /**
  * State of the POS screen (provided in pos.routes.ts): master data loaded once per page load,
@@ -80,6 +86,9 @@ export class PosStore {
   private readonly _lastInvoice = signal<TaxInvoice | null>(null);
   private readonly _shift = signal<Shift | null>(null);
   private readonly _shiftLoaded = signal(false);
+  /** The shift closed on this page load (Z report) */
+  private readonly _closedShift = signal<Shift | null>(null);
+  private readonly _lockedShiftId = signal<number | null>(this.storage.get<number>(LOCK_KEY));
 
   readonly products = this._products.asReadonly();
   readonly promotions = this._promotions.asReadonly();
@@ -150,6 +159,21 @@ export class PosStore {
     }),
   );
   /** Open longer than `StoreInfo.shiftMaxHours` — probably left open (warning only). */
+  readonly closedShift = this._closedShift.asReadonly();
+  /** Name of the logged-in user (= `Shift.cashier` of the shifts they open) */
+  readonly userName = computed(() => this.auth.user()?.name ?? '');
+  /** Username to prefill on the lock screen (the part of the e-mail before @) */
+  readonly loginHint = computed(() => this.auth.user()?.email.split('@')[0] ?? '');
+  /** The screen is locked for the open shift (a lock of another / closed shift is ignored). */
+  readonly locked = computed(() => {
+    const id = this._lockedShiftId();
+    return id !== null && this._shift()?.id === id;
+  });
+  /** Its cashier or an admin may close the open shift (S1). */
+  readonly canCloseShift = computed(() => {
+    const shift = this._shift();
+    return !!shift && (shift.cashier === this.auth.user()?.name || this.isAdmin());
+  });
   readonly shiftTooLong = computed(() => {
     const shift = this._shift();
     const info = this._storeInfo();
@@ -224,6 +248,52 @@ export class PosStore {
 
   addCashMovement(shiftId: number, payload: CashMovementPayload): Observable<CashMovement> {
     return this.api.addCashMovement(shiftId, payload);
+  }
+
+  /** Expected amounts / variances of the open shift, after a complete blind count. */
+  countCheck(counts: ShiftCountInput[]): Observable<CountCheckResult> {
+    const shift = this._shift();
+    if (!shift) return throwError(() => new Error('ยังไม่ได้เปิดกะที่เครื่องนี้'));
+    return this.api.countCheck(shift.id, counts);
+  }
+
+  /** Closes the open shift; the closed one stays available for its Z report. */
+  closeShift(payload: ShiftClosePayload): Observable<Shift> {
+    const shift = this._shift();
+    if (!shift) return throwError(() => new Error('ยังไม่ได้เปิดกะที่เครื่องนี้'));
+    return this.api.closeShift(shift.id, payload).pipe(
+      tap((closed) => {
+        this._closedShift.set(closed);
+        this._shift.set(null);
+        this.setLock(null);
+      }),
+    );
+  }
+
+  /** Locks the screen of the open shift until its cashier (or an admin) logs in again. */
+  lock(): void {
+    const shift = this._shift();
+    if (shift) this.setLock(shift.id);
+  }
+
+  /** Unlocks with a verified login; returns why not (null = unlocked). */
+  unlock(credentials: ApprovalCredentials): Observable<string | null> {
+    return this.api.verify(credentials).pipe(
+      map(({ user }) => {
+        const shift = this._shift();
+        if (shift && user.name !== shift.cashier && user.role !== 'admin') {
+          return `ปลดล็อกได้เฉพาะ ${shift.cashier} หรือผู้ดูแลระบบ`;
+        }
+        this.setLock(null);
+        return null;
+      }),
+    );
+  }
+
+  private setLock(shiftId: number | null): void {
+    this._lockedShiftId.set(shiftId);
+    if (shiftId === null) this.storage.remove(LOCK_KEY);
+    else this.storage.set(LOCK_KEY, shiftId);
   }
 
   product(id: number): Product | undefined {

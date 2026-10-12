@@ -1,0 +1,65 @@
+// Width = the paper; printElement() sizes the printed page to this host (same look as Receipt).
+:host {
+  display: block;
+  width: fit-content;
+}
+
+.slip {
+  box-sizing: border-box;
+  width: 80mm;
+  padding: 4mm;
+  font:
+    12px/1.35 ui-monospace,
+    'Sarabun',
+    monospace;
+  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface-container-lowest);
+
+  @media print {
+    color: #000;
+    background: #fff;
+  }
+}
+
+header,
+footer {
+  text-align: center;
+}
+
+.shop,
+.title,
+.mark {
+  font-weight: 700;
+}
+
+.shop {
+  font-size: 15px;
+}
+
+.block,
+footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed currentColor;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.head,
+.strong,
+.method {
+  font-weight: 700;
+}
+
+.note {
+  padding-left: 8px;
+  font-size: 11px;
+}
+
+.sign {
+  margin-top: 18px;
+}

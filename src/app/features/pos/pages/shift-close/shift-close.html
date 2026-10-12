@@ -1,0 +1,277 @@
+<app-page-header title="ปิดกะ" subtitle="นับเงินและตรวจยอดแต่ละช่องทางก่อนส่งมอบลิ้นชัก">
+  @if (step() !== 'done') {
+    <a mat-stroked-button routerLink="/pos">
+      <mat-icon>arrow_back</mat-icon>
+      กลับหน้าขาย
+    </a>
+  }
+</app-page-header>
+
+@if (step() === 'done') {
+  <mat-card appearance="outlined" class="done">
+    <mat-card-content>
+      @if (store.closedShift(); as closed) {
+        <p>
+          ปิดกะ <strong>{{ closed.shiftNo }}</strong> แล้ว · เงินนำส่ง
+          {{ closed.depositAmount | number: '1.2-2' }} บาท · เงินทอนทิ้งไว้
+          {{ closed.floatLeft | number: '1.2-2' }} บาท
+        </p>
+        @if (closed.approvalStatus === 'pending') {
+          <p class="warn">ส่วนต่างเกินเกณฑ์ — รอผู้ดูแลระบบอนุมัติ</p>
+        }
+        <div class="actions">
+          <button mat-flat-button type="button" [disabled]="!zSummary()" (click)="print()">
+            <mat-icon>print</mat-icon>
+            พิมพ์ใบสรุปปิดกะ
+          </button>
+          <button mat-stroked-button type="button" (click)="backToPos()">
+            <mat-icon>point_of_sale</mat-icon>
+            กลับหน้าขาย
+          </button>
+        </div>
+        @if (zSummary(); as z) {
+          <app-shift-slip #slip [shift]="closed" [summary]="z" [store]="store.storeInfo()" />
+        } @else {
+          <app-loading-spinner />
+        }
+      }
+    </mat-card-content>
+  </mat-card>
+} @else if (!store.shiftLoaded()) {
+  <app-loading-spinner />
+} @else if (!store.shift()) {
+  <mat-card appearance="outlined">
+    <mat-card-content>เครื่องนี้ไม่มีกะที่เปิดอยู่</mat-card-content>
+  </mat-card>
+} @else if (!store.canCloseShift()) {
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      กะนี้เป็นของ {{ store.shift()?.cashier }} — ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ
+    </mat-card-content>
+  </mat-card>
+} @else if (!summary()) {
+  <app-loading-spinner />
+} @else {
+  @let shift = store.shift()!;
+  <p class="text-muted">
+    กะ <strong>{{ shift.shiftNo }}</strong> · {{ shift.cashier }} · เครื่อง {{ shift.terminalId }} ·
+    เงินทอนตั้งต้น {{ shift.openingFloat | number: '1.2-2' }} บาท
+  </p>
+
+  @if (step() === 'count') {
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <h3>
+          1. นับเงิน
+          @if (firstCounts()) {
+            (นับใหม่)
+          }
+        </h3>
+        <p class="text-muted small">
+          กรอกยอดที่นับได้จริง — ระบบจะแสดงยอดที่ควรมีหลังจากกด "ตรวจยอด"
+        </p>
+        @for (item of checklist(); track item.methodId) {
+          <div class="method">
+            <div class="method-name">{{ item.name }}</div>
+            @if (item.type === 'cash') {
+              <mat-slide-toggle [checked]="useCounter()" (change)="useCounter.set($event.checked)">
+                นับตามชนิดแบงก์ / เหรียญ
+              </mat-slide-toggle>
+              @if (useCounter()) {
+                <app-denomination-counter [(counts)]="cashCounts" />
+              } @else {
+                <mat-form-field appearance="outline">
+                  <mat-label>เงินสดที่นับได้</mat-label>
+                  <input
+                    matInput
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    [value]="counted()[item.methodId] ?? ''"
+                    (input)="setCounted(item.methodId, $any($event.target).value)"
+                  />
+                  <span matTextSuffix>บาท</span>
+                </mat-form-field>
+              }
+            } @else if (item.closeCheck === 'count') {
+              <mat-form-field appearance="outline">
+                <mat-label>ยอดจากหลักฐาน (เช่น สลิปสรุปยอด EDC)</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  [value]="counted()[item.methodId] ?? ''"
+                  (input)="setCounted(item.methodId, $any($event.target).value)"
+                />
+                <span matTextSuffix>บาท</span>
+              </mat-form-field>
+            } @else if (item.closeCheck === 'confirm') {
+              <mat-slide-toggle
+                [checked]="!!confirmed()[item.methodId]"
+                (change)="setConfirmed(item.methodId, $event.checked)"
+              >
+                ตรวจรายการในแอปธนาคารแล้ว
+              </mat-slide-toggle>
+            } @else {
+              <span class="text-muted small">ไม่ต้องตรวจ</span>
+            }
+          </div>
+        }
+        @if (countProblem(); as message) {
+          <div class="problem">{{ message }}</div>
+        }
+        <div class="actions">
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="!!countProblem() || busy()"
+            (click)="runCheck()"
+          >
+            <mat-icon>fact_check</mat-icon>
+            ตรวจยอด
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (step() === 'review' && check(); as result) {
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <h3>2. ผลตรวจยอด</h3>
+        <table class="result">
+          <thead>
+            <tr>
+              <th>ช่องทาง</th>
+              <th class="num">ควรมี</th>
+              <th class="num">นับได้</th>
+              <th class="num">ส่วนต่าง</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (line of result.lines; track line.methodId) {
+              <tr [class.off]="line.variance !== 0">
+                <td>{{ line.name }}</td>
+                <td class="num">{{ line.expected | number: '1.2-2' }}</td>
+                <td class="num">
+                  @if (line.counted !== null) {
+                    {{ line.counted | number: '1.2-2' }}
+                  } @else {
+                    {{ line.closeCheck === 'confirm' ? 'ตรวจแล้ว' : '-' }}
+                  }
+                </td>
+                <td class="num">
+                  <strong>{{ line.variance | number: '1.2-2' }}</strong>
+                </td>
+              </tr>
+              @if (line.variance !== 0) {
+                <tr class="reason">
+                  <td colspan="4">
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>สาเหตุ ({{ line.variance > 0 ? 'เกิน' : 'ขาด' }})</mat-label>
+                      <mat-select
+                        [value]="reasonCode()[line.methodId] ?? null"
+                        (selectionChange)="setReasonCode(line.methodId, $event.value)"
+                      >
+                        @for (r of reasons; track r[0]) {
+                          <mat-option [value]="r[0]">{{ r[1] }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                      <mat-label>รายละเอียด</mat-label>
+                      <input
+                        matInput
+                        [value]="reasonText()[line.methodId] ?? ''"
+                        (input)="setReasonText(line.methodId, $any($event.target).value)"
+                      />
+                    </mat-form-field>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+        @if (!firstCounts()) {
+          <button mat-button type="button" (click)="recount()">
+            <mat-icon>replay</mat-icon>
+            นับใหม่ (ได้ 1 ครั้ง)
+          </button>
+        }
+
+        <h3>3. ส่งมอบเงิน</h3>
+        <div class="money">
+          <mat-form-field appearance="outline">
+            <mat-label>เงินนำส่ง (เข้าเซฟ / ธนาคาร)</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="0.25"
+              [value]="deposit()"
+              (input)="deposit.set($any($event.target).value)"
+            />
+            <span matTextSuffix>บาท</span>
+          </mat-form-field>
+          <div>
+            เงินทอนทิ้งไว้ในลิ้นชัก <strong>{{ floatLeft() | number: '1.2-2' }}</strong> บาท
+          </div>
+        </div>
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>หมายเหตุ</mat-label>
+          <input matInput [value]="note()" (input)="note.set($any($event.target).value)" />
+        </mat-form-field>
+
+        @if (needsApprover()) {
+          <div class="approval">
+            <p class="warn">
+              ส่วนต่างเกิน {{ store.storeInfo()?.shiftVarianceLimit }} บาท ต้องให้ผู้ดูแลระบบอนุมัติ
+            </p>
+            <mat-slide-toggle [checked]="approveNow()" (change)="approveNow.set($event.checked)">
+              ผู้ดูแลระบบอนุมัติที่เครื่องนี้ตอนนี้ (ไม่เปิด = ปิดกะเป็น "รออนุมัติ")
+            </mat-slide-toggle>
+            @if (approveNow()) {
+              <div class="money">
+                <mat-form-field appearance="outline">
+                  <mat-label>ชื่อผู้ใช้ผู้ดูแลระบบ</mat-label>
+                  <input
+                    matInput
+                    autocomplete="off"
+                    [value]="approverName()"
+                    (input)="approverName.set($any($event.target).value)"
+                  />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>รหัสผ่าน</mat-label>
+                  <input
+                    matInput
+                    type="password"
+                    autocomplete="off"
+                    [value]="approverPassword()"
+                    (input)="approverPassword.set($any($event.target).value)"
+                  />
+                </mat-form-field>
+              </div>
+            }
+          </div>
+        }
+
+        @if (closeProblem(); as message) {
+          <div class="problem">{{ message }}</div>
+        }
+        <div class="actions">
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="!!closeProblem() || busy()"
+            (click)="close()"
+          >
+            <mat-icon>lock</mat-icon>
+            ปิดกะ
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+}

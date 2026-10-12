@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
+  CountCheckResult,
   CreditNote,
   CreditNoteLineInput,
   Exchange,
@@ -1229,5 +1230,53 @@ describe('mockBackendInterceptor – shifts', () => {
     expect(await errorOf(setRequireShift(false))).toBe(
       'ยังมีกะที่เปิดอยู่ 1 กะ — ปิดกะทั้งหมดก่อนปิดการใช้ระบบกะ',
     );
+  });
+
+  it('verifies a login without starting a session (400 when wrong)', async () => {
+    const ok = await call<{ user: { name: string } }>('POST', 'auth/verify', {
+      username: 'somchai',
+      password: '1234',
+    });
+    expect(ok.user.name).toBe('สมชาย ใจดี');
+    expect(await errorOf(call('POST', 'auth/verify', { username: 'somchai', password: 'x' }))).toBe(
+      'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+    );
+  });
+
+  it('reveals variances after a full blind count and approves with an admin login', async () => {
+    const staff = { token: STAFF };
+    const shift = await open(1000, staff);
+    const counts = await countsFor(shift, -150);
+    const blank = counts.map((c, i) => (i === 0 ? { ...c, counted: null } : c));
+    expect(
+      await errorOf(call('POST', `shifts/${shift.id}/count-check`, { counts: blank }, staff)),
+    ).toBe('กรุณากรอกยอดที่นับได้ของ เงินสด');
+    const check = await call<CountCheckResult>(
+      'POST',
+      `shifts/${shift.id}/count-check`,
+      { counts },
+      staff,
+    );
+    expect(check.needsApproval).toBe(true);
+    expect(check.lines[0]).toMatchObject({ expected: 1000, counted: 850, variance: -150 });
+
+    const close = (approval: unknown) =>
+      call<Shift>(
+        'POST',
+        `shifts/${shift.id}/close`,
+        { counts, cashDenominations: [], depositAmount: 0, note: '', approval },
+        staff,
+      );
+    expect(await errorOf(close({ username: 'admin', password: 'x' }))).toBe(
+      'รหัสผ่านผู้อนุมัติไม่ถูกต้อง',
+    );
+    expect(await errorOf(close({ username: 'somchai', password: '1234' }))).toBe(
+      'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ',
+    );
+    expect(await close({ username: 'admin', password: 'admin' })).toMatchObject({
+      approvalStatus: 'approved',
+      approvedBy: 'Admin',
+      closedBy: 'สมชาย ใจดี',
+    });
   });
 });

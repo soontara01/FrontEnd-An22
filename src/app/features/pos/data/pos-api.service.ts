@@ -2,9 +2,11 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  ApprovalCredentials,
   CashMovement,
   CashMovementPayload,
   Category,
+  CountCheckResult,
   PaymentMethod,
   Product,
   Promotion,
@@ -12,9 +14,12 @@ import {
   SalePayload,
   SerialNumber,
   Shift,
+  ShiftClosePayload,
+  ShiftCountInput,
   ShiftOpenPayload,
   ShiftSummary,
   StoreInfo,
+  User,
   TaxInvoice,
   TaxInvoiceBuyer,
 } from '@core/models';
@@ -86,5 +91,19 @@ export class PosApi {
 
   addCashMovement(shiftId: number, payload: CashMovementPayload): Observable<CashMovement> {
     return this.api.post<CashMovement>(`shifts/${shiftId}/cash-movements`, payload);
+  }
+
+  /** Expected amounts / variances, revealed only after a complete blind count. */
+  countCheck(shiftId: number, counts: ShiftCountInput[]): Observable<CountCheckResult> {
+    return this.api.post<CountCheckResult>(`shifts/${shiftId}/count-check`, { counts });
+  }
+
+  closeShift(shiftId: number, payload: ShiftClosePayload): Observable<Shift> {
+    return this.api.post<Shift>(`shifts/${shiftId}/close`, payload);
+  }
+
+  /** Checks a login without starting a session (wrong → 400, never a 401 logout). */
+  verify(credentials: ApprovalCredentials): Observable<{ user: User }> {
+    return this.api.post<{ user: User }>('auth/verify', credentials);
   }
 }

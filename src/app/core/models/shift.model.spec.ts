@@ -7,7 +7,10 @@ import {
   approvalStatusFor,
   buildShiftCounts,
   cashMovementError,
+  closeChecklist,
   closeShiftError,
+  countCheck,
+  countInputsError,
   denominationTotal,
   drawerExpected,
   expectedByMethod,
@@ -99,7 +102,7 @@ const close = (over: Partial<ShiftClosePayload> = {}, counts: ShiftCountInput[] 
     cashDenominations: [],
     depositAmount: 0,
     note: '',
-    approvedBy: null,
+    approval: null,
     ...over,
   };
 };
@@ -355,7 +358,33 @@ describe('shift model', () => {
       netSales: 21300,
     });
     expect(x.lines).toBeUndefined();
+    expect(x.checklist).toEqual(closeChecklist(expected));
     expect(shiftSummary(shift, ctx, { detailed: true }).lines).toEqual(expected);
+  });
+
+  it('lists what to check at close without any amount (blind count)', () => {
+    const list = closeChecklist(expected);
+    expect(list.map((l) => [l.name, l.closeCheck])).toEqual([
+      ['เงินสด', 'count'],
+      ['บัตร', 'count'],
+      ['QR', 'count'],
+      ['โอน', 'confirm'],
+    ]);
+    expect(Object.keys(list[0]).sort()).toEqual(['closeCheck', 'methodId', 'name', 'type']);
+  });
+
+  it('reveals variances only from a complete count', () => {
+    const counts = close({}, [input(1, { counted: 6680 })]).counts;
+    expect(countInputsError(expected, counts)).toBeNull();
+    expect(countInputsError(expected, close({}, [input(2)]).counts)).toBe(
+      'กรุณากรอกยอดที่นับได้ของ บัตร',
+    );
+    const check = countCheck(expected, counts, 100);
+    expect(check.needsApproval).toBe(false);
+    expect(check.lines[0]).toMatchObject({ expected: 6700, counted: 6680, variance: -20 });
+    expect(check.lines[3]).toMatchObject({ closeCheck: 'confirm', counted: null, variance: 0 });
+    const short = close({}, [input(1, { counted: 6550 })]).counts;
+    expect(countCheck(expected, short, 100).needsApproval).toBe(true);
   });
 
   it('reports variances per cashier over closed shifts', () => {

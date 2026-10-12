@@ -1,0 +1,131 @@
+@let s = shift();
+@let sum = summary();
+<div class="slip">
+  <header>
+    @if (store(); as shop) {
+      <div class="shop">{{ shop.name }}</div>
+      @if (shop.posId) {
+        <div>POS ID {{ shop.posId }}</div>
+      }
+    }
+    <div class="title">ใบสรุปปิดกะ (Z report)</div>
+    @if (copy()) {
+      <div class="mark">*** สำเนา ***</div>
+    }
+  </header>
+
+  <div class="block">
+    <div class="row">
+      <span>เลขที่กะ</span><span>{{ s.shiftNo }}</span>
+    </div>
+    <div class="row">
+      <span>เครื่อง POS</span><span>{{ s.terminalId }}</span>
+    </div>
+    <div class="row">
+      <span>แคชเชียร์</span><span>{{ s.cashier }}</span>
+    </div>
+    <div class="row">
+      <span>เปิดกะ</span><span>{{ s.openedAt | thaiDate: 'datetime' }}</span>
+    </div>
+    <div class="row">
+      <span>ปิดกะ</span><span>{{ s.closedAt | thaiDate: 'datetime' }}</span>
+    </div>
+    @if (closedOnBehalf()) {
+      <div class="row">
+        <span>ปิดแทนโดย</span><span>{{ s.closedBy }}</span>
+      </div>
+    }
+  </div>
+
+  <div class="block">
+    <div class="row">
+      <span>ขาย {{ sum.billCount }} บิล</span><span>{{ sum.salesTotal | number: '1.2-2' }}</span>
+    </div>
+    <div class="row">
+      <span>ส่วนลดในบิล</span><span>{{ sum.discountTotal | number: '1.2-2' }}</span>
+    </div>
+    <div class="row">
+      <span>ยกเลิก {{ sum.voidCount }} บิล</span><span>−{{ sum.voidTotal | number: '1.2-2' }}</span>
+    </div>
+    <div class="row">
+      <span>คืนเงิน {{ sum.refundCount }} ใบ</span
+      ><span>−{{ sum.refundTotal | number: '1.2-2' }}</span>
+    </div>
+    <div class="row strong">
+      <span>ยอดขายสุทธิ</span><span>{{ sum.netSales | number: '1.2-2' }}</span>
+    </div>
+    <div class="row">
+      <span>เงินทอนตั้งต้น</span><span>{{ s.openingFloat | number: '1.2-2' }}</span>
+    </div>
+    <div class="row">
+      <span>นำเงินเข้า / ออก</span>
+      <span>+{{ sum.cashIn | number: '1.2-2' }} / −{{ sum.cashOut | number: '1.2-2' }}</span>
+    </div>
+    @if (sum.exchangeCount) {
+      <div class="row">
+        <span>ใบเปลี่ยนสินค้า</span><span>{{ sum.exchangeCount }} ใบ</span>
+      </div>
+    }
+  </div>
+
+  <div class="block">
+    <div class="row head"><span>ช่องทาง</span><span>ควรมี / นับได้ / ต่าง</span></div>
+    @for (c of s.counts; track c.methodId) {
+      <div class="method">{{ c.name }}</div>
+      @if (c.counted !== null) {
+        <div class="row">
+          <span></span>
+          <span>
+            {{ c.expected | number: '1.2-2' }} / {{ c.counted | number: '1.2-2' }} /
+            <strong>{{ diff(c) | number: '1.2-2' }}</strong>
+          </span>
+        </div>
+        @if (c.firstCount !== null && c.firstCount !== c.counted) {
+          <div class="note">นับครั้งแรก {{ c.firstCount | number: '1.2-2' }}</div>
+        }
+        @if (reasonText(c); as reason) {
+          <div class="note">สาเหตุ: {{ reason }}</div>
+        }
+      } @else {
+        <div class="row">
+          <span></span>
+          <span>
+            {{ c.expected | number: '1.2-2' }} ·
+            {{
+              c.closeCheck === 'confirm' ? 'ตรวจแล้วโดย ' + (c.confirmedBy ?? '-') : 'ไม่ต้องนับ'
+            }}
+          </span>
+        </div>
+      }
+    }
+    <div class="row strong">
+      <span>รวมส่วนต่าง</span><span>{{ totalVariance() | number: '1.2-2' }}</span>
+    </div>
+  </div>
+
+  <div class="block">
+    <div class="row">
+      <span>เงินนำส่ง</span><span>{{ s.depositAmount | number: '1.2-2' }}</span>
+    </div>
+    <div class="row">
+      <span>เงินทอนทิ้งไว้</span><span>{{ s.floatLeft | number: '1.2-2' }}</span>
+    </div>
+    <div class="row">
+      <span>การอนุมัติ</span>
+      <span>
+        {{ approvalLabel[s.approvalStatus] }}
+        @if (s.approvedBy) {
+          · {{ s.approvedBy }}
+        }
+      </span>
+    </div>
+    @if (s.note) {
+      <div class="note">หมายเหตุ: {{ s.note }}</div>
+    }
+  </div>
+
+  <footer>
+    <div class="sign">ลงชื่อ ..................................... แคชเชียร์</div>
+    <div class="sign">ลงชื่อ ..................................... ผู้ตรวจ</div>
+  </footer>
+</div>

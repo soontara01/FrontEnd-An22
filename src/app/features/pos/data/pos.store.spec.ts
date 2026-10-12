@@ -87,6 +87,9 @@ describe('PosStore', () => {
       shiftSummary: vi.fn(),
       cashMovements: vi.fn(() => of([])),
       addCashMovement: vi.fn(),
+      countCheck: vi.fn(),
+      closeShift: vi.fn(() => of({ ...shift, status: 'closed' })),
+      verify: vi.fn(() => of({ user: { name: 'สมชาย ใจดี', role: 'user' } })),
     };
     TestBed.configureTestingModule({ providers: [PosStore, { provide: PosApi, useValue: api }] });
     store = TestBed.inject(PosStore);
@@ -245,6 +248,42 @@ describe('PosStore', () => {
       withShifts({ ...shift, cashier: 'สมหญิง รักงาน', openedAt: '2020-01-01T00:00:00.000Z' });
       expect(store.blocker()).toBe('กะนี้เป็นของ สมหญิง รักงาน — ต้องปิดกะนั้นก่อนจึงจะขายได้');
       expect(store.shiftTooLong()).toBe(true);
+    });
+
+    it('closes the shift, keeps it for the Z report and clears the lock', () => {
+      withShifts(shift);
+      store.lock();
+      expect(store.locked()).toBe(true);
+      expect(localStorage.getItem('an22.pos.locked')).toBe('7');
+      store
+        .closeShift({
+          counts: [],
+          cashDenominations: [],
+          depositAmount: 0,
+          note: '',
+          approval: null,
+        })
+        .subscribe();
+      expect(api.closeShift).toHaveBeenCalledWith(7, expect.objectContaining({ approval: null }));
+      expect(store.shift()).toBeNull();
+      expect(store.closedShift()?.status).toBe('closed');
+      expect(store.locked()).toBe(false);
+      expect(localStorage.getItem('an22.pos.locked')).toBeNull();
+    });
+
+    it('unlocks only for the shift cashier or an admin', () => {
+      withShifts(shift);
+      store.lock();
+      const unlock = () => {
+        let result: string | null = 'pending';
+        store.unlock({ username: 'x', password: 'y' }).subscribe((r) => (result = r));
+        return result;
+      };
+      api.verify.mockReturnValueOnce(of({ user: { name: 'สมหญิง รักงาน', role: 'user' } }));
+      expect(unlock()).toBe('ปลดล็อกได้เฉพาะ สมชาย ใจดี หรือผู้ดูแลระบบ');
+      expect(store.locked()).toBe(true);
+      expect(unlock()).toBeNull();
+      expect(store.locked()).toBe(false);
     });
 
     it("defaults the opening float to what this terminal's last shift left", () => {

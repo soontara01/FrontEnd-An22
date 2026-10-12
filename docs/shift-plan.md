@@ -1,6 +1,6 @@
 # แผนเปิด / ปิดกะ (Shift) + นับเงินตามช่องทางชำระเงิน
 
-สถานะ: **กำลังทำ** · ขั้นที่ 1–3 เสร็จ (2026-10-12: โมเดล + กติกา + mock + POS เปิดกะ / เงินเข้าออก / X report) · ข้อตัดสินใจ S1–S6 ยืนยันครบแล้ว (2026-10-11) · `requireShift` อยู่ในรอบแรก
+สถานะ: **กำลังทำ** · ขั้นที่ 1–4 เสร็จ (2026-10-12: โมเดล + กติกา + mock + POS เปิด / ปิดกะ, เงินเข้าออก, X / Z report, พักหน้าจอ) · ข้อตัดสินใจ S1–S6 ยืนยันครบแล้ว (2026-10-11) · `requireShift` อยู่ในรอบแรก
 
 ที่มา: `docs/pos-plan.md` ข้อตัดสินใจ 7 ("เปิด/ปิดกะ + นับเงินลิ้นชัก — รอบถัดไป")
 เป้าหมาย: เมื่อแคชเชียร์เปลี่ยนกะ ต้องนับเงินและยอดแต่ละช่องทางชำระเงินของกะนั้นได้ และรู้ว่าเงินขาด/เกินเป็นความรับผิดชอบของใคร
@@ -140,7 +140,9 @@ interface CashMovement {
 - `POST /shifts/open { terminalId, openingFloat, openingDenominations }` (เครื่องนี้มีกะเปิดอยู่แล้ว → 400)
 - `POST /shifts/:id/cash-movements { type, amount, reason }` (`cashMovementError()`; เงินออกเกินเงินสดคาด → 400)
 - `GET /shifts/:id/summary` → X report (กะเปิด) / Z report (กะปิด); ผู้ใช้ไม่ใช่ admin ขณะกะเปิด → ได้แค่จำนวนบิล + ยอดขายรวม (ไม่มียอดตามช่องทาง / ยอดคาด)
-- `POST /shifts/:id/close { counts (+ เหตุผลต่อช่องทาง), cashDenominations, depositAmount, approval? }` (`closeShiftError()` → 400) — mock ขั้น 2: admin ที่ปิดกะอนุมัติเอง, คนอื่นได้ `pending`; อนุมัติด้วยรหัสผ่าน admin ที่เครื่องทำในขั้น 4
+- `POST /shifts/:id/count-check { counts }` → `CountCheckResult` (ยอดคาด / ส่วนต่างต่อช่องทาง + `needsApproval`) — เปิดเผยเฉพาะหลังกรอกยอดครบ (`countInputsError()` → 400), ไม่บันทึกอะไร; **backend จริงควรบันทึก count-check ครั้งแรกเอง** แทนการเชื่อ `firstCount` จาก client
+- `POST /shifts/:id/close { counts (+ เหตุผลต่อช่องทาง), cashDenominations, depositAmount, note, approval: { username, password } | null }` (`closeShiftError()` → 400) — ผู้อนุมัติ = admin ที่ปิดกะเอง หรือ admin ที่ใส่ username / password ที่เครื่อง (server ตรวจ; ผิด / ไม่ใช่ admin → 400) ไม่อย่างนั้นส่วนต่างเกินเกณฑ์ได้ `pending`
+- `POST /auth/verify { username, password }` → `{ user }` ตรวจรหัสผ่านโดยไม่เปลี่ยน session (ปลดล็อกหน้าจอ); ผิด → **400** (ไม่ใช่ 401 ที่ทำให้ logout)
 - `POST /shifts/:id/approve { note }` (admin; กะ `pending` → `approved`)
 - `GET /shifts/variance-report?from&to` → ส่วนต่างต่อแคชเชียร์ (S3)
 - `GET /shifts[?from&to]` (กรองตาม**วันที่เปิดกะ**; `?openOnly=1` = กะที่ยังเปิด), `GET /shifts/:id`, `GET /shifts/:id/movements` (เงินเข้า / ออกของกะ)
@@ -152,7 +154,7 @@ interface CashMovement {
   - แถบบนแสดงสถานะกะ: เลขกะ, แคชเชียร์, เวลาเปิด (เปิดนานเกิน `shiftMaxHours` → สีเตือน); ไม่มีกะ → dialog เปิดกะแทนตะกร้า
   - เมนูกะ: นำเงินเข้า / ออก, เปิดลิ้นชัก, X report, ปิดกะ
   - คนที่ login ไม่ใช่เจ้าของกะ → ขายไม่ได้ (admin ทำ void / คืนเงินได้) ต้องให้เจ้าของกะปิดกะก่อน หรือ admin ปิดแทน (S1)
-  - ปุ่ม **พักหน้าจอ** — ล็อก POS จนกว่าเจ้าของกะใส่รหัสผ่าน (ย้ายไปขั้น 4: ใช้การตรวจรหัสผ่านแบบเดียวกับการอนุมัติ)
+  - ปุ่ม **พักหน้าจอ** — ล็อกทั้งแอปจนกว่าเจ้าของกะหรือ admin ใส่รหัสผ่าน (`auth/verify`); สถานะล็อกเก็บใน localStorage `pos.locked` จึงยังล็อกหลัง reload
 - **ปิดกะ (`/pos/shift-close`)** — นับ blind count → ผลส่วนต่าง → เหตุผล / อนุมัติ → พิมพ์ Z report (80 มม., `printElement()`)
 - **เมนูการขาย** — `/sales/shifts` รายการกะ (สถานะ, แคชเชียร์, ยอดขาย, ส่วนต่าง, ผู้อนุมัติ; กรองช่วงวันตาม `date-range.ts`;
   ตัวกรอง "รออนุมัติ" + ปุ่มอนุมัติ; แท็บรายงานส่วนต่างต่อแคชเชียร์)
@@ -167,7 +169,9 @@ interface CashMovement {
    เงินเข้า / ออก (`CashMovementDialog`), X report (`ShiftReportDialog`); `PosStore.shiftProblem` = `shiftBlocker('sell')` ปิดปุ่มชำระเงิน;
    เลขเครื่อง = `TerminalService` (`core/services`, localStorage `pos.terminal`, ตั้งตอนเปิดกะ) + `terminalInterceptor` ส่ง `X-Terminal-Id` ทุก request (หน้ายกเลิกบิล / ใบลดหนี้ด้วย);
    mock เปิด `requireShift` ตามค่าเริ่มต้น + `enableShifts()` เปลี่ยน `false` ชั่วคราวของขั้น 2 เป็น `true` ครั้งเดียว (`MockDb.shiftsEnabled`)
-4. ปิดกะ + Z report + อนุมัติส่วนต่าง (รหัสผ่าน admin ที่เครื่อง) + พักหน้าจอ
+4. ✅ ปิดกะ (เสร็จ 2026-10-12): หน้า `/pos/shift-close` — นับแบบ blind ตาม `ShiftSummary.checklist` (ไม่มียอด; เงินสดใช้ `DenominationCounter`), `count-check` เปิดเผยส่วนต่าง,
+   นับใหม่ได้ 1 ครั้ง (`firstCount`), สาเหตุต่อช่องทาง, เงินนำส่ง (ค่าเริ่มต้น = เงินสดนับได้ − เงินทอนตั้งต้น), อนุมัติด้วย login admin ที่เครื่องหรือปิดเป็นรออนุมัติ;
+   Z report = `ShiftSlip` (`shared/components/shift-slip`, 80 มม., ใช้ซ้ำในเมนูการขายขั้น 5); พักหน้าจอ (overlay + `auth/verify`)
 5. เมนูการขาย: รายการกะ / รายละเอียดกะ; Settings (`requireShift`, เกณฑ์ต่าง ๆ) + `closeCheck`
 6. อัปเดต `CLAUDE.md` + `pos-plan.md`
 

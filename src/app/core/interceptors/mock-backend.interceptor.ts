@@ -104,7 +104,10 @@ import {
   ShiftAction,
   ShiftClosePayload,
   ShiftContext,
+  ShiftCountInput,
   ShiftOpenPayload,
+  countCheck,
+  countInputsError,
   approvalStatusFor,
   buildShiftCounts,
   cashMovementError,
@@ -842,6 +845,13 @@ function handle(
 ): Observable<HttpResponse<unknown>> {
   if (path === 'auth/login' && req.method === 'POST') {
     return login(req.body as LoginRequest, db.users);
+  }
+  if (path === 'auth/verify' && req.method === 'POST') {
+    // Checks a login without starting a session (shift approval, unlocking the POS). A wrong
+    // password is a 400, not a 401: the error interceptor logs out on 401.
+    const { username, password } = (req.body ?? {}) as Partial<LoginRequest>;
+    const user = checkCredentials(username, password, db.users);
+    return typeof user === 'string' ? error(400, user) : ok({ user });
   }
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
   if (path === 'products' || path.startsWith('products/')) return handleProducts(req, path, db);
@@ -2514,7 +2524,8 @@ function handleShifts(
     );
   }
 
-  const match = /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|close|approve))?$/.exec(path);
+  const match =
+    /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|count-check|close|approve))?$/.exec(path);
   if (!match) return notFound(req, path);
   const shift = db.shifts.find((s) => s.id === Number(match[1]));
   if (!shift) return error(404, 'ไม่พบกะ');
@@ -2553,6 +2564,18 @@ function handleShifts(
     db.cashMovements.push(movement);
     return ok(movement);
   }
+  if (action === 'count-check' && req.method === 'POST') {
+    // Reveals expected amounts / variances only after a full blind count (S2); stores nothing.
+    if (shift.status !== 'open') return error(400, 'กะนี้ปิดไปแล้ว');
+    if (user !== shift.cashier && !isAdmin) {
+      return error(400, 'ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
+    }
+    const counts = ((req.body ?? {}) as { counts?: ShiftCountInput[] }).counts ?? [];
+    const expected = expectedByMethod(shift, shiftContext(db));
+    const problem = countInputsError(expected, counts);
+    if (problem) return error(400, problem);
+    return ok(countCheck(expected, counts, db.storeInfo.shiftVarianceLimit));
+  }
   if (action === 'close' && req.method === 'POST') {
     const body = (req.body ?? {}) as Partial<ShiftClosePayload>;
     const payload: ShiftClosePayload = {
@@ -2560,21 +2583,28 @@ function handleShifts(
       cashDenominations: body.cashDenominations ?? [],
       depositAmount: Number(body.depositAmount ?? 0),
       note: (body.note ?? '').trim(),
-      approvedBy: null,
+      approval: body.approval ?? null,
     };
     const expected = expectedByMethod(shift, shiftContext(db));
     const problem = closeShiftError(shift, payload, expected, { user, isAdmin });
     if (problem) return error(400, problem);
+    // The variance is approved by the admin closing, or by an admin's login typed at the
+    // terminal; otherwise a variance above the limit waits as `pending`.
+    let approver: string | null = isAdmin ? user : null;
+    if (!approver && payload.approval) {
+      const found = checkCredentials(
+        payload.approval.username,
+        payload.approval.password,
+        db.users,
+      );
+      if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
+      if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
+      approver = found.name;
+    }
     const counts = buildShiftCounts(expected, payload.counts, user);
     const drawer = expected.find((l) => l.type === 'cash');
     const cash = counts.find((c) => c.methodId === drawer?.methodId)?.counted ?? 0;
-    // An admin closing approves the variance; at-terminal approval with an admin's password is
-    // step 4 of the shift plan. Otherwise a variance above the limit waits as `pending`.
-    const approval = approvalStatusFor(
-      counts,
-      db.storeInfo.shiftVarianceLimit,
-      isAdmin ? user : null,
-    );
+    const approval = approvalStatusFor(counts, db.storeInfo.shiftVarianceLimit, approver);
     Object.assign(shift, {
       status: 'closed',
       closedAt: now,
@@ -2584,7 +2614,7 @@ function handleShifts(
       depositAmount: payload.depositAmount,
       floatLeft: round2(cash - payload.depositAmount),
       approvalStatus: approval,
-      approvedBy: approval === 'approved' ? user : null,
+      approvedBy: approval === 'approved' ? approver : null,
       approvedAt: approval === 'approved' ? now : null,
       note: payload.note,
     } satisfies Partial<Shift>);
@@ -2631,19 +2661,27 @@ function login(
   { username, password }: LoginRequest,
   users: User[],
 ): Observable<HttpResponse<LoginResponse>> {
-  if (username === 'admin' && password === 'admin') {
-    return ok({ token: ADMIN_TOKEN, user: users[0] });
-  }
+  const user = checkCredentials(username, password, users);
+  if (typeof user === 'string') return error(401, user);
+  const token = user.id === users[0]?.id ? ADMIN_TOKEN : `${ADMIN_TOKEN}.u${user.id}`;
+  return ok({ token, user });
+}
+
+/** The user a mock login names, or the Thai reason it is refused (login + `auth/verify`). */
+function checkCredentials(
+  username: string | undefined,
+  password: string | undefined,
+  users: User[],
+): User | string {
+  if (username === 'admin' && password === 'admin' && users[0]) return users[0];
   const name = (username ?? '').trim().toLowerCase();
   const user = users.find(
     (u) =>
       u.id !== users[0]?.id && (u.email.toLowerCase() === name || u.email.split('@')[0] === name),
   );
-  if (!user || password !== MOCK_USER_PASSWORD) {
-    return error(401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-  }
-  if (!user.active) return error(401, 'บัญชีนี้ถูกปิดใช้งาน');
-  return ok({ token: `${ADMIN_TOKEN}.u${user.id}`, user });
+  if (!user || password !== MOCK_USER_PASSWORD) return 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+  if (!user.active) return 'บัญชีนี้ถูกปิดใช้งาน';
+  return user;
 }
 
 const ADMIN_TOKEN = 'mock-jwt-token';

@@ -1,0 +1,78 @@
+mat-card {
+  max-width: 760px;
+  margin-bottom: 16px;
+}
+
+h3 {
+  font: var(--mat-sys-title-medium);
+  margin: 8px 0;
+}
+
+.method {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+}
+
+.method-name {
+  font: var(--mat-sys-title-small);
+}
+
+.result {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 6px 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .num {
+    text-align: right;
+  }
+
+  .off td {
+    color: var(--mat-sys-error);
+  }
+
+  .reason td {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+.money {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.approval {
+  padding: 12px;
+  margin: 8px 0;
+  border-radius: 12px;
+  background: var(--mat-sys-surface-container);
+}
+
+.warn {
+  color: var(--mat-sys-error);
+}
+
+.problem {
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+  margin-top: 8px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
