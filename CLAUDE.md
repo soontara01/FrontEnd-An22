@@ -6,7 +6,7 @@ POS (sales screen, menu ขายหน้าร้าน `features/pos`, `PosSt
 
 POS shifts (เปิด/ปิดกะ, cash count per payment method): done (decisions S1–S6 + steps in `docs/shift-plan.md`) — rules below under **POS shifts**.
 
-POS terminal registry (many terminals per store, Revenue Dept POS ID per terminal instead of `StoreInfo.posId`): draft in `docs/terminal-plan.md` (T4 confirmed 2026-10-12: POS bill numbers run continuously **per terminal**, `POS<terminal>-YYYYMMDD-NNNN`; T1–T3, T5 pending; not started).
+POS terminal registry (many terminals per store, Revenue Dept POS ID per terminal instead of `StoreInfo.posId`): plan in `docs/terminal-plan.md` (decisions T1–T5 confirmed 2026-10-12; T4: POS bill numbers run continuously **per terminal**, `POS<terminal>-YYYYMMDD-NNNN`; in progress).
 
 SaaS direction (multi-company, many branches per company) plan + decisions: `docs/saas-plan.md` (decisions D1–D7 confirmed 2026-10-10, not started) — tenant comes only from the token, the working branch from the `X-Branch-Id` header (server-checked).
 
