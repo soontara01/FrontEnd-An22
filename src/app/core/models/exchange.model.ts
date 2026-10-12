@@ -50,6 +50,9 @@ export interface Exchange {
   lines: ExchangeLine[];
   /** Open shift of the terminal at the time, if any — counted in its report (no money moves) */
   shiftId?: number | null;
+  /** Terminal it was made at + its POS ID (server-set snapshot; missing = unknown) */
+  terminalId?: number | null;
+  posId?: string;
 }
 
 export interface ExchangeLineInput {

@@ -83,6 +83,9 @@ export interface CreditNote {
   refunds: SalePayment[];
   /** Shift the refund was paid from (server-set; missing / null = no shift) */
   shiftId?: number | null;
+  /** Terminal it was issued at + its POS ID (server-set snapshot) */
+  terminalId?: number | null;
+  posId?: string;
 }
 
 export interface CreditNoteLineInput {

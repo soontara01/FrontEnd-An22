@@ -94,7 +94,7 @@ export interface SalePayment {
 
 export interface Sale {
   id: number;
-  /** Receipt number issued by the server, e.g. 'POS-20261004-0001' */
+  /** Receipt number issued by the server: 'POS<terminal>-YYYYMMDD-NNNN' (older bills 'POS-YYYYMMDD-NNNN') */
   orderNo: string;
   /** ISO timestamp */
   date: string;
@@ -139,6 +139,10 @@ export interface Sale {
   shiftId?: number | null;
   /** Shift the void was made in — its money goes out of that drawer (server-set) */
   voidShiftId?: number | null;
+  /** Terminal (POS device) the bill was made at (server-set snapshot; missing = before the registry) */
+  terminalId?: number | null;
+  /** That terminal's Revenue Dept POS ID when the bill was made — printed on its receipts */
+  posId?: string;
 }
 
 /** Defaults for fields missing from older stored sales (before the POS existed). */

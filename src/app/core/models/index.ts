@@ -7,6 +7,7 @@ export * from './price.model';
 export * from './payment-method.model';
 export * from './pos-payment.model';
 export * from './pos-pricing.model';
+export * from './pos-terminal.model';
 export * from './product.model';
 export * from './promotion.model';
 export * from './sale.model';

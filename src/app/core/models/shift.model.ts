@@ -77,6 +77,8 @@ export interface Shift {
   /** 'SH-<open day YYYYMMDD>-NN', issued by the server */
   shiftNo: string;
   terminalId: number;
+  /** The terminal's Revenue Dept POS ID when the shift was opened (server-set snapshot) */
+  posId?: string;
   /** Who opened it = who is responsible for the drawer */
   cashier: string;
   status: ShiftStatus;
