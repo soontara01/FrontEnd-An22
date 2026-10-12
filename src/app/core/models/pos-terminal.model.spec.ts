@@ -3,6 +3,7 @@ import {
   missingPosId,
   normalizePosTerminal,
   posTerminalError,
+  terminalError,
   terminalLabel,
   terminalOrderPrefix,
 } from './pos-terminal.model';
@@ -48,6 +49,19 @@ describe('pos terminal model', () => {
     expect(missingPosId(t2, false)).toBe(false);
     expect(missingPosId({ ...t2, active: false }, true)).toBe(false);
     expect(missingPosId(t1, true)).toBe(false);
+  });
+
+  it('lets only an active registered terminal sell', () => {
+    expect(terminalError(1, [t1, t2])).toBeNull();
+    expect(terminalError(null, [t1])).toBe(
+      'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า',
+    );
+    expect(terminalError(3, [t1])).toBe(
+      'ไม่พบเครื่อง 3 ในทะเบียนเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าใหม่',
+    );
+    expect(terminalError(2, [{ ...t2, active: false }])).toBe(
+      'เครื่อง 2 ถูกปิดใช้งาน กรุณาให้ผู้ดูแลตั้งค่าใหม่',
+    );
   });
 
   it('numbers bills per terminal and day', () => {

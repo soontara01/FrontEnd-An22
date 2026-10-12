@@ -121,6 +121,12 @@ import {
   shiftSummary,
   varianceReport,
   exchangeNos,
+  POS_TERMINAL_DEFAULTS,
+  PosTerminal,
+  normalizePosTerminal,
+  posTerminalError,
+  terminalError,
+  terminalOrderPrefix,
 } from '../models';
 import { StorageService } from '../services/storage.service';
 
@@ -164,6 +170,13 @@ interface MockDb {
   cashMovements: CashMovement[];
   /** Set once shifts were switched on for this stored db (see `enableShifts()`). */
   shiftsEnabled?: boolean;
+  /** POS terminal registry: number + Revenue Dept POS ID per cash drawer (terminal plan). */
+  posTerminals: PosTerminal[];
+  /**
+   * The store-wide POS ID from before the registry (`StoreInfo.posId`): what older receipts /
+   * Z reports printed, filled into their missing snapshots on read.
+   */
+  legacyPosId?: string;
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -738,6 +751,11 @@ export const SEED_STORE_INFO: StoreInfo = {
   receiptFooter: 'ขอบคุณที่ใช้บริการ · เปลี่ยน/คืนสินค้าภายใน 7 วันพร้อมใบเสร็จ',
 };
 
+const SEED_POS_TERMINALS: PosTerminal[] = [
+  { id: 1, name: 'แคชเชียร์หน้าร้าน', posId: 'E051234567890', active: true },
+  { id: 2, name: 'แคชเชียร์โซนมือถือ', posId: 'E051234567891', active: true },
+];
+
 const seedDb = (): MockDb => ({
   users: [...SEED_USERS],
   nextId: SEED_USERS.length + 1,
@@ -764,6 +782,7 @@ const seedDb = (): MockDb => ({
   taxInvoices: [],
   shifts: [],
   cashMovements: [],
+  posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
 });
 
 const LATENCY_MS = 300;
@@ -774,8 +793,8 @@ let actor: User | undefined;
 const actorName = (): string => actor?.name ?? '';
 /** Admin-only rules (exchange window, manual-discount ceiling) follow the logged-in user. */
 const actorIsAdmin = (): boolean => actor?.role === 'admin';
-/** POS terminal (cash drawer) of the request: header `X-Terminal-Id`, default 1. */
-let terminalId = 1;
+/** POS terminal (cash drawer) of the request: header `X-Terminal-Id`, null = not set on the device. */
+let terminalId: number | null = null;
 
 /**
  * Fake backend for development without a real API.
@@ -794,7 +813,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
 
   const storage = inject(StorageService);
   // Merge with seed so collections added later still exist in an older stored db.
-  const db: MockDb = { ...seedDb(), ...storage.get<Partial<MockDb>>(DB_KEY) };
+  const stored = storage.get<Partial<MockDb>>(DB_KEY);
+  const db: MockDb = { ...seedDb(), ...stored };
   // Products stored before the SKU master fields existed get defaults filled in.
   db.products = db.products.map((p) => ({ ...PRODUCT_DEFAULTS, ...p }));
   db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
@@ -826,13 +846,17 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const generated = syncSerials(db);
   const costed = migrateCosting(db);
   const shiftsOn = enableShifts(db);
+  const registered = migrateTerminals(db, stored);
+  fillTerminalSnapshots(db);
   const path = req.url.slice(base.length + 1);
   // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
   actor = requestUser(req, db.users);
   const terminal = Number(req.headers.get('X-Terminal-Id'));
-  terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : 1;
+  terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
   const response$ = handle(req, path, db);
-  if (generated || costed || shiftsOn || req.method !== 'GET') storage.set(DB_KEY, db);
+  if (generated || costed || shiftsOn || registered || req.method !== 'GET') {
+    storage.set(DB_KEY, db);
+  }
 
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
 };
@@ -871,6 +895,9 @@ function handle(
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
   if (path === 'shifts' || path.startsWith('shifts/')) return handleShifts(req, path, db);
+  if (path === 'pos-terminals' || path.startsWith('pos-terminals/')) {
+    return handlePosTerminals(req, path, db);
+  }
   if (path === 'credit-notes' && req.method === 'GET') return listCreditNotes(req, db);
   if (path === 'tax-invoices' && req.method === 'GET') {
     // Full tax invoices issued within a local-date range (oldest first, for the tax report).
@@ -1926,6 +1953,9 @@ function handleSales(
  * (serial: the unit's own cost, others: the current average, services: the standard cost).
  */
 function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknown>> {
+  // The receipt needs this device's POS ID, so only a registered terminal sells (T2).
+  const terminalProblem = terminalError(terminalId, db.posTerminals);
+  if (terminalProblem) return error(400, terminalProblem);
   const shift = moneyShift(db, 'sell');
   if (shift.problem) return error(400, shift.problem);
   const today = todayIso();
@@ -1963,7 +1993,8 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   if (buyerProblem) return error(400, buyerProblem);
 
   const now = new Date();
-  const orderNo = nextOrderNo(db, today);
+  const here = terminalSnapshot(db);
+  const orderNo = nextOrderNo(db, today, here.terminalId!);
   const lines: SaleLine[] = cart.lines.map((priced) => {
     const line: Omit<SaleLine, 'cogs'> & { cartIndex?: number | null } = { ...priced };
     delete line.cartIndex;
@@ -2002,6 +2033,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     manualDiscountBy: cart.manualDiscount > 0 ? actorName() : '',
     shiftId: shift.shiftId,
     voidShiftId: null,
+    ...here,
   };
   db.sales.push(sale);
   // Full tax invoice requested at the POS: issued with the sale, same date.
@@ -2009,9 +2041,9 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   return ok(sale);
 }
 
-/** 'POS-YYYYMMDD-NNNN', numbered per day. */
-function nextOrderNo(db: MockDb, today: string): string {
-  const prefix = `POS-${today.replaceAll('-', '')}-`;
+/** 'POS<terminal>-YYYYMMDD-NNNN', numbered continuously per terminal and day (T4). */
+function nextOrderNo(db: MockDb, today: string, terminal: number): string {
+  const prefix = terminalOrderPrefix(terminal, today);
   const last = db.sales
     .filter((s) => s.orderNo.startsWith(prefix))
     .map((s) => Number(s.orderNo.slice(prefix.length)))
@@ -2155,6 +2187,7 @@ function createCreditNote(
     vat: draft.vat,
     refunds: toRefunds(payload.refunds, db.paymentMethods),
     shiftId: shift.shiftId,
+    ...terminalSnapshot(db),
   };
   db.creditNotes.push(created);
   return ok(created);
@@ -2287,6 +2320,7 @@ function createExchange(
     lines,
     // No money moves, so no shift is required; an open one counts it in its report.
     shiftId: db.storeInfo.requireShift ? (openShiftOf(db, terminalId)?.id ?? null) : null,
+    ...terminalSnapshot(db),
   };
   db.exchanges.push(created);
   return ok(created);
@@ -2418,8 +2452,116 @@ function enableShifts(db: MockDb): boolean {
 }
 
 /** The open shift of a terminal (at most one). */
-function openShiftOf(db: MockDb, terminal: number): Shift | undefined {
+function openShiftOf(db: MockDb, terminal: number | null): Shift | undefined {
   return db.shifts.find((s) => s.terminalId === terminal && s.status === 'open');
+}
+
+/**
+ * One-time creation of the POS terminal registry for a db stored before it existed: one terminal
+ * per number already used by a shift (at least terminal 1), terminal 1 taking the old store-wide
+ * POS ID, which is also kept as `legacyPosId` for older documents. Returns true when the db changed.
+ */
+function migrateTerminals(db: MockDb, stored: Partial<MockDb> | null): boolean {
+  if (!stored || stored.posTerminals) return false;
+  const legacy = ((stored.storeInfo as { posId?: string } | undefined)?.posId ?? '').trim();
+  const ids = [...new Set([1, ...db.shifts.map((s) => s.terminalId)])].sort((a, b) => a - b);
+  db.posTerminals = ids.map((id) => ({
+    id,
+    name: `เครื่อง ${id}`,
+    posId: id === 1 ? legacy : '',
+    active: true,
+  }));
+  db.legacyPosId = legacy;
+  return true;
+}
+
+/**
+ * Documents made before the registry have no terminal snapshot: they printed the store-wide POS ID
+ * (`legacyPosId`); a bill's terminal is its shift's, else 1 (numbered store-wide back then).
+ */
+function fillTerminalSnapshots(db: MockDb): void {
+  const legacy = db.legacyPosId ?? '';
+  const terminalOfShift = (id?: number | null) =>
+    db.shifts.find((s) => s.id === id)?.terminalId ?? null;
+  db.sales = db.sales.map((s) =>
+    s.posId !== undefined || !s.lines.length
+      ? s
+      : { ...s, terminalId: s.terminalId ?? terminalOfShift(s.shiftId) ?? 1, posId: legacy },
+  );
+  db.creditNotes = db.creditNotes.map((n) =>
+    n.posId !== undefined
+      ? n
+      : { ...n, terminalId: n.terminalId ?? terminalOfShift(n.shiftId), posId: legacy },
+  );
+  db.exchanges = db.exchanges.map((x) =>
+    x.posId !== undefined
+      ? x
+      : { ...x, terminalId: x.terminalId ?? terminalOfShift(x.shiftId), posId: legacy },
+  );
+  db.shifts = db.shifts.map((s) => (s.posId !== undefined ? s : { ...s, posId: legacy }));
+}
+
+/** Snapshot of this request's terminal for a document (T3); unknown terminal → no POS ID. */
+function terminalSnapshot(db: MockDb): { terminalId: number | null; posId: string } {
+  const terminal = db.posTerminals.find((t) => t.id === terminalId);
+  return { terminalId, posId: terminal?.posId ?? '' };
+}
+
+/** GET/POST /pos-terminals, PUT/DELETE /pos-terminals/:id (writes: admins only). */
+function handlePosTerminals(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  if (path === 'pos-terminals' && req.method === 'GET') {
+    return ok([...db.posTerminals].sort((a, b) => a.id - b.id));
+  }
+  if (!actorIsAdmin()) return error(403, 'แก้ทะเบียนเครื่อง POS ได้เฉพาะผู้ดูแลระบบ');
+  const normalize = (body: unknown, id?: number): PosTerminal =>
+    normalizePosTerminal({
+      ...POS_TERMINAL_DEFAULTS,
+      ...(body as Partial<PosTerminal>),
+      ...(id ? { id } : {}),
+    });
+  if (path === 'pos-terminals' && req.method === 'POST') {
+    const created = normalize(req.body);
+    const problem = posTerminalError(created, db.posTerminals);
+    if (problem) return error(400, problem);
+    db.posTerminals.push(created);
+    return ok(created);
+  }
+  const match = /^pos-terminals\/(\d+)$/.exec(path);
+  if (!match) return notFound(req, path);
+  const id = Number(match[1]);
+  const index = db.posTerminals.findIndex((t) => t.id === id);
+  if (index < 0) return error(404, 'ไม่พบเครื่อง POS');
+  switch (req.method) {
+    case 'PUT': {
+      // The terminal number never changes (documents and shifts refer to it).
+      const updated = normalize(req.body, id);
+      const problem = posTerminalError(
+        updated,
+        db.posTerminals.filter((t) => t.id !== id),
+      );
+      if (problem) return error(400, problem);
+      if (!updated.active && openShiftOf(db, id)) {
+        return error(400, `เครื่อง ${id} มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้`);
+      }
+      db.posTerminals[index] = updated;
+      return ok(updated);
+    }
+    case 'DELETE': {
+      const used =
+        db.shifts.some((s) => s.terminalId === id) ||
+        db.sales.some((s) => s.terminalId === id) ||
+        db.creditNotes.some((n) => n.terminalId === id) ||
+        db.exchanges.some((x) => x.terminalId === id);
+      if (used) return error(400, `เครื่อง ${id} มีกะหรือเอกสารแล้ว ลบไม่ได้ (ปิดใช้งานแทน)`);
+      db.posTerminals.splice(index, 1);
+      return ok(null);
+    }
+  }
+  return notFound(req, path);
 }
 
 const shiftContext = (db: MockDb): ShiftContext => ({
@@ -2473,9 +2615,15 @@ function handleShifts(
     return ok(openShiftOf(db, terminalId) ?? null);
   }
   if (path === 'shifts/open' && req.method === 'POST') {
+    // The drawer is this device's registered terminal; the body may only repeat it (T2).
+    const terminalProblem = terminalError(terminalId, db.posTerminals);
+    if (terminalProblem) return error(400, terminalProblem);
     const body = (req.body ?? {}) as Partial<ShiftOpenPayload>;
+    if (body.terminalId !== undefined && body.terminalId !== terminalId) {
+      return error(400, `เลขเครื่องไม่ตรงกับเครื่องนี้ (เครื่อง ${terminalId})`);
+    }
     const payload: ShiftOpenPayload = {
-      terminalId: body.terminalId ?? terminalId,
+      terminalId: terminalId!,
       openingFloat: Number(body.openingFloat),
       openingDenominations: body.openingDenominations ?? [],
     };
@@ -2489,6 +2637,7 @@ function handleShifts(
       id: Math.max(0, ...db.shifts.map((s) => s.id)) + 1,
       shiftNo: nextShiftNo(db, toIsoDate(now)),
       terminalId: payload.terminalId,
+      posId: terminalSnapshot(db).posId,
       cashier: user,
       status: 'open',
       openedAt: now.toISOString(),

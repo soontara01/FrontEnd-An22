@@ -1,8 +1,15 @@
-import { HttpClient, HttpHeaders, provideHttpClient, withInterceptors } from '@angular/common/http';
+import {
+  HttpClient,
+  HttpHeaders,
+  HttpInterceptorFn,
+  provideHttpClient,
+  withInterceptors,
+} from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
+  PosTerminal,
   CountCheckResult,
   CreditNote,
   CreditNoteLineInput,
@@ -26,6 +33,10 @@ import {
 } from '../models';
 import { addDaysIso, storeInfoError, todayIso } from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor } from './mock-backend.interceptor';
+
+/** What `terminalInterceptor` adds on a POS device set to terminal 1. */
+const atTerminal1: HttpInterceptorFn = (req, next) =>
+  next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
 describe('mockBackendInterceptor – serials', () => {
@@ -492,7 +503,7 @@ describe('mockBackendInterceptor – POS sales', () => {
       }),
     );
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([atTerminal1, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -536,7 +547,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     ]);
 
     expect(sale).toMatchObject({
-      orderNo: 'POS-20261004-0001',
+      orderNo: 'POS1-20261004-0001',
       status: 'paid',
       cashier: 'Admin',
       subtotal: 24900,
@@ -565,11 +576,11 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(card.movements.at(-1)).toMatchObject({
       type: 'issue',
       qty: -1,
-      note: 'ของแถม POS-20261004-0001',
+      note: 'ของแถม POS1-20261004-0001',
     });
 
     const next = await sell([item(ESIM)], 199, [pay(QR, 199)]);
-    expect(next.orderNo).toBe('POS-20261004-0002');
+    expect(next.orderNo).toBe('POS1-20261004-0002');
     expect(next.lines[0].cogs).toBe((await product(ESIM)).cost);
     expect(await get<Sale>(`sales/${next.id}`)).toEqual(next);
   });
@@ -937,8 +948,8 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await product(MOUSE)).stock).toBe(2); // out 1 from the shelf, the old one back
     const card = (await get<StockCardResult>(`products/${MOUSE}/movements`)).movements;
     expect(card.slice(-2).map((m) => [m.type, m.qty, m.balanceQty, m.note])).toEqual([
-      ['issue', -1, 1, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS-20261004-0001)'],
-      ['receive', 1, 2, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS-20261004-0001)'],
+      ['issue', -1, 1, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS1-20261004-0001)'],
+      ['receive', 1, 2, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS1-20261004-0001)'],
     ]);
 
     // the last 2 sold too: nothing on the shelf to hand out, even if the old one is fine
@@ -1068,13 +1079,15 @@ describe('mockBackendInterceptor – shifts', () => {
   const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
   interface As {
     token?: string;
-    terminal?: number;
+    /** Terminal header, default 1; null = a device not set to any terminal */
+    terminal?: number | null;
   }
 
   const call = <T>(method: string, url: string, body?: unknown, as: As = {}) => {
     let headers = new HttpHeaders();
     if (as.token) headers = headers.set('Authorization', `Bearer ${as.token}`);
-    if (as.terminal) headers = headers.set('X-Terminal-Id', String(as.terminal));
+    const terminal = as.terminal === undefined ? 1 : as.terminal;
+    if (terminal) headers = headers.set('X-Terminal-Id', String(terminal));
     return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
   };
   const errorOf = (p: Promise<unknown>) =>
@@ -1280,5 +1293,139 @@ describe('mockBackendInterceptor – shifts', () => {
       approvedBy: 'Admin',
       closedBy: 'สมชาย ใจดี',
     });
+  });
+});
+
+describe('mockBackendInterceptor – POS terminals', () => {
+  let http: HttpClient;
+  const MOUSE = 2; // 531 after promo 1
+  const CASH = 1;
+  const STAFF = 'mock-jwt-token.u2';
+
+  const call = <T>(
+    method: string,
+    url: string,
+    body?: unknown,
+    terminal?: number,
+    token?: string,
+  ) => {
+    let headers = new HttpHeaders();
+    if (terminal) headers = headers.set('X-Terminal-Id', String(terminal));
+    if (token) headers = headers.set('Authorization', `Bearer ${token}`);
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+  const sellMouse = (terminal?: number) =>
+    call<Sale>(
+      'POST',
+      'sales',
+      {
+        items: [{ productId: MOUSE, factor: 1, qty: 1, serial: null }],
+        freeSerials: [],
+        payments: [{ methodId: CASH, amount: 531, reference: '', installmentMonths: null }],
+        customer: '',
+        expectedTotal: 531,
+      },
+      terminal,
+    );
+  const start = (stored?: object) => {
+    localStorage.clear();
+    if (stored) localStorage.setItem('an22.mock.db', JSON.stringify(stored));
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('sells only at a registered active terminal and numbers bills per terminal', async () => {
+    start({ shiftsEnabled: true, storeInfo: { ...SEED_STORE_INFO, requireShift: false } });
+    expect(await errorOf(sellMouse())).toBe(
+      'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า',
+    );
+    expect(await errorOf(sellMouse(9))).toBe(
+      'ไม่พบเครื่อง 9 ในทะเบียนเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าใหม่',
+    );
+    await call('POST', 'pos-terminals', { id: 2, name: 'ชั้น 2', posId: 'E052', active: true });
+    const a = await sellMouse(1);
+    const b = await sellMouse(2);
+    const c = await sellMouse(1);
+    expect([a, b, c].map((s) => [s.orderNo, s.terminalId, s.posId])).toEqual([
+      ['POS1-20261004-0001', 1, 'E051234567890'],
+      ['POS2-20261004-0001', 2, 'E052'],
+      ['POS1-20261004-0002', 1, 'E051234567890'],
+    ]);
+  });
+
+  it('keeps the registry for admins and protects terminals in use', async () => {
+    start();
+    const terminals = await call<PosTerminal[]>('GET', 'pos-terminals');
+    expect(terminals.map((t) => t.id)).toEqual([1, 2]);
+    const add = { id: 3, name: ' ชั้น 3 ', posId: '', active: true };
+    expect(await errorOf(call('POST', 'pos-terminals', add, undefined, STAFF))).toBe(
+      'แก้ทะเบียนเครื่อง POS ได้เฉพาะผู้ดูแลระบบ',
+    );
+    expect(await call<PosTerminal>('POST', 'pos-terminals', add)).toMatchObject({ name: 'ชั้น 3' });
+    expect(await errorOf(call('POST', 'pos-terminals', add))).toBe('มีเครื่อง 3 อยู่แล้ว');
+
+    await call('POST', 'shifts/open', { openingFloat: 0, openingDenominations: [] }, 3);
+    expect(await errorOf(call('PUT', 'pos-terminals/3', { ...add, id: 99, active: false }))).toBe(
+      'เครื่อง 3 มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้',
+    );
+    expect(await errorOf(call('DELETE', 'pos-terminals/3'))).toBe(
+      'เครื่อง 3 มีกะหรือเอกสารแล้ว ลบไม่ได้ (ปิดใช้งานแทน)',
+    );
+    expect(await call('DELETE', 'pos-terminals/2')).toBeNull();
+  });
+
+  it('opens a shift only at the registered terminal it names', async () => {
+    start();
+    const open = (body: object, terminal?: number) =>
+      call<Shift>(
+        'POST',
+        'shifts/open',
+        { openingFloat: 0, openingDenominations: [], ...body },
+        terminal,
+      );
+    expect(await errorOf(open({}))).toBe(
+      'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า',
+    );
+    expect(await errorOf(open({ terminalId: 1 }, 2))).toBe(
+      'เลขเครื่องไม่ตรงกับเครื่องนี้ (เครื่อง 2)',
+    );
+    expect(await open({ terminalId: 2 }, 2)).toMatchObject({
+      terminalId: 2,
+      posId: 'E051234567891',
+    });
+  });
+
+  it('moves the old store-wide POS ID to terminal 1 and to older documents', async () => {
+    const old = { id: 50, total: 100, orderNo: 'POS-20261003-0001', lines: [{ unitPrice: 100 }] };
+    start({
+      shiftsEnabled: true,
+      storeInfo: { ...SEED_STORE_INFO, posId: 'E0OLD' },
+      sales: [old],
+      shifts: [{ id: 1, terminalId: 3, status: 'closed', openedAt: '2026-10-03T01:00:00Z' }],
+    });
+    const terminals = await call<PosTerminal[]>('GET', 'pos-terminals');
+    expect(terminals.map((t) => [t.id, t.name, t.posId])).toEqual([
+      [1, 'เครื่อง 1', 'E0OLD'],
+      [3, 'เครื่อง 3', ''],
+    ]);
+    expect(await call<Sale>('GET', 'sales/50')).toMatchObject({
+      orderNo: 'POS-20261003-0001',
+      terminalId: 1,
+      posId: 'E0OLD',
+    });
+    expect((await call<Shift>('GET', 'shifts/1')).posId).toBe('E0OLD');
   });
 });

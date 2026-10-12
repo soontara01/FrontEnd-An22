@@ -46,6 +46,23 @@ export function terminalLabel(id: number, terminals: readonly PosTerminal[] = []
   return name ? `เครื่อง ${id} · ${name}` : `เครื่อง ${id}`;
 }
 
+/**
+ * Why this device cannot sell or open a shift (T2): it must be set to an active terminal of the
+ * registry (Settings → "เครื่องนี้"). Single rule for the POS and the server; null = OK.
+ */
+export function terminalError(
+  id: number | null,
+  terminals: readonly Pick<PosTerminal, 'id' | 'active'>[],
+): string | null {
+  if (id === null) {
+    return 'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า';
+  }
+  const terminal = terminals.find((t) => t.id === id);
+  if (!terminal) return `ไม่พบเครื่อง ${id} ในทะเบียนเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าใหม่`;
+  if (!terminal.active) return `เครื่อง ${id} ถูกปิดใช้งาน กรุณาให้ผู้ดูแลตั้งค่าใหม่`;
+  return null;
+}
+
 /** A VAT-registered store's active terminal should have a POS ID (warning only). */
 export const missingPosId = (t: PosTerminal, vatRegistered: boolean): boolean =>
   vatRegistered && t.active && !t.posId.trim();
