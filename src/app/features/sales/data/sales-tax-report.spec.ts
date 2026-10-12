@@ -112,8 +112,29 @@ describe('buildSalesTaxReport', () => {
       exempt: 200,
       total: 1270,
       counted: true,
-      note: '2 ใบ · ยกเลิก 1 ใบ · ไม่รวมบิลที่ออกใบกำกับเต็มรูป 1 ใบ',
+      // Bills from before the terminal registry count as terminal 1.
+      note: 'เครื่อง 1 · 2 ใบ · ยกเลิก 1 ใบ · ไม่รวมบิลที่ออกใบกำกับเต็มรูป 1 ใบ',
     });
+  });
+
+  it('keeps one abbreviated line per day and terminal, numbered per terminal', () => {
+    const t = (id: number, terminalId: number, no: string, hour: number) =>
+      sale(id, no, at(7, hour), [line(107, 7)], { terminalId, posId: `E05${terminalId}` });
+    const r = buildSalesTaxReport(
+      '2026-10',
+      [
+        t(11, 1, 'POS1-20261007-0001', 9),
+        t(12, 2, 'POS2-20261007-0001', 10),
+        t(13, 1, 'POS1-20261007-0002', 11),
+      ],
+      [],
+      [],
+    );
+    expect(r.rows.map((x) => [x.docNo, x.total, x.note])).toEqual([
+      ['POS1-20261007-0001 – POS1-20261007-0002', 214, 'เครื่อง 1 (POS ID E051) · 2 ใบ'],
+      ['POS2-20261007-0001', 107, 'เครื่อง 2 (POS ID E052) · 1 ใบ'],
+    ]);
+    expect(r.totals.total).toBe(321);
   });
 
   it('lists full invoices issued at sale on their own line with the buyer', () => {

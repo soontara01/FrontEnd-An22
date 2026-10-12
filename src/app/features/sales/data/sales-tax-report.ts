@@ -12,9 +12,10 @@ import {
 /**
  * Monthly sales tax report (รายงานภาษีขาย, decided 2026-10-04). Every sale's output VAT is
  * counted exactly once:
- * - abbreviated invoices (POS bills) are summarised per day as one line with their number range;
- *   bills whose full tax invoice was issued *with the sale* are left out of that range — the full
- *   invoice is their only tax document and is listed on its own line
+ * - abbreviated invoices (POS bills) are summarised per day **and POS terminal** as one line with
+ *   their number range — numbers run per terminal (docs/terminal-plan.md T4; bills from before the
+ *   registry count as terminal 1); bills whose full tax invoice was issued *with the sale* are left
+ *   out of that range — the full invoice is their only tax document and is listed on its own line
  * - a full invoice issued *later* is dated on the sale day (accountant's decision) and replaces an
  *   abbreviated one already counted that day, so it is listed for reference only (not in the totals)
  * - voided bills count 0 (their numbers stay in the day's range; a voided full invoice is listed
@@ -81,18 +82,25 @@ export function buildSalesTaxReport(
   );
   const posBills = sales.filter((s) => s.lines.length && inMonth(saleDay(s), month));
 
-  // Abbreviated invoices, one line per day.
-  const byDay = new Map<string, Sale[]>();
+  // Abbreviated invoices, one line per day and terminal.
+  const terminalOf = (s: Sale) => s.terminalId ?? 1;
+  const groups = new Map<string, { day: string; terminal: number; bills: Sale[] }>();
   for (const s of posBills) {
     if (atSaleInvoice.has(s.id)) continue;
-    byDay.set(saleDay(s), [...(byDay.get(saleDay(s)) ?? []), s]);
+    const key = `${saleDay(s)}|${terminalOf(s)}`;
+    const group = groups.get(key) ?? { day: saleDay(s), terminal: terminalOf(s), bills: [] };
+    group.bills.push(s);
+    groups.set(key, group);
   }
-  for (const [day, bills] of byDay) {
+  for (const { day, terminal, bills } of groups.values()) {
     const numbers = bills.map((b) => b.orderNo).sort();
     const paid = bills.filter((b) => b.status === 'paid');
     const voided = bills.length - paid.length;
     const t = paid.map(invoiceTotals);
-    const skipped = posBills.filter((s) => saleDay(s) === day && atSaleInvoice.has(s.id)).length;
+    const skipped = posBills.filter(
+      (s) => saleDay(s) === day && terminalOf(s) === terminal && atSaleInvoice.has(s.id),
+    ).length;
+    const posId = bills.find((b) => b.posId)?.posId;
     rows.push({
       kind: 'abbreviated',
       date: day,
@@ -105,6 +113,7 @@ export function buildSalesTaxReport(
       total: sum(t.map((x) => x.total)),
       counted: true,
       note: [
+        posId ? `เครื่อง ${terminal} (POS ID ${posId})` : `เครื่อง ${terminal}`,
         `${paid.length} ใบ`,
         voided ? `ยกเลิก ${voided} ใบ` : '',
         skipped ? `ไม่รวมบิลที่ออกใบกำกับเต็มรูป ${skipped} ใบ` : '',
