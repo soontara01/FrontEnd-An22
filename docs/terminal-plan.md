@@ -1,6 +1,6 @@
 # แผนทะเบียนเครื่อง POS (หลายเครื่องต่อร้าน)
 
-สถานะ: **กำลังทำ (2026-10-12)** · ข้อตัดสินใจ T1–T5 ยืนยันครบแล้ว (2026-10-12; T4 = รันเลขต่อเนื่องแยกตามเครื่อง)
+สถานะ: **เสร็จ (2026-10-12)** · ขั้นที่ 1–7 ครบ · ข้อตัดสินใจ T1–T5 ยืนยันครบแล้ว (2026-10-12; T4 = รันเลขต่อเนื่องแยกตามเครื่อง)
 
 ที่มา: ระบบกะรองรับหลายเครื่องต่อร้านแล้ว (`docs/shift-plan.md` หัวข้อ 1: 1 เครื่องเปิดได้ทีละ 1 กะ) แต่เอกสารภาษียังคิดแบบ
 1 ร้าน = 1 POS — ร้านไอที / เครื่องใช้ไฟฟ้ามักมีมากกว่า 1 เครื่อง จึงไม่รอถึง SaaS (`saas-plan.md` หัวข้อ 5 เดิมเลื่อนไว้)
@@ -74,14 +74,20 @@ posId?: string; // ที่พิมพ์บนเอกสาร
 
 ## 5. ลำดับงาน (แต่ละขั้น build + test + lint ผ่าน แล้ว commit)
 
-1. โมเดล `pos-terminal.model.ts` (`PosTerminal`, `posTerminalError()`, ป้ายชื่อ `terminalLabel()`) + spec
-2. mock: `/pos-terminals` CRUD + ล็อกการลบ / ปิดใช้งาน; **migrate**: สร้างเครื่องจากเลขที่เคยใช้ในกะ (อย่างน้อยเครื่อง 1),
-   เครื่อง 1 รับ `StoreInfo.posId` เดิม แล้วลบ field นั้น; เอกสารเก่าที่ไม่มี `posId` เติมตอนอ่านด้วยค่าเดิมของร้าน (สิ่งที่เคยพิมพ์);
-   `POST /sales`, credit note, exchange, open shift เก็บ snapshot + ตรวจ `X-Terminal-Id` ตาม T2
-3. แท็บ "เครื่อง POS" ในข้อมูลหลัก (รายการ + ฟอร์ม dialog เหมือนช่องทางชำระเงิน)
-4. ตั้งค่า "เครื่องนี้" + `TerminalService` (null = ยังไม่ตั้ง) + `OpenShiftDialog` อ่านอย่างเดียว + หน้าขายบล็อกเครื่องที่ยังไม่ตั้ง;
-   ย้ายช่อง POS ID ออกจากฟอร์มข้อมูลร้าน
-5. เอกสาร: `Receipt`, `TaxInvoiceSlip`, `CreditNoteReceipt`, `ExchangeReceipt`, `ShiftSlip` พิมพ์จาก snapshot;
-   หน้าบิล / รายการบิล / หน้ากะแสดงชื่อเครื่อง; ตัวกรองเครื่องในรายการบิล
-6. เลขบิลต่อเครื่องตาม T4 (ข): `POS<เลขเครื่อง>-YYYYMMDD-NNNN` + รายงานภาษีขายวันละ 1 บรรทัดต่อเครื่อง + Excel
-7. `CLAUDE.md` + อัปเดต `shift-plan.md` / `saas-plan.md`
+1. ✅ โมเดล `pos-terminal.model.ts` (`PosTerminal`, `posTerminalError()`, `terminalError()`, `terminalLabel()`,
+   `missingPosId()`, `terminalOrderPrefix()`) + spec; snapshot `terminalId` / `posId` ใน `Sale` / `CreditNote` / `Exchange`, `Shift.posId`
+2. ✅ mock: `/pos-terminals` CRUD (เขียนได้เฉพาะ admin) + ล็อกการลบ / ปิดใช้งาน; **migrate** ครั้งเดียว (`migrateTerminals()`):
+   สร้างเครื่องจากเลขที่เคยใช้ในกะ (อย่างน้อยเครื่อง 1), เครื่อง 1 รับ `StoreInfo.posId` เดิม (เก็บเป็น `legacyPosId`) แล้วลบ field นั้น;
+   เอกสารเก่าเติม snapshot ตอนอ่าน (`fillTerminalSnapshots()`); `POST /sales` + `POST /shifts/open` ตรวจ `terminalError()`;
+   เลขบิล `POS<เลขเครื่อง>-YYYYMMDD-NNNN` (ทำในขั้นนี้เลย); seed มีเครื่อง 1–2
+   - ต่างจากร่าง: void / ใบลดหนี้ / เงินเข้าออกลิ้นชัก **ไม่**ตรวจทะเบียนเครื่องเพิ่ม — เมื่อเปิดระบบกะก็ต้องมีกะของเครื่องนั้นอยู่แล้ว
+     และเมื่อปิดระบบกะ ใบลดหนี้ควรออกจากเครื่องหลังร้านได้ (เก็บ snapshot ถ้ามีเครื่อง)
+3. ✅ แท็บ "เครื่อง POS" `/master-data/terminals` (`PosTerminalStore`, รายการ + `PosTerminalFormDialog`; ป้ายเตือนไม่มี POS ID, ป้าย "เครื่องนี้")
+4. ✅ ตั้งค่า "เครื่องนี้" (`ThisTerminal`, admin; ล็อกเมื่อมีกะเปิด) + `TerminalService` (null = ยังไม่ตั้ง, `clear()`) + interceptor ไม่ส่ง header
+   เมื่อยังไม่ตั้ง + `OpenShiftDialog` แสดงเครื่องแบบอ่านอย่างเดียว + หน้าขายแถบเตือน / บล็อก (`PosStore.terminalProblem`);
+   ลบ `StoreInfo.posId` + ช่องในฟอร์มข้อมูลร้าน; `Receipt` / `TaxInvoiceSlip` / `ShiftSlip` พิมพ์ POS ID จาก snapshot (ทำในขั้นนี้)
+   - เครื่องที่เคยใช้ก่อนหน้านี้แต่ไม่เคยเปิดกะ (ไม่มี `pos.terminal` ใน localStorage) จะกลายเป็น "ยังไม่ได้ตั้ง" ต้องให้ admin ตั้งครั้งหนึ่ง
+5. ✅ หน้าบิล (เครื่อง + POS ID), หน้ากะ / รายการกะ / ปิดกะ / X report แสดงชื่อเครื่อง; ตัวกรองเครื่องในรายการบิล
+   (signal ในหน้าเหมือนตัวกรองสถานะ ไม่ใช่ query param); ใบลดหนี้ / ใบเปลี่ยนสินค้า 80 มม. ยังไม่พิมพ์ POS ID (เดิมก็ไม่พิมพ์)
+6. ✅ รายงานภาษีขาย: ใบกำกับอย่างย่อวันละ 1 บรรทัด **ต่อเครื่อง** (หมายเหตุ "เครื่อง N (POS ID …)"), Excel ใช้แถวเดียวกัน
+7. ✅ `CLAUDE.md` (**POS terminals**), `shift-plan.md`, `pos-plan.md`
