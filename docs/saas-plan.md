@@ -38,20 +38,20 @@ Platform (เจ้าของ SaaS)
 
 ## 3. ข้อมูลระดับบริษัท / ระดับสาขา
 
-| ข้อมูล (model ปัจจุบัน)                                  | ระดับ          | หมายเหตุ                                                                                                                                                                                      |
-| -------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Product` (SKU master), `Category`, `Supplier`, บาร์โค้ด | บริษัท         | ทุกสาขาใช้รหัสเดียวกัน                                                                                                                                                                        |
-| `Product.saleStatus`                                     | บริษัท         | (อนาคต: เปิด/ปิดขายรายสาขา)                                                                                                                                                                   |
-| `Product.stock`, `avgCost`, `minStock`, `maxStock`       | **สาขา**       | ตาราง `branch_stock (tenant, branch, product)` — ดูหัวข้อ 4                                                                                                                                   |
-| `SerialNumber`, `StockMovement`                          | **สาขา**       | serial มี `branchId` (อยู่ที่สาขาไหน)                                                                                                                                                         |
-| `SkuPrice`                                               | บริษัท         | ราคาเดียวทั้งบริษัท (D2); ราคาเฉพาะสาขาค่อยเพิ่ม `branchId` ที่เว้นว่างได้ภายหลัง                                                                                                             |
-| `Promotion`                                              | บริษัท         | + `branchIds` (ว่าง = ทุกสาขา) ตาม D2; สร้าง/แก้ได้เฉพาะ owner / admin ระดับบริษัท                                                                                                            |
-| `PaymentMethod`                                          | บริษัท         | สาขาปิดบางช่องทางได้, `promptPayId` / `bankAccount` อาจต่างตามสาขา                                                                                                                            |
-| `User`                                                   | บริษัท         | + `username` (ไม่ซ้ำในบริษัท), `email` ไม่บังคับ (owner ต้องมี), `branchIds` / `allBranches`                                                                                                  |
-| `StoreInfo`                                              | **แยก 2 ส่วน** | `CompanyInfo`: name, taxId, vatRegistered, exchangeDays, manualDiscountMaxPercent, taxInvoicePaper · `BranchInfo`: code, placeName, branchType/branchNo, address, phone, posId, receiptFooter |
-| `Sale`, `CreditNote`, `Exchange`, `TaxInvoice`           | **สาขา**       | + `branchId` (snapshot ชื่อ/เลขสาขาในเอกสาร)                                                                                                                                                  |
-| เลขรันเอกสาร                                             | **สาขา**       | `POS-<code>-YYYYMMDD-NNNN`, `INV-<code>-…`, `CN-<code>-…`, `EX-<code>-…`                                                                                                                      |
-| พักบิล POS (localStorage)                                | เครื่อง + สาขา | key รวม tenant + branch: `pos.held.<tenantId>.<branchId>`                                                                                                                                     |
+| ข้อมูล (model ปัจจุบัน)                                  | ระดับ          | หมายเหตุ                                                                                                                                                                                                       |
+| -------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Product` (SKU master), `Category`, `Supplier`, บาร์โค้ด | บริษัท         | ทุกสาขาใช้รหัสเดียวกัน                                                                                                                                                                                         |
+| `Product.saleStatus`                                     | บริษัท         | (อนาคต: เปิด/ปิดขายรายสาขา)                                                                                                                                                                                    |
+| `Product.stock`, `avgCost`, `minStock`, `maxStock`       | **สาขา**       | ตาราง `branch_stock (tenant, branch, product)` — ดูหัวข้อ 4                                                                                                                                                    |
+| `SerialNumber`, `StockMovement`                          | **สาขา**       | serial มี `branchId` (อยู่ที่สาขาไหน)                                                                                                                                                                          |
+| `SkuPrice`                                               | บริษัท         | ราคาเดียวทั้งบริษัท (D2); ราคาเฉพาะสาขาค่อยเพิ่ม `branchId` ที่เว้นว่างได้ภายหลัง                                                                                                                              |
+| `Promotion`                                              | บริษัท         | + `branchIds` (ว่าง = ทุกสาขา) ตาม D2; สร้าง/แก้ได้เฉพาะ owner / admin ระดับบริษัท                                                                                                                             |
+| `PaymentMethod`                                          | บริษัท         | สาขาปิดบางช่องทางได้, `promptPayId` / `bankAccount` อาจต่างตามสาขา                                                                                                                                             |
+| `User`                                                   | บริษัท         | + `username` (ไม่ซ้ำในบริษัท), `email` ไม่บังคับ (owner ต้องมี), `branchIds` / `allBranches`                                                                                                                   |
+| `StoreInfo`                                              | **แยก 2 ส่วน** | `CompanyInfo`: name, taxId, vatRegistered, exchangeDays, manualDiscountMaxPercent, taxInvoicePaper · `BranchInfo`: code, placeName, branchType/branchNo, address, phone, receiptFooter (posId → `PosTerminal`) |
+| `Sale`, `CreditNote`, `Exchange`, `TaxInvoice`           | **สาขา**       | + `branchId` (snapshot ชื่อ/เลขสาขาในเอกสาร)                                                                                                                                                                   |
+| เลขรันเอกสาร                                             | **สาขา**       | `POS-<code>-<เครื่อง>-YYYYMMDD-NNNN` (ต่อเครื่อง, terminal-plan T4), `INV-<code>-…`, `CN-<code>-…`, `EX-<code>-…`                                                                                              |
+| พักบิล POS (localStorage)                                | เครื่อง + สาขา | key รวม tenant + branch: `pos.held.<tenantId>.<branchId>`                                                                                                                                                      |
 
 ## 4. สต็อกและต้นทุน
 
@@ -74,7 +74,8 @@ Platform (เจ้าของ SaaS)
 - **รายงานภาษีขายทำแยกตามสถานประกอบการ** (`/sales/tax-report?month=&branchId=`) หัวรายงานใช้ชื่อสถานประกอบการและเลขสาขาของสาขานั้น
   ยื่นรวม (ได้รับอนุมัติ) = ทำทีหลัง เปิดด้วยค่าตั้ง `CompanyInfo.vatFilingCombined`; ระหว่างนี้มีแค่ตารางสรุปทุกสาขา "ไม่ใช่รายงานยื่นภาษี" (D6, หัวข้อ 15)
 - ใบลดหนี้ / ใบเปลี่ยนสินค้า / void ทำได้เฉพาะที่สาขาที่ขาย (D3, หัวข้อ 13) — ใบลดหนี้ลงรายงานภาษีของสาขาที่ขาย
-- เลข POS (`posId`) อยู่ระดับสาขา ถ้าในอนาคตมีหลายเครื่องต่อสาขา ให้แยกเป็น `PosTerminal`
+- เลข POS (`posId`) อยู่ใน**ทะเบียนเครื่อง POS ต่อสาขา** (`PosTerminal.branchId`) ไม่ใช่ใน `BranchInfo` — ทำก่อน SaaS
+  ตาม `docs/terminal-plan.md` (T5); เลขบิล POS รันต่อเครื่อง (T4 ยืนยัน 2026-10-12)
 - `buildSalesTaxReport()`, `invoiceTotals()`, `draftCreditNote()` ไม่ต้องเปลี่ยนสูตร แค่ข้อมูลที่ส่งเข้าไปถูกกรองตามสาขา
 
 ## 6. ผู้ใช้และสิทธิ์

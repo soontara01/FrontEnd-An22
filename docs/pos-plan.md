@@ -1,6 +1,7 @@
 # แผนหน้าจอขาย (POS)
 
-สถานะ: ข้อตัดสินใจหัวข้อ 9 ยืนยันแล้ว (2026-10-04) · ขั้นที่ 1–5b เสร็จ (โมเดล + `priceCart()` + การชำระ + mock `/sales` + หน้าจอ `/pos` + ใบเสร็จ + เมนูการขาย + ใบลดหนี้)
+สถานะ: ข้อตัดสินใจหัวข้อ 9 ยืนยันแล้ว (2026-10-04) · ขั้นที่ 1–6 เสร็จ (โมเดล + `priceCart()` + การชำระ + mock `/sales` + หน้าจอ `/pos` + ใบเสร็จ + เมนูการขาย + ใบลดหนี้ + `CLAUDE.md`)
+· หลายเครื่องต่อร้าน (POS ID ต่อเครื่อง): `docs/terminal-plan.md` (ร่าง)
 
 อ้างอิงกติกาที่ตกลงไว้แล้วใน `CLAUDE.md`: Promotions (POS rules), Payment methods (POS rules),
 Inventory costing (COGS ตอนขาย), Serial SKUs, Service SKUs, SKU retail fields (pack units / barcode).
