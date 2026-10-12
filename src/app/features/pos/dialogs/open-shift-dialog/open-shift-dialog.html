@@ -4,18 +4,13 @@
     นับเงินทอนในลิ้นชักก่อนเริ่มขาย — คุณจะเป็นผู้รับผิดชอบเงินในลิ้นชักจนกว่าจะปิดกะ
   </p>
 
+  <!-- The terminal is set once per device in Settings → "เครื่องนี้" (not by the cashier). -->
+  <p class="terminal">
+    <mat-icon inline>point_of_sale</mat-icon>
+    {{ data.terminalLabel }}
+  </p>
+
   <div class="row">
-    <mat-form-field appearance="outline">
-      <mat-label>เครื่อง POS</mat-label>
-      <input
-        matInput
-        type="number"
-        min="1"
-        step="1"
-        [value]="terminalId()"
-        (input)="terminalId.set($any($event.target).value)"
-      />
-    </mat-form-field>
     <mat-form-field appearance="outline">
       <mat-label>เงินทอนตั้งต้น</mat-label>
       <input

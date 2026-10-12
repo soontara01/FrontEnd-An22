@@ -20,9 +20,9 @@ describe('terminalInterceptor', () => {
     backend = TestBed.inject(HttpTestingController);
   });
 
-  it('sends terminal 1 by default and the stored number once set', () => {
+  it('sends no terminal until the device is set, then the stored number', () => {
     http.get('/api/sales').subscribe();
-    expect(backend.expectOne('/api/sales').request.headers.get('X-Terminal-Id')).toBe('1');
+    expect(backend.expectOne('/api/sales').request.headers.has('X-Terminal-Id')).toBe(false);
 
     const terminal = TestBed.inject(TerminalService);
     terminal.set(3);
@@ -30,6 +30,11 @@ describe('terminalInterceptor', () => {
     http.get('/api/sales').subscribe();
     expect(backend.expectOne('/api/sales').request.headers.get('X-Terminal-Id')).toBe('3');
     expect(localStorage.getItem('an22.pos.terminal')).toBe('3');
+
+    terminal.clear();
+    http.get('/api/sales').subscribe();
+    expect(backend.expectOne('/api/sales').request.headers.has('X-Terminal-Id')).toBe(false);
+    expect(localStorage.getItem('an22.pos.terminal')).toBeNull();
     backend.verify();
   });
 });

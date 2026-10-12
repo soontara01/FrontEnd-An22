@@ -1348,7 +1348,10 @@ describe('mockBackendInterceptor – POS terminals', () => {
   afterEach(() => vi.useRealTimers());
 
   it('sells only at a registered active terminal and numbers bills per terminal', async () => {
-    start({ shiftsEnabled: true, storeInfo: { ...SEED_STORE_INFO, requireShift: false } });
+    start({
+      shiftsEnabled: true,
+      storeInfo: { ...SEED_STORE_INFO, posId: 'E051234567890', requireShift: false },
+    });
     expect(await errorOf(sellMouse())).toBe(
       'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า',
     );

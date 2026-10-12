@@ -65,6 +65,8 @@ describe('PosStore', () => {
     localStorage.clear();
     // Logged in as a cashier (AuthService reads the stored user).
     localStorage.setItem('an22.user', JSON.stringify({ id: 2, name: 'สมชาย ใจดี', role: 'user' }));
+    // This device is set to terminal 1 (Settings → "เครื่องนี้").
+    localStorage.setItem('an22.pos.terminal', '1');
     api = {
       products: vi.fn(() =>
         of([
@@ -79,6 +81,12 @@ describe('PosStore', () => {
       checkout: vi.fn(() => of(sale)),
       // Selling itself is tested with shifts off; the shift tests below turn them on.
       storeInfo: vi.fn(() => of({ ...STORE_INFO_DEFAULTS, requireShift: false })),
+      posTerminals: vi.fn(() =>
+        of([
+          { id: 1, name: 'หน้าร้าน', posId: 'E051', active: true },
+          { id: 2, name: 'ชั้น 2', posId: '', active: false },
+        ]),
+      ),
       taxInvoiceOf: vi.fn(() => of(null)),
       buyerByTaxId: vi.fn(() => of(null)),
       currentShift: vi.fn(() => of(null)),
@@ -237,11 +245,22 @@ describe('PosStore', () => {
       withShifts(null);
       expect(store.shiftLoaded()).toBe(true);
       expect(store.blocker()).toBe('ยังไม่ได้เปิดกะที่เครื่องนี้');
-      store.openShift({ terminalId: 2, openingFloat: 1000, openingDenominations: [] }).subscribe();
-      expect(store.terminalId()).toBe(2);
-      expect(localStorage.getItem('an22.pos.terminal')).toBe('2');
+      store.openShift({ terminalId: 1, openingFloat: 1000, openingDenominations: [] }).subscribe();
       expect(store.shift()).toEqual(shift);
       expect(store.blocker()).toBeNull();
+    });
+
+    it('blocks selling on a device not set to an active registered terminal', () => {
+      withShifts(shift);
+      expect(store.terminalLabel()).toBe('เครื่อง 1 · หน้าร้าน');
+      expect(store.blocker()).toBeNull();
+      TestBed.inject(TerminalService).set(2);
+      expect(store.blocker()).toBe('เครื่อง 2 ถูกปิดใช้งาน กรุณาให้ผู้ดูแลตั้งค่าใหม่');
+      TestBed.inject(TerminalService).clear();
+      expect(store.terminalLabel()).toBe('ยังไม่ได้ตั้งเลขเครื่อง');
+      expect(store.blocker()).toBe(
+        'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า',
+      );
     });
 
     it("blocks selling in someone else's shift and flags one left open", () => {

@@ -4,9 +4,9 @@
   <header>
     @if (store(); as shop) {
       <div class="shop">{{ shop.name }}</div>
-      @if (shop.posId) {
-        <div>POS ID {{ shop.posId }}</div>
-      }
+    }
+    @if (s.posId) {
+      <div>POS ID {{ s.posId }}</div>
     }
     <div class="title">ใบสรุปปิดกะ (Z report)</div>
     @if (copy()) {

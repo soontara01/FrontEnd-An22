@@ -12,8 +12,8 @@
     @if (shop.taxId) {
       <div>เลขประจำตัวผู้เสียภาษี {{ shop.taxId }} ({{ branch() }})</div>
     }
-    @if (shop.posId) {
-      <div>POS ID {{ shop.posId }}</div>
+    @if (s.posId) {
+      <div>POS ID {{ s.posId }}</div>
     }
     <div class="title">{{ title() }}</div>
     @if (s.taxInvoiceNo) {

@@ -142,9 +142,11 @@ export default class PosPage {
       const paper = this.store.storeInfo()?.taxInvoicePaper === '80mm' ? 'fit' : 'A4';
       setTimeout(() => printElement(el, paper));
     });
-    // Shifts on and none open at this terminal: ask to open one right away.
+    // Shifts on and none open at this terminal: ask to open one right away (only on a device set
+    // to a registered terminal — otherwise the banner asks for the setting first).
     effect(() => {
       if (!this.store.shiftLoaded() || !this.store.requireShift() || this.store.shift()) return;
+      if (this.store.terminalProblem()) return;
       if (this.shiftPrompted) return;
       this.shiftPrompted = true;
       setTimeout(() => this.openShift());
@@ -153,14 +155,17 @@ export default class PosPage {
 
   /** Opening float defaults to what the last shift of this terminal left in the drawer. */
   protected openShift(): void {
-    if (this.dialog.openDialogs.length) return;
+    const terminalId = this.store.terminalId();
+    if (this.dialog.openDialogs.length || terminalId === null || this.store.terminalProblem()) {
+      return;
+    }
     this.store
       .lastFloatLeft()
       .pipe(
         switchMap((defaultFloat) =>
           this.dialog
             .open<OpenShiftDialog, OpenShiftDialogData, ShiftOpenPayload>(OpenShiftDialog, {
-              data: { terminalId: this.store.terminalId(), defaultFloat },
+              data: { terminalId, terminalLabel: this.store.terminalLabel(), defaultFloat },
               injector: this.injector,
               width: '520px',
               maxWidth: '95vw',

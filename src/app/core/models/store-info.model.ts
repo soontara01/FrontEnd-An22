@@ -21,8 +21,6 @@ export interface StoreInfo {
   branchNo: string;
   address: string;
   phone: string;
-  /** POS machine registration number from the Revenue Department ('' = not shown) */
-  posId: string;
   /** Printed at the bottom of every receipt, e.g. return policy */
   receiptFooter: string;
   /** Default paper for full tax invoices (the POS prints on it; the bill page can switch) */
@@ -48,7 +46,6 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
   branchNo: '',
   address: '',
   phone: '',
-  posId: '',
   receiptFooter: 'ขอบคุณที่ใช้บริการ',
   taxInvoicePaper: 'A4',
   exchangeDays: 7,
@@ -78,7 +75,6 @@ export function storeInfoError(s: StoreInfo): string | null {
     return 'เลขที่สาขาต้องเป็นตัวเลข 5 หลัก';
   }
   if (!s.address.trim()) return 'กรุณากรอกที่อยู่';
-  if (s.posId.length > 30) return 'หมายเลขเครื่อง POS ต้องไม่เกิน 30 ตัวอักษร';
   if (s.receiptFooter.length > 200) return 'ข้อความท้ายใบเสร็จต้องไม่เกิน 200 ตัวอักษร';
   if (s.taxInvoicePaper !== 'A4' && s.taxInvoicePaper !== '80mm') {
     return 'ขนาดกระดาษใบกำกับภาษีไม่ถูกต้อง';
@@ -111,7 +107,6 @@ export function normalizeStoreInfo(s: StoreInfo): StoreInfo {
     branchNo: s.branchType === 'branch' ? s.branchNo.trim() : '',
     address: s.address.trim(),
     phone: s.phone.trim(),
-    posId: s.posId.trim(),
     receiptFooter: s.receiptFooter.trim(),
     exchangeDays: Number(s.exchangeDays ?? STORE_INFO_DEFAULTS.exchangeDays),
     manualDiscountMaxPercent: Number(

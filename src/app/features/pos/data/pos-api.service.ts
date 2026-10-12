@@ -8,6 +8,7 @@ import {
   Category,
   CountCheckResult,
   PaymentMethod,
+  PosTerminal,
   Product,
   Promotion,
   Sale,
@@ -51,6 +52,10 @@ export class PosApi {
 
   storeInfo(): Observable<StoreInfo> {
     return this.api.get<StoreInfo>('settings/store');
+  }
+
+  posTerminals(): Observable<PosTerminal[]> {
+    return this.api.get<PosTerminal[]>('pos-terminals');
   }
 
   taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {

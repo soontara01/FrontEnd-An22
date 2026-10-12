@@ -4,7 +4,9 @@ import { SALE_DEFAULTS, Sale, TaxInvoice } from '@core/models';
 export const SAMPLE_SALE: Sale = {
   ...SALE_DEFAULTS,
   id: 0,
-  orderNo: 'POS-20261004-0001',
+  orderNo: 'POS1-20261004-0001',
+  terminalId: 1,
+  posId: 'E051234567890',
   date: new Date(2026, 9, 4, 14, 5).toISOString(),
   cashier: 'Admin',
   customer: '',

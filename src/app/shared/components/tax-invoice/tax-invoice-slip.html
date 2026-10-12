@@ -9,8 +9,8 @@
       <div>โทร {{ shop.phone }}</div>
     }
     <div>เลขประจำตัวผู้เสียภาษี {{ shop.taxId }} ({{ sellerBranch() }})</div>
-    @if (shop.posId) {
-      <div>POS ID {{ shop.posId }}</div>
+    @if (s.posId) {
+      <div>POS ID {{ s.posId }}</div>
     }
     <div class="title">ใบกำกับภาษี/ใบเสร็จรับเงิน</div>
     <div class="mark">{{ copy() ? 'สำเนา' : 'ต้นฉบับ' }}</div>

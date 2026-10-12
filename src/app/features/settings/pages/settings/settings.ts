@@ -5,10 +5,11 @@ import { ThemeService } from '@core/services/theme.service';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
 import { StoreInfoForm } from '../../components/store-info-form/store-info-form';
+import { ThisTerminal } from '../../components/this-terminal/this-terminal';
 
 @Component({
   selector: 'app-settings',
-  imports: [PageHeader, MatListModule, StoreInfoForm, MATERIAL],
+  imports: [PageHeader, MatListModule, StoreInfoForm, ThisTerminal, MATERIAL],
   template: `
     <app-page-header title="ตั้งค่า" />
 
@@ -21,6 +22,15 @@ import { StoreInfoForm } from '../../components/store-info-form/store-info-form'
         >
           โหมดมืด
         </mat-slide-toggle>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined" class="section">
+      <mat-card-header>
+        <mat-card-title>เครื่องนี้ (เครื่อง POS)</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <app-this-terminal [editable]="auth.user()?.role === 'admin'" />
       </mat-card-content>
     </mat-card>
 

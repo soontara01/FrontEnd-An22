@@ -11,6 +11,7 @@ import {
   ManualDiscount,
   PaymentInput,
   PaymentMethod,
+  PosTerminal,
   PricedCart,
   Product,
   Promotion,
@@ -29,6 +30,8 @@ import {
   priceCart,
   shiftBlocker,
   shiftOpenTooLong,
+  terminalError,
+  terminalLabel,
   todayIso,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
@@ -74,6 +77,7 @@ export class PosStore {
   private readonly _categories = signal<Category[]>([]);
   private readonly _methods = signal<PaymentMethod[]>([]);
   private readonly _storeInfo = signal<StoreInfo | null>(null);
+  private readonly _terminals = signal<PosTerminal[]>([]);
   private readonly _loading = signal(false);
   private readonly _items = signal<CartItem[]>([]);
   private readonly _freeSerials = signal<FreeSerial[]>([]);
@@ -146,7 +150,20 @@ export class PosStore {
   readonly shift = this._shift.asReadonly();
   /** The current shift has been fetched at least once (no open-shift prompt before that) */
   readonly shiftLoaded = this._shiftLoaded.asReadonly();
+  /** The terminal this device is set to (Settings → "เครื่องนี้"); null = not set */
   readonly terminalId = this.terminal.terminalId;
+  /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน' */
+  readonly terminalLabel = computed(() => {
+    const id = this.terminalId();
+    return id === null ? 'ยังไม่ได้ตั้งเลขเครื่อง' : terminalLabel(id, this._terminals());
+  });
+  /**
+   * Why this device cannot sell or open a shift: it must be an active terminal of the registry —
+   * same rule as the server (`terminalError()`). Null until the data has loaded.
+   */
+  readonly terminalProblem = computed(() =>
+    this._shiftLoaded() ? terminalError(this.terminalId(), this._terminals()) : null,
+  );
   /** Shifts in use (`StoreInfo.requireShift`); unknown until the store info has loaded */
   readonly requireShift = computed(() => this._storeInfo()?.requireShift ?? false);
   /** Why this user cannot sell here now — same rule as the server (`shiftBlocker()`). */
@@ -182,7 +199,11 @@ export class PosStore {
 
   /** First reason the bill cannot be paid yet (null = ready). */
   readonly blocker = computed(
-    () => this.shiftProblem() ?? cartError(this.cart()) ?? this.manualProblem(),
+    () =>
+      this.terminalProblem() ??
+      this.shiftProblem() ??
+      cartError(this.cart()) ??
+      this.manualProblem(),
   );
 
   readonly promotionName = computed(
@@ -202,26 +223,24 @@ export class PosStore {
       categories: this.api.categories(),
       methods: this.api.paymentMethods(),
       storeInfo: this.api.storeInfo(),
+      terminals: this.api.posTerminals(),
       shift: this.api.currentShift(),
     })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ products, promotions, categories, methods, storeInfo, shift }) => {
+      .subscribe(({ products, promotions, categories, methods, storeInfo, terminals, shift }) => {
         this._products.set(products);
         this._promotions.set(promotions);
         this._categories.set(categories);
         this._methods.set(methods);
         this._storeInfo.set(storeInfo);
+        this._terminals.set(terminals);
         this._shift.set(shift);
         this._shiftLoaded.set(true);
       });
   }
 
-  /**
-   * Opens a shift at this device. The terminal number is remembered first so the request (and
-   * every later one) carries it in `X-Terminal-Id`.
-   */
+  /** Opens a shift at this device's terminal (the number comes from Settings, not the cashier). */
   openShift(payload: ShiftOpenPayload): Observable<Shift> {
-    this.terminal.set(payload.terminalId);
     return this.api.openShift(payload).pipe(tap((shift) => this._shift.set(shift)));
   }
 

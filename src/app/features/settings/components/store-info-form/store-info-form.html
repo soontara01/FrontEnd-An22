@@ -45,10 +45,7 @@
         <mat-label>โทรศัพท์</mat-label>
         <input matInput formControlName="phone" />
       </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>หมายเลขเครื่อง POS (สรรพากร)</mat-label>
-        <input matInput formControlName="posId" />
-      </mat-form-field>
+      <p class="text-muted small">POS ID (สรรพากร) ตั้งแยกต่อเครื่องที่ ข้อมูลหลัก → เครื่อง POS</p>
     </div>
 
     @if (info().vatRegistered) {

@@ -30,7 +30,9 @@ describe('Receipt', () => {
   const sale: Sale = {
     ...SALE_DEFAULTS,
     id: 1,
-    orderNo: 'POS-20261004-0001',
+    orderNo: 'POS1-20261004-0001',
+    terminalId: 1,
+    posId: 'POS-1',
     date: new Date(2026, 9, 4, 14, 5).toISOString(),
     customer: '',
     lines: [
@@ -68,7 +70,6 @@ describe('Receipt', () => {
     name: 'ร้านทดสอบ',
     taxId: '0105550123451',
     address: 'กรุงเทพฯ',
-    posId: 'POS-1',
   };
 
   const render = (inputs: { sale?: Sale; store?: StoreInfo; copy?: boolean } = {}) => {
@@ -86,7 +87,7 @@ describe('Receipt', () => {
     expect(text).toContain('ใบกำกับภาษีอย่างย่อ/ใบเสร็จรับเงิน');
     expect(text).toContain('เลขประจำตัวผู้เสียภาษี0105550123451(สำนักงานใหญ่)');
     expect(text).toContain('POSIDPOS-1');
-    expect(text).toContain('POS-20261004-0001');
+    expect(text).toContain('POS1-20261004-0001');
     expect(text).toContain('SNSN1');
     expect(text).toContain('รับประกัน12เดือน');
     expect(text).toContain('มูลค่าสินค้ามีภาษี93.46');

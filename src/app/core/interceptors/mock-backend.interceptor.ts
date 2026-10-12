@@ -747,7 +747,6 @@ export const SEED_STORE_INFO: StoreInfo = {
   taxId: '0105550123451',
   address: '99/9 ถนนพหลโยธิน แขวงสามเสนใน เขตพญาไท กรุงเทพฯ 10400',
   phone: '02-123-4567',
-  posId: 'E051234567890',
   receiptFooter: 'ขอบคุณที่ใช้บริการ · เปลี่ยน/คืนสินค้าภายใน 7 วันพร้อมใบเสร็จ',
 };
 
@@ -2472,6 +2471,7 @@ function migrateTerminals(db: MockDb, stored: Partial<MockDb> | null): boolean {
     active: true,
   }));
   db.legacyPosId = legacy;
+  delete (db.storeInfo as { posId?: string }).posId;
   return true;
 }
 

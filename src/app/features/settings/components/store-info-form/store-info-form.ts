@@ -50,7 +50,6 @@ export class StoreInfoForm {
     branchNo: '',
     address: '',
     phone: '',
-    posId: '',
     receiptFooter: '',
     taxInvoicePaper: STORE_INFO_DEFAULTS.taxInvoicePaper,
     exchangeDays: STORE_INFO_DEFAULTS.exchangeDays,

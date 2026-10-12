@@ -1,10 +1,24 @@
-@if (store.requireShift() && store.shiftLoaded()) {
+@if (store.terminalProblem(); as problem) {
+  <!-- Device not set to a registered terminal: no sale / shift until an admin sets it. -->
+  <div class="shift-bar warn">
+    <mat-icon>point_of_sale</mat-icon>
+    <span>{{ problem }}</span>
+    <span class="spacer"></span>
+    @if (store.isAdmin()) {
+      <!-- Another menu: full page load (SPA per menu). -->
+      <a mat-flat-button href="/settings">
+        <mat-icon>settings</mat-icon>
+        ตั้งค่าเครื่องนี้
+      </a>
+    }
+  </div>
+} @else if (store.requireShift() && store.shiftLoaded()) {
   <div class="shift-bar" [class.warn]="store.shiftTooLong()">
     @if (store.shift(); as shift) {
       <mat-icon>schedule</mat-icon>
       <span>
         กะ <strong>{{ shift.shiftNo }}</strong> · {{ shift.cashier }} · เปิด
-        {{ time(shift.openedAt) }} · เครื่อง {{ shift.terminalId }}
+        {{ time(shift.openedAt) }} · {{ store.terminalLabel() }}
       </span>
       @if (store.shiftTooLong()) {
         <span class="badge badge-warn">
@@ -40,7 +54,7 @@
       </mat-menu>
     } @else {
       <mat-icon>lock</mat-icon>
-      <span>เครื่อง {{ store.terminalId() }} ยังไม่ได้เปิดกะ</span>
+      <span>{{ store.terminalLabel() }} ยังไม่ได้เปิดกะ</span>
       <span class="spacer"></span>
       <button mat-flat-button type="button" (click)="openShift()">
         <mat-icon>lock_open</mat-icon>
@@ -147,6 +161,11 @@
 
     @if (store.loading() && !store.products().length) {
       <app-loading-spinner />
+    } @else if (store.terminalProblem(); as problem) {
+      <div class="shift-blocked">
+        <mat-icon>point_of_sale</mat-icon>
+        <p>{{ problem }}</p>
+      </div>
     } @else if (store.shiftProblem(); as problem) {
       <div class="shift-blocked">
         <mat-icon>lock</mat-icon>

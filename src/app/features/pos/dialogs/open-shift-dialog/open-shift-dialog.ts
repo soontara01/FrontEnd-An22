@@ -11,13 +11,16 @@ import { MATERIAL } from '@shared/material';
 import { DenominationCounter } from '../../components/denomination-counter/denomination-counter';
 
 export interface OpenShiftDialogData {
+  /** This device's terminal (from `TerminalService`, never typed by the cashier) */
   terminalId: number;
+  /** e.g. 'เครื่อง 2 · แคชเชียร์หน้าร้าน' */
+  terminalLabel: string;
   /** Float the last shift of this terminal left in the drawer */
   defaultFloat: number;
 }
 
 /**
- * Opens a POS shift: terminal number + opening float, optionally counted per banknote / coin
+ * Opens a POS shift at this device's terminal: opening float, optionally counted per banknote / coin
  * (the count then sets the float). Duplicate shifts are checked by the server (`openShiftError()`).
  */
 @Component({
@@ -28,8 +31,10 @@ export interface OpenShiftDialogData {
   styles: `
     .row {
       display: grid;
-      grid-template-columns: 140px minmax(0, 1fr);
-      gap: 12px;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .terminal {
+      font: var(--mat-sys-title-small);
     }
     .problem {
       color: var(--mat-sys-error);
@@ -42,7 +47,6 @@ export class OpenShiftDialog {
   private readonly dialogRef =
     inject<MatDialogRef<OpenShiftDialog, ShiftOpenPayload>>(MatDialogRef);
 
-  protected readonly terminalId = signal(this.data.terminalId);
   protected readonly float = signal(this.data.defaultFloat);
   protected readonly counting = signal(false);
   /** Quantity per banknote / coin (when counting) */
@@ -52,7 +56,7 @@ export class OpenShiftDialog {
   private readonly payload = computed<ShiftOpenPayload>(() => {
     const counted = this.counting() ? this.counted() : [];
     return {
-      terminalId: Number(this.terminalId()),
+      terminalId: this.data.terminalId,
       openingFloat: counted.length ? this.countTotal() : Number(this.float()),
       openingDenominations: counted,
     };
