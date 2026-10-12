@@ -108,3 +108,11 @@ tr.cancelled td:nth-last-child(-n + 2) {
   text-align: center;
   color: var(--mat-sys-on-surface-variant);
 }
+
+.shift-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}

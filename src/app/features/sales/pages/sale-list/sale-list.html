@@ -1,4 +1,7 @@
-<app-page-header title="การขาย" [subtitle]="'บิลขาย · ช่วงวันที่: ' + rangeText()">
+<app-page-header
+  title="การขาย"
+  [subtitle]="shiftId() ? 'บิลขาย · กะ ' + shiftNo() : 'บิลขาย · ช่วงวันที่: ' + rangeText()"
+>
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="reload()">
     <mat-icon>refresh</mat-icon>
   </button>
@@ -43,6 +46,20 @@
     }
   </div>
 </div>
+
+@if (shiftId(); as id) {
+  <div class="shift-filter">
+    <span class="badge badge-warn">
+      <mat-icon inline>schedule</mat-icon>
+      เฉพาะกะ {{ shiftNo() }} (บิลที่ขายหรือยกเลิกในกะ ไม่ใช้ช่วงวันที่)
+    </span>
+    <a mat-button [routerLink]="['/sales/shifts', id]">ดูกะ</a>
+    <button mat-button type="button" (click)="clearShift()">
+      <mat-icon>close</mat-icon>
+      ล้างตัวกรองกะ
+    </button>
+  </div>
+}
 
 @let sum = summary();
 <section class="stat-grid">

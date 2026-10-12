@@ -87,6 +87,16 @@ export default class SaleList {
   readonly from = input<string>();
   readonly to = input<string>();
   readonly all = input<string>();
+  /** `?shift=<id>`: bills sold or voided in that shift (the date range is ignored) */
+  readonly shift = input<string>();
+  protected readonly shiftId = computed(() => Number(this.shift()) || null);
+  protected readonly shiftInfo = rxResource({
+    params: () => this.shiftId() ?? undefined,
+    stream: ({ params }) => this.store.shift(params),
+  });
+  protected readonly shiftNo = computed(() =>
+    this.shiftInfo.hasValue() ? this.shiftInfo.value().shiftNo : `#${this.shiftId()}`,
+  );
 
   protected readonly presets = DATE_PRESETS;
   protected readonly methodIcon = PAYMENT_TYPE_ICON;
@@ -126,12 +136,18 @@ export default class SaleList {
   });
 
   protected readonly sales = rxResource({
-    params: () => this.range(),
-    stream: ({ params }) => this.store.list(params.from, params.to),
+    params: () => ({ ...this.range(), shiftId: this.shiftId() }),
+    stream: ({ params }) =>
+      params.shiftId
+        ? this.store.salesOfShift(params.shiftId)
+        : this.store.list(params.from, params.to),
   });
   protected readonly creditNotes = rxResource({
-    params: () => this.range(),
-    stream: ({ params }) => this.store.creditNotes(params.from, params.to),
+    params: () => ({ ...this.range(), shiftId: this.shiftId() }),
+    stream: ({ params }) =>
+      params.shiftId
+        ? this.store.creditNotesOfShift(params.shiftId)
+        : this.store.creditNotes(params.from, params.to),
   });
   private readonly rows = computed(() => (this.sales.hasValue() ? this.sales.value() : []));
   protected readonly summary = computed(() =>
@@ -219,10 +235,10 @@ export default class SaleList {
 
   protected applyPreset(preset: DatePreset): void {
     if (preset === 'all') {
-      this.navigate({ all: '1', from: null, to: null });
+      this.navigate({ all: '1', from: null, to: null, shift: null });
     } else {
       const { from, to } = presetRange(preset);
-      this.navigate({ all: null, from, to });
+      this.navigate({ all: null, from, to, shift: null });
     }
   }
 
@@ -232,7 +248,13 @@ export default class SaleList {
       all: start || end ? null : '1',
       from: start ? toIsoDate(start) : null,
       to: end ? toIsoDate(end) : null,
+      shift: null,
     });
+  }
+
+  /** Back to the date range (the shift filter replaces it). */
+  protected clearShift(): void {
+    this.navigate({ shift: null });
   }
 
   protected reload(): void {

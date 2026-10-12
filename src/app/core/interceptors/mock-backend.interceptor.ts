@@ -2074,9 +2074,12 @@ function listCreditNotes(req: HttpRequest<unknown>, db: MockDb): Observable<Http
   const from = req.params.get('from') || null;
   const to = req.params.get('to') || null;
   const day = (n: CreditNote) => saleDay(n);
+  // Optional shift: the notes whose refund was paid from it.
+  const shiftId = Number(req.params.get('shiftId')) || null;
   return ok(
     db.creditNotes
       .filter((n) => (!from || day(n) >= from) && (!to || day(n) <= to))
+      .filter((n) => !shiftId || n.shiftId === shiftId)
       .sort((a, b) => b.date.localeCompare(a.date)),
   );
 }

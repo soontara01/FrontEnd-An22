@@ -1432,6 +1432,19 @@ describe('mockBackendInterceptor – POS terminals', () => {
     });
   });
 
+  it('lists the credit notes refunded from one shift', async () => {
+    const note = (id: number, shiftId: number | null) => ({
+      id,
+      cnNo: `CN-20261004-000${id}`,
+      date: '2026-10-04T03:00:00Z',
+      shiftId,
+    });
+    start({ creditNotes: [note(1, 7), note(2, 8), note(3, null)] });
+    const ofShift = await call<CreditNote[]>('GET', 'credit-notes?shiftId=7');
+    expect(ofShift.map((n) => n.id)).toEqual([1]);
+    expect(await call<CreditNote[]>('GET', 'credit-notes')).toHaveLength(3);
+  });
+
   it('moves the old store-wide POS ID to terminal 1 and to older documents', async () => {
     const old = { id: 50, total: 100, orderNo: 'POS-20261003-0001', lines: [{ unitPrice: 100 }] };
     start({

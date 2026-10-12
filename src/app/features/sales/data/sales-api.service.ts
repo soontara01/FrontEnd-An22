@@ -154,6 +154,11 @@ export class SalesApi {
   salesOfShift(shiftId: number): Observable<Sale[]> {
     return this.api.get<Sale[]>('sales', { shiftId: String(shiftId) });
   }
+
+  /** Credit notes whose refund was paid from the shift. */
+  creditNotesOfShift(shiftId: number): Observable<CreditNote[]> {
+    return this.api.get<CreditNote[]>('credit-notes', { shiftId: String(shiftId) });
+  }
 }
 
 function rangeParams(from: string | null, to: string | null): Record<string, string> {

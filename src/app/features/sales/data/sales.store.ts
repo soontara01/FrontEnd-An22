@@ -61,6 +61,19 @@ export class SalesStore {
     return this.api.creditNotes(from, to);
   }
 
+  /** Bills sold or voided in a shift, newest first (bill list `?shift=`). */
+  salesOfShift(shiftId: number): Observable<Sale[]> {
+    return this.api.salesOfShift(shiftId);
+  }
+
+  creditNotesOfShift(shiftId: number): Observable<CreditNote[]> {
+    return this.api.creditNotesOfShift(shiftId);
+  }
+
+  shift(id: number): Observable<Shift> {
+    return this.api.shift(id);
+  }
+
   /** A bill with its credit notes and exchanges (credit-note and exchange forms). */
   withReturnsAndExchanges(
     id: number,
