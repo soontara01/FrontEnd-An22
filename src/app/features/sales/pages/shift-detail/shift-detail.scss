@@ -50,3 +50,10 @@ h3 {
 .empty {
   padding: 12px;
 }
+
+.close-for {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}

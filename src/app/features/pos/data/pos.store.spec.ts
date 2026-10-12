@@ -90,6 +90,7 @@ describe('PosStore', () => {
       taxInvoiceOf: vi.fn(() => of(null)),
       buyerByTaxId: vi.fn(() => of(null)),
       currentShift: vi.fn(() => of(null)),
+      shift: vi.fn(() => of(shift)),
       shifts: vi.fn(() => of([])),
       openShift: vi.fn(() => of(shift)),
       shiftSummary: vi.fn(),
@@ -288,6 +289,29 @@ describe('PosStore', () => {
       expect(store.closedShift()?.status).toBe('closed');
       expect(store.locked()).toBe(false);
       expect(localStorage.getItem('an22.pos.locked')).toBeNull();
+    });
+
+    it("closes another terminal's shift without touching this terminal's shift or lock", () => {
+      withShifts(shift);
+      store.lock();
+      const other = { ...shift, id: 9, terminalId: 2 };
+      api.countCheck.mockReturnValue(of({ lines: [], needsApproval: false }));
+      api.closeShift.mockReturnValue(of({ ...other, status: 'closed' }));
+      const payload = {
+        counts: [],
+        cashDenominations: [],
+        depositAmount: 0,
+        note: '',
+        approval: null,
+      };
+      store.countCheck([], other).subscribe();
+      store.closeShift(payload, other).subscribe();
+      expect(api.countCheck).toHaveBeenCalledWith(9, []);
+      expect(api.closeShift).toHaveBeenCalledWith(9, payload);
+      expect(store.closedShift()?.id).toBe(9);
+      expect(store.shift()).toEqual(shift);
+      expect(store.locked()).toBe(true);
+      expect(store.terminalLabelOf(2)).toBe('เครื่อง 2 · ชั้น 2');
     });
 
     it('unlocks only for the shift cashier or an admin', () => {

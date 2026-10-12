@@ -1294,6 +1294,27 @@ describe('mockBackendInterceptor – shifts', () => {
       closedBy: 'สมชาย ใจดี',
     });
   });
+
+  it("lets an admin close another terminal's shift from any device, not other staff", async () => {
+    const shift = await open(500, { token: STAFF, terminal: 2 });
+    await sellMouse({ token: STAFF, terminal: 2 });
+    const counts = await countsFor(shift);
+    const body = { counts, cashDenominations: [], depositAmount: 0, note: '' };
+    const OTHER = 'mock-jwt-token.u3';
+    expect(
+      await errorOf(call('POST', `shifts/${shift.id}/close`, body, { token: OTHER, terminal: 2 })),
+    ).toBe('ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
+    // Admin on a back-office device (no terminal set): count check + close.
+    const check = await call<CountCheckResult>(
+      'POST',
+      `shifts/${shift.id}/count-check`,
+      { counts },
+      { terminal: null },
+    );
+    expect(check.needsApproval).toBe(false);
+    const closed = await call<Shift>('POST', `shifts/${shift.id}/close`, body, { terminal: null });
+    expect(closed).toMatchObject({ status: 'closed', closedBy: 'Admin', cashier: 'สมชาย ใจดี' });
+  });
 });
 
 describe('mockBackendInterceptor – POS terminals', () => {

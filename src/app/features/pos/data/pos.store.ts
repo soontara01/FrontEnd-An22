@@ -269,20 +269,38 @@ export class PosStore {
     return this.api.addCashMovement(shiftId, payload);
   }
 
-  /** Expected amounts / variances of the open shift, after a complete blind count. */
-  countCheck(counts: ShiftCountInput[]): Observable<CountCheckResult> {
-    const shift = this._shift();
+  /** Any shift by id — an admin closing another terminal's shift (`/pos/shift-close?shift=`). */
+  fetchShift(id: number): Observable<Shift> {
+    return this.api.shift(id);
+  }
+
+  /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน' for any terminal number. */
+  terminalLabelOf(id: number): string {
+    return terminalLabel(id, this._terminals());
+  }
+
+  /**
+   * Expected amounts / variances after a complete blind count — of this terminal's open shift, or
+   * of `target` (another terminal's shift an admin closes).
+   */
+  countCheck(counts: ShiftCountInput[], target?: Shift): Observable<CountCheckResult> {
+    const shift = target ?? this._shift();
     if (!shift) return throwError(() => new Error('ยังไม่ได้เปิดกะที่เครื่องนี้'));
     return this.api.countCheck(shift.id, counts);
   }
 
-  /** Closes the open shift; the closed one stays available for its Z report. */
-  closeShift(payload: ShiftClosePayload): Observable<Shift> {
-    const shift = this._shift();
+  /**
+   * Closes this terminal's open shift, or `target`; the closed one stays available for its Z
+   * report. Closing another terminal's shift leaves this terminal's shift and lock alone.
+   */
+  closeShift(payload: ShiftClosePayload, target?: Shift): Observable<Shift> {
+    const shift = target ?? this._shift();
     if (!shift) return throwError(() => new Error('ยังไม่ได้เปิดกะที่เครื่องนี้'));
+    const own = shift.id === this._shift()?.id;
     return this.api.closeShift(shift.id, payload).pipe(
       tap((closed) => {
         this._closedShift.set(closed);
+        if (!own) return;
         this._shift.set(null);
         this.setLock(null);
       }),

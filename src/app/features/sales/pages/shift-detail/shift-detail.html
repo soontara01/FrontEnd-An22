@@ -41,6 +41,18 @@
               กะนี้ยังเปิดอยู่ (เปิดเมื่อ {{ d.shift.openedAt | thaiDate: 'datetime' }}) —
               ปิดกะได้ที่{{ store.terminalLabel(d.shift.terminalId) }} ในหน้าขายหน้าร้าน
             </p>
+            @if (isAdmin()) {
+              <p class="close-for">
+                <!-- The POS menu's close page: another menu = full page load. -->
+                <a mat-flat-button [href]="'/pos/shift-close?shift=' + d.shift.id">
+                  <mat-icon>lock</mat-icon>
+                  ปิดกะแทน
+                </a>
+                <span class="text-muted small">
+                  เช่น แคชเชียร์กลับไปแล้วโดยไม่ได้ปิดกะ — ต้องนับเงินในลิ้นชักของเครื่องนั้น
+                </span>
+              </p>
+            }
             <div class="grid">
               <span>บิลขาย {{ d.summary.billCount }} บิล</span>
               <span>{{ d.summary.salesTotal | number: '1.2-2' }}</span>

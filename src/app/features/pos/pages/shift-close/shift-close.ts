@@ -2,17 +2,21 @@ import { DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
+  DOCUMENT,
   ElementRef,
   computed,
   effect,
   inject,
+  input,
   signal,
   viewChild,
 } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
 import {
   CountCheckResult,
   DenominationCount,
+  Shift,
   ShiftClosePayload,
   ShiftCountInput,
   ShiftSummary,
@@ -39,6 +43,9 @@ type Step = 'count' | 'review' | 'done';
  * (cash per banknote / coin) → the server reveals expected amounts and variances
  * (`count-check`) → one recount allowed (first count kept), a reason per variance, deposit and
  * float left, admin approval at the terminal or pending → close → Z report (80 mm).
+ *
+ * `?shift=<id>`: an admin closes another terminal's open shift (e.g. the cashier left without
+ * closing), opened from the Sales menu's shift page; this terminal's own shift is left alone.
  */
 @Component({
   selector: 'app-shift-close',
@@ -58,8 +65,40 @@ type Step = 'count' | 'review' | 'done';
 export default class ShiftClose {
   protected readonly store = inject(PosStore);
   private readonly router = inject(Router);
+  private readonly document = inject(DOCUMENT);
   private readonly notify = inject(NotificationService);
   private readonly slip = viewChild('slip', { read: ElementRef<HTMLElement> });
+
+  /** Query param `?shift=<id>` (withComponentInputBinding): another terminal's shift to close. */
+  readonly shift = input<string>();
+  protected readonly remoteId = computed(() => Number(this.shift()) || null);
+  private readonly remote = rxResource({
+    params: () => this.remoteId() ?? undefined,
+    stream: ({ params }) => this.store.fetchShift(params),
+  });
+  /** The shift being closed: the `?shift=` one, else this terminal's open shift. */
+  protected readonly target = computed<Shift | null>(() => {
+    if (!this.remoteId()) return this.store.shift();
+    return this.remote.hasValue() ? this.remote.value() : null;
+  });
+  protected readonly targetLoaded = computed(() =>
+    this.remoteId() ? !this.remote.isLoading() : this.store.shiftLoaded(),
+  );
+  /** Why the target cannot be closed here (null = go ahead). */
+  protected readonly blocked = computed(() => {
+    const shift = this.target();
+    if (this.remoteId()) {
+      if (!this.store.isAdmin()) return 'ปิดกะของเครื่องอื่นได้เฉพาะผู้ดูแลระบบ';
+      if (!shift) return 'ไม่พบกะ';
+      if (shift.status !== 'open') return `กะ ${shift.shiftNo} ปิดไปแล้ว`;
+      return null;
+    }
+    if (!shift) return 'เครื่องนี้ไม่มีกะที่เปิดอยู่';
+    if (!this.store.canCloseShift()) {
+      return `กะนี้เป็นของ ${shift.cashier} — ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ`;
+    }
+    return null;
+  });
 
   protected readonly reasons = Object.entries(VARIANCE_REASON_LABEL) as [VarianceReason, string][];
   protected readonly step = signal<Step>('count');
@@ -133,7 +172,7 @@ export default class ShiftClose {
     () => !!this.check()?.needsApproval && !this.store.isAdmin(),
   );
   protected readonly closeProblem = computed(() => {
-    const shift = this.store.shift();
+    const shift = this.target();
     const check = this.check();
     if (!shift || !check) return null;
     const problem = closeShiftError(shift, this.payload(), check.lines, {
@@ -151,8 +190,8 @@ export default class ShiftClose {
     // Opened directly (reload): load the POS data, including this terminal's open shift.
     if (!this.store.shiftLoaded()) this.store.load();
     effect(() => {
-      const shift = this.store.shift();
-      if (!shift || this.summary() || this.step() === 'done') return;
+      const shift = this.target();
+      if (!shift || this.blocked() || this.summary() || this.step() === 'done') return;
       this.store.shiftSummary(shift.id).subscribe((s) => this.summary.set(s));
     });
   }
@@ -178,10 +217,10 @@ export default class ShiftClose {
   protected runCheck(): void {
     if (this.countProblem() || this.busy()) return;
     this.busy.set(true);
-    this.store.countCheck(this.inputs()).subscribe({
+    this.store.countCheck(this.inputs(), this.remoteTarget()).subscribe({
       next: (check) => {
         this.check.set(check);
-        const shift = this.store.shift();
+        const shift = this.target();
         // Default: deposit everything above the float the shift started with.
         const keep = shift?.openingFloat ?? 0;
         this.deposit.set(Math.max(0, round2((this.cashCounted() ?? 0) - keep)));
@@ -206,7 +245,7 @@ export default class ShiftClose {
   protected close(): void {
     if (this.closeProblem() || this.busy()) return;
     this.busy.set(true);
-    this.store.closeShift(this.payload()).subscribe({
+    this.store.closeShift(this.payload(), this.remoteTarget()).subscribe({
       next: (closed) => {
         this.notify.success(`ปิดกะ ${closed.shiftNo} แล้ว`);
         this.step.set('done');
@@ -222,7 +261,15 @@ export default class ShiftClose {
     if (el) printElement(el);
   }
 
-  protected backToPos(): void {
-    void this.router.navigate(['/pos']);
+  /** Back to the POS, or to the Sales menu's shift page (another menu: full page load). */
+  protected back(): void {
+    const id = this.remoteId();
+    if (id) this.document.location.assign(`/sales/shifts/${id}`);
+    else void this.router.navigate(['/pos']);
+  }
+
+  /** The `?shift=` shift, passed to the store (undefined = this terminal's own). */
+  private remoteTarget(): Shift | undefined {
+    return this.remoteId() ? (this.target() ?? undefined) : undefined;
   }
 }

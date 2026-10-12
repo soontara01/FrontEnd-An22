@@ -71,6 +71,11 @@ export class PosApi {
     return this.api.post<Sale>('sales', payload);
   }
 
+  /** Any shift by id (an admin closing another terminal's shift). */
+  shift(id: number): Observable<Shift> {
+    return this.api.get<Shift>(`shifts/${id}`);
+  }
+
   /** Open shift of this terminal (`X-Terminal-Id`), null = none. */
   currentShift(): Observable<Shift | null> {
     return this.api.get<Shift | null>('shifts/current');

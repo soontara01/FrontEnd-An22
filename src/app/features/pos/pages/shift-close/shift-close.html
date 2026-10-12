@@ -1,9 +1,20 @@
-<app-page-header title="ปิดกะ" subtitle="นับเงินและตรวจยอดแต่ละช่องทางก่อนส่งมอบลิ้นชัก">
+<app-page-header
+  [title]="remoteId() ? 'ปิดกะแทน' : 'ปิดกะ'"
+  subtitle="นับเงินและตรวจยอดแต่ละช่องทางก่อนส่งมอบลิ้นชัก"
+>
   @if (step() !== 'done') {
-    <a mat-stroked-button routerLink="/pos">
-      <mat-icon>arrow_back</mat-icon>
-      กลับหน้าขาย
-    </a>
+    @if (remoteId(); as id) {
+      <!-- Back to the Sales menu: another menu = full page load. -->
+      <a mat-stroked-button [href]="'/sales/shifts/' + id">
+        <mat-icon>arrow_back</mat-icon>
+        กลับหน้ากะ
+      </a>
+    } @else {
+      <a mat-stroked-button routerLink="/pos">
+        <mat-icon>arrow_back</mat-icon>
+        กลับหน้าขาย
+      </a>
+    }
   }
 </app-page-header>
 
@@ -24,10 +35,17 @@
             <mat-icon>print</mat-icon>
             พิมพ์ใบสรุปปิดกะ
           </button>
-          <button mat-stroked-button type="button" (click)="backToPos()">
-            <mat-icon>point_of_sale</mat-icon>
-            กลับหน้าขาย
-          </button>
+          @if (remoteId()) {
+            <button mat-stroked-button type="button" (click)="back()">
+              <mat-icon>schedule</mat-icon>
+              กลับหน้ากะ
+            </button>
+          } @else {
+            <button mat-stroked-button type="button" (click)="back()">
+              <mat-icon>point_of_sale</mat-icon>
+              กลับหน้าขาย
+            </button>
+          }
         </div>
         @if (zSummary(); as z) {
           <app-shift-slip #slip [shift]="closed" [summary]="z" [store]="store.storeInfo()" />
@@ -37,25 +55,25 @@
       }
     </mat-card-content>
   </mat-card>
-} @else if (!store.shiftLoaded()) {
+} @else if (!targetLoaded()) {
   <app-loading-spinner />
-} @else if (!store.shift()) {
+} @else if (blocked(); as message) {
   <mat-card appearance="outlined">
-    <mat-card-content>เครื่องนี้ไม่มีกะที่เปิดอยู่</mat-card-content>
-  </mat-card>
-} @else if (!store.canCloseShift()) {
-  <mat-card appearance="outlined">
-    <mat-card-content>
-      กะนี้เป็นของ {{ store.shift()?.cashier }} — ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ
-    </mat-card-content>
+    <mat-card-content>{{ message }}</mat-card-content>
   </mat-card>
 } @else if (!summary()) {
   <app-loading-spinner />
 } @else {
-  @let shift = store.shift()!;
+  @let shift = target()!;
+  @if (remoteId()) {
+    <p class="warn">
+      ปิดกะแทนเจ้าของกะ — นับเงินในลิ้นชักของ{{ store.terminalLabelOf(shift.terminalId) }}
+    </p>
+  }
   <p class="text-muted">
-    กะ <strong>{{ shift.shiftNo }}</strong> · {{ shift.cashier }} · {{ store.terminalLabel() }} ·
-    เงินทอนตั้งต้น {{ shift.openingFloat | number: '1.2-2' }} บาท
+    กะ <strong>{{ shift.shiftNo }}</strong> · {{ shift.cashier }} ·
+    {{ store.terminalLabelOf(shift.terminalId) }} · เงินทอนตั้งต้น
+    {{ shift.openingFloat | number: '1.2-2' }} บาท
   </p>
 
   @if (step() === 'count') {
