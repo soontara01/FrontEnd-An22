@@ -24,7 +24,7 @@ import {
   Supplier,
 } from '../models';
 import { addDaysIso, storeInfoError, todayIso } from '../models';
-import { mockBackendInterceptor } from './mock-backend.interceptor';
+import { SEED_STORE_INFO, mockBackendInterceptor } from './mock-backend.interceptor';
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
 describe('mockBackendInterceptor – serials', () => {
@@ -482,6 +482,14 @@ describe('mockBackendInterceptor – POS sales', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
     localStorage.clear();
+    // These tests cover selling itself; shifts have their own describe below.
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        shiftsEnabled: true,
+        storeInfo: { ...SEED_STORE_INFO, requireShift: false },
+      }),
+    );
     TestBed.configureTestingModule({
       providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
     });
@@ -1105,7 +1113,7 @@ describe('mockBackendInterceptor – shifts', () => {
     }));
   };
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
     localStorage.clear();
@@ -1113,9 +1121,18 @@ describe('mockBackendInterceptor – shifts', () => {
       providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
-    await setRequireShift(true);
   });
   afterEach(() => vi.useRealTimers());
+
+  it('switches shifts on once for a db stored while they were temporarily off', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({ storeInfo: { ...SEED_STORE_INFO, requireShift: false } }),
+    );
+    expect((await call<StoreInfo>('GET', 'settings/store')).requireShift).toBe(true);
+    await setRequireShift(false);
+    expect((await call<StoreInfo>('GET', 'settings/store')).requireShift).toBe(false);
+  });
 
   it('blocks money actions without an open shift and records the shift', async () => {
     expect(await errorOf(sellMouse())).toBe('ยังไม่ได้เปิดกะที่เครื่องนี้');

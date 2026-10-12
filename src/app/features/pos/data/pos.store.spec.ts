@@ -8,7 +8,9 @@ import {
   SALE_DEFAULTS,
   STORE_INFO_DEFAULTS,
   Sale,
+  Shift,
 } from '@core/models';
+import { TerminalService } from '@core/services/terminal.service';
 import { PosApi } from './pos-api.service';
 import { HeldBill, PosStore } from './pos.store';
 
@@ -38,8 +40,31 @@ describe('PosStore', () => {
   let api: Record<keyof PosApi, ReturnType<typeof vi.fn>>;
   let store: PosStore;
 
+  const shift: Shift = {
+    id: 7,
+    shiftNo: 'SH-20261012-01',
+    terminalId: 2,
+    cashier: 'สมชาย ใจดี',
+    status: 'open',
+    openedAt: new Date().toISOString(),
+    openingFloat: 1000,
+    openingDenominations: [],
+    closedAt: null,
+    closedBy: null,
+    counts: [],
+    cashDenominations: [],
+    depositAmount: 0,
+    floatLeft: 0,
+    approvalStatus: 'not_needed',
+    approvedBy: null,
+    approvedAt: null,
+    note: '',
+  };
+
   beforeEach(() => {
     localStorage.clear();
+    // Logged in as a cashier (AuthService reads the stored user).
+    localStorage.setItem('an22.user', JSON.stringify({ id: 2, name: 'สมชาย ใจดี', role: 'user' }));
     api = {
       products: vi.fn(() =>
         of([
@@ -52,9 +77,16 @@ describe('PosStore', () => {
       paymentMethods: vi.fn(() => of(methods)),
       serials: vi.fn(() => of([])),
       checkout: vi.fn(() => of(sale)),
-      storeInfo: vi.fn(() => of(STORE_INFO_DEFAULTS)),
+      // Selling itself is tested with shifts off; the shift tests below turn them on.
+      storeInfo: vi.fn(() => of({ ...STORE_INFO_DEFAULTS, requireShift: false })),
       taxInvoiceOf: vi.fn(() => of(null)),
       buyerByTaxId: vi.fn(() => of(null)),
+      currentShift: vi.fn(() => of(null)),
+      shifts: vi.fn(() => of([])),
+      openShift: vi.fn(() => of(shift)),
+      shiftSummary: vi.fn(),
+      cashMovements: vi.fn(() => of([])),
+      addCashMovement: vi.fn(),
     };
     TestBed.configureTestingModule({ providers: [PosStore, { provide: PosApi, useValue: api }] });
     store = TestBed.inject(PosStore);
@@ -188,5 +220,45 @@ describe('PosStore', () => {
     store.checkout([]).subscribe({ error: () => undefined });
     expect(store.items()).toHaveLength(1);
     expect(api.promotions).toHaveBeenCalledTimes(2);
+  });
+
+  describe('shifts', () => {
+    const withShifts = (current: Shift | null) => {
+      api.storeInfo.mockReturnValue(of(STORE_INFO_DEFAULTS));
+      api.currentShift.mockReturnValue(of(current));
+      store.load();
+      store.add(1);
+    };
+
+    it('blocks selling until this terminal has an open shift', () => {
+      withShifts(null);
+      expect(store.shiftLoaded()).toBe(true);
+      expect(store.blocker()).toBe('ยังไม่ได้เปิดกะที่เครื่องนี้');
+      store.openShift({ terminalId: 2, openingFloat: 1000, openingDenominations: [] }).subscribe();
+      expect(store.terminalId()).toBe(2);
+      expect(localStorage.getItem('an22.pos.terminal')).toBe('2');
+      expect(store.shift()).toEqual(shift);
+      expect(store.blocker()).toBeNull();
+    });
+
+    it("blocks selling in someone else's shift and flags one left open", () => {
+      withShifts({ ...shift, cashier: 'สมหญิง รักงาน', openedAt: '2020-01-01T00:00:00.000Z' });
+      expect(store.blocker()).toBe('กะนี้เป็นของ สมหญิง รักงาน — ต้องปิดกะนั้นก่อนจึงจะขายได้');
+      expect(store.shiftTooLong()).toBe(true);
+    });
+
+    it("defaults the opening float to what this terminal's last shift left", () => {
+      localStorage.setItem('an22.pos.terminal', '2');
+      api.shifts.mockReturnValue(
+        of([
+          { ...shift, id: 9, terminalId: 1, status: 'closed', floatLeft: 300 },
+          { ...shift, id: 8, terminalId: 2, status: 'closed', floatLeft: 500 },
+        ]),
+      );
+      let float = -1;
+      TestBed.inject(TerminalService).set(2);
+      store.lastFloatLeft().subscribe((f) => (float = f));
+      expect(float).toBe(500);
+    });
   });
 });

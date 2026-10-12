@@ -1,0 +1,48 @@
+<h2 mat-dialog-title>นำเงินเข้า / ออกลิ้นชัก</h2>
+<mat-dialog-content>
+  <mat-button-toggle-group
+    class="kind"
+    aria-label="ประเภทรายการ"
+    [value]="type()"
+    (change)="type.set($event.value)"
+  >
+    <mat-button-toggle value="in">นำเงินเข้า</mat-button-toggle>
+    <mat-button-toggle value="out">นำเงินออก</mat-button-toggle>
+  </mat-button-toggle-group>
+
+  <mat-form-field appearance="outline" class="w-full">
+    <mat-label>จำนวนเงิน</mat-label>
+    <input
+      matInput
+      appAutofocus
+      type="number"
+      min="0"
+      step="0.25"
+      [value]="amount() || ''"
+      (input)="amount.set($any($event.target).value)"
+      (keydown.enter)="save()"
+    />
+    <span matTextSuffix>บาท</span>
+  </mat-form-field>
+
+  <div class="quick">
+    @for (q of quickReasons[type()]; track q) {
+      <button mat-stroked-button type="button" (click)="reason.set(q)">{{ q }}</button>
+    }
+  </div>
+  <mat-form-field appearance="outline" class="w-full">
+    <mat-label>เหตุผล (จำเป็น)</mat-label>
+    <input matInput [value]="reason()" (input)="reason.set($any($event.target).value)" />
+  </mat-form-field>
+
+  @if (problem(); as message) {
+    <div class="problem">{{ message }}</div>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button mat-dialog-close>ยกเลิก</button>
+  <button mat-flat-button type="button" [disabled]="!!problem()" (click)="save()">
+    <mat-icon>check</mat-icon>
+    บันทึก
+  </button>
+</mat-dialog-actions>

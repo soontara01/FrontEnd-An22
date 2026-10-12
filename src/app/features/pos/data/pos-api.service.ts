@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  CashMovement,
+  CashMovementPayload,
   Category,
   PaymentMethod,
   Product,
@@ -9,6 +11,9 @@ import {
   Sale,
   SalePayload,
   SerialNumber,
+  Shift,
+  ShiftOpenPayload,
+  ShiftSummary,
   StoreInfo,
   TaxInvoice,
   TaxInvoiceBuyer,
@@ -54,5 +59,32 @@ export class PosApi {
 
   checkout(payload: SalePayload): Observable<Sale> {
     return this.api.post<Sale>('sales', payload);
+  }
+
+  /** Open shift of this terminal (`X-Terminal-Id`), null = none. */
+  currentShift(): Observable<Shift | null> {
+    return this.api.get<Shift | null>('shifts/current');
+  }
+
+  /** All shifts, newest first (to find the float the last shift left in the drawer). */
+  shifts(): Observable<Shift[]> {
+    return this.api.get<Shift[]>('shifts');
+  }
+
+  openShift(payload: ShiftOpenPayload): Observable<Shift> {
+    return this.api.post<Shift>('shifts/open', payload);
+  }
+
+  /** X report; per-method lines only for admins while the shift is open. */
+  shiftSummary(shiftId: number): Observable<ShiftSummary> {
+    return this.api.get<ShiftSummary>(`shifts/${shiftId}/summary`);
+  }
+
+  cashMovements(shiftId: number): Observable<CashMovement[]> {
+    return this.api.get<CashMovement[]>(`shifts/${shiftId}/movements`);
+  }
+
+  addCashMovement(shiftId: number, payload: CashMovementPayload): Observable<CashMovement> {
+    return this.api.post<CashMovement>(`shifts/${shiftId}/cash-movements`, payload);
   }
 }

@@ -17,17 +17,21 @@ import {
 } from '@angular/material/autocomplete';
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
-import { filter, tap } from 'rxjs';
+import { filter, switchMap, tap } from 'rxjs';
 import {
+  CashMovementPayload,
   ManualDiscount,
   PricedLine,
   Product,
+  Shift,
+  ShiftOpenPayload,
   TaxInvoiceBuyer,
   buyerBranchLabel,
   buyerIdShort,
   round2,
   stockInPacks,
 } from '@core/models';
+import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -40,6 +44,12 @@ import { printElement } from '@shared/utils/print-element';
 import { SellUnit, findByCode, searchProducts } from '../../data/product-lookup';
 import { PosStore } from '../../data/pos.store';
 import { BuyerDialog } from '../../dialogs/buyer-dialog/buyer-dialog';
+import { CashMovementDialog } from '../../dialogs/cash-movement-dialog/cash-movement-dialog';
+import {
+  OpenShiftDialog,
+  OpenShiftDialogData,
+} from '../../dialogs/open-shift-dialog/open-shift-dialog';
+import { ShiftReportDialog } from '../../dialogs/shift-report-dialog/shift-report-dialog';
 import {
   DiscountDialog,
   DiscountDialogData,
@@ -85,6 +95,9 @@ export default class PosPage {
   protected readonly store = inject(PosStore);
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
+  private readonly notify = inject(NotificationService);
+  /** The open-shift dialog pops up by itself only once per page load. */
+  private shiftPrompted = false;
 
   private readonly scanInput = viewChild.required<ElementRef<HTMLInputElement>>('scanInput');
   private readonly trigger = viewChild.required(MatAutocompleteTrigger);
@@ -121,6 +134,72 @@ export default class PosPage {
       const paper = this.store.storeInfo()?.taxInvoicePaper === '80mm' ? 'fit' : 'A4';
       setTimeout(() => printElement(el, paper));
     });
+    // Shifts on and none open at this terminal: ask to open one right away.
+    effect(() => {
+      if (!this.store.shiftLoaded() || !this.store.requireShift() || this.store.shift()) return;
+      if (this.shiftPrompted) return;
+      this.shiftPrompted = true;
+      setTimeout(() => this.openShift());
+    });
+  }
+
+  /** Opening float defaults to what the last shift of this terminal left in the drawer. */
+  protected openShift(): void {
+    if (this.dialog.openDialogs.length) return;
+    this.store
+      .lastFloatLeft()
+      .pipe(
+        switchMap((defaultFloat) =>
+          this.dialog
+            .open<OpenShiftDialog, OpenShiftDialogData, ShiftOpenPayload>(OpenShiftDialog, {
+              data: { terminalId: this.store.terminalId(), defaultFloat },
+              injector: this.injector,
+              width: '520px',
+              maxWidth: '95vw',
+              autoFocus: false,
+            })
+            .afterClosed(),
+        ),
+        filter((payload): payload is ShiftOpenPayload => !!payload),
+        switchMap((payload) => this.store.openShift(payload)),
+      )
+      .subscribe((shift) => {
+        this.notify.success(`เปิดกะ ${shift.shiftNo} แล้ว`);
+        this.focusScan();
+      });
+  }
+
+  protected cashMovement(shift: Shift): void {
+    this.dialog
+      .open<CashMovementDialog, void, CashMovementPayload>(CashMovementDialog, {
+        injector: this.injector,
+        width: '440px',
+        maxWidth: '95vw',
+        autoFocus: false,
+      })
+      .afterClosed()
+      .pipe(
+        filter((payload): payload is CashMovementPayload => !!payload),
+        switchMap((payload) => this.store.addCashMovement(shift.id, payload)),
+      )
+      .subscribe((m) => {
+        const kind = m.type === 'in' ? 'นำเงินเข้า' : 'นำเงินออก';
+        this.notify.success(`${kind} ${m.amount.toLocaleString('en-US')} บาทแล้ว`);
+        this.focusScan();
+      });
+  }
+
+  /** X report: the per-method lines come only for admins (blind count, S2). */
+  protected shiftReport(shift: Shift): void {
+    this.dialog
+      .open<ShiftReportDialog, Shift>(ShiftReportDialog, {
+        data: shift,
+        injector: this.injector,
+        width: '560px',
+        maxWidth: '95vw',
+      })
+      .afterClosed()
+      .subscribe(() => this.focusScan());
   }
 
   protected stockText(product: Product): string {

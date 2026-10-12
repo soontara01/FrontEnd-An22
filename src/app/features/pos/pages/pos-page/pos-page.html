@@ -1,3 +1,47 @@
+@if (store.requireShift() && store.shiftLoaded()) {
+  <div class="shift-bar" [class.warn]="store.shiftTooLong()">
+    @if (store.shift(); as shift) {
+      <mat-icon>schedule</mat-icon>
+      <span>
+        กะ <strong>{{ shift.shiftNo }}</strong> · {{ shift.cashier }} · เปิด
+        {{ time(shift.openedAt) }} · เครื่อง {{ shift.terminalId }}
+      </span>
+      @if (store.shiftTooLong()) {
+        <span class="badge badge-warn">
+          เปิดนานเกิน {{ store.storeInfo()?.shiftMaxHours }} ชม. — ลืมปิดกะหรือไม่?
+        </span>
+      }
+      <span class="spacer"></span>
+      <button mat-stroked-button type="button" [matMenuTriggerFor]="shiftMenu">
+        <mat-icon>point_of_sale</mat-icon>
+        กะ
+      </button>
+      <mat-menu #shiftMenu="matMenu">
+        <button
+          mat-menu-item
+          [disabled]="!!store.shiftProblem() && !store.isAdmin()"
+          (click)="cashMovement(shift)"
+        >
+          <mat-icon>currency_exchange</mat-icon>
+          <span>นำเงินเข้า / ออกลิ้นชัก</span>
+        </button>
+        <button mat-menu-item (click)="shiftReport(shift)">
+          <mat-icon>summarize</mat-icon>
+          <span>X report (ยอดระหว่างกะ)</span>
+        </button>
+      </mat-menu>
+    } @else {
+      <mat-icon>lock</mat-icon>
+      <span>เครื่อง {{ store.terminalId() }} ยังไม่ได้เปิดกะ</span>
+      <span class="spacer"></span>
+      <button mat-flat-button type="button" (click)="openShift()">
+        <mat-icon>lock_open</mat-icon>
+        เปิดกะ
+      </button>
+    }
+  </div>
+}
+
 <div class="pos">
   <section class="main">
     <mat-form-field appearance="outline" class="w-full scan" subscriptSizing="dynamic">
@@ -44,6 +88,17 @@
 
     @if (store.loading() && !store.products().length) {
       <app-loading-spinner />
+    } @else if (store.shiftProblem(); as problem) {
+      <div class="shift-blocked">
+        <mat-icon>lock</mat-icon>
+        <p>{{ problem }}</p>
+        @if (!store.shift()) {
+          <button mat-flat-button type="button" (click)="openShift()">
+            <mat-icon>lock_open</mat-icon>
+            เปิดกะ
+          </button>
+        }
+      </div>
     } @else if (!cart().lines.length) {
       <app-empty-state icon="shopping_cart" message="สแกนบาร์โค้ดหรือค้นหาสินค้าเพื่อเริ่มขาย" />
     } @else {

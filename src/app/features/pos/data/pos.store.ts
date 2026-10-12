@@ -1,7 +1,9 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, finalize, forkJoin, tap } from 'rxjs';
+import { Observable, finalize, forkJoin, map, tap } from 'rxjs';
 import {
   CartItem,
+  CashMovement,
+  CashMovementPayload,
   Category,
   FreeSerial,
   ManualDiscount,
@@ -12,16 +14,22 @@ import {
   Promotion,
   Sale,
   SerialNumber,
+  Shift,
+  ShiftOpenPayload,
+  ShiftSummary,
   StoreInfo,
   TaxInvoice,
   TaxInvoiceBuyer,
   cartError,
   manualDiscountError,
   priceCart,
+  shiftBlocker,
+  shiftOpenTooLong,
   todayIso,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
 import { StorageService } from '@core/services/storage.service';
+import { TerminalService } from '@core/services/terminal.service';
 import { PosApi } from './pos-api.service';
 
 /** A parked bill, kept in localStorage so it survives reloads and menu switches. */
@@ -53,6 +61,7 @@ export class PosStore {
   private readonly api = inject(PosApi);
   private readonly storage = inject(StorageService);
   private readonly auth = inject(AuthService);
+  private readonly terminal = inject(TerminalService);
 
   private readonly _products = signal<Product[]>([]);
   private readonly _promotions = signal<Promotion[]>([]);
@@ -69,6 +78,8 @@ export class PosStore {
   private readonly _holds = signal<HeldBill[]>(this.storage.get<HeldBill[]>(HOLDS_KEY) ?? []);
   private readonly _lastSale = signal<Sale | null>(null);
   private readonly _lastInvoice = signal<TaxInvoice | null>(null);
+  private readonly _shift = signal<Shift | null>(null);
+  private readonly _shiftLoaded = signal(false);
 
   readonly products = this._products.asReadonly();
   readonly promotions = this._promotions.asReadonly();
@@ -122,8 +133,33 @@ export class PosStore {
     }),
   );
 
+  /** Open shift of this terminal (null = none) */
+  readonly shift = this._shift.asReadonly();
+  /** The current shift has been fetched at least once (no open-shift prompt before that) */
+  readonly shiftLoaded = this._shiftLoaded.asReadonly();
+  readonly terminalId = this.terminal.terminalId;
+  /** Shifts in use (`StoreInfo.requireShift`); unknown until the store info has loaded */
+  readonly requireShift = computed(() => this._storeInfo()?.requireShift ?? false);
+  /** Why this user cannot sell here now — same rule as the server (`shiftBlocker()`). */
+  readonly shiftProblem = computed(() =>
+    shiftBlocker('sell', {
+      requireShift: this.requireShift(),
+      shift: this._shift(),
+      user: this.auth.user()?.name ?? '',
+      isAdmin: this.isAdmin(),
+    }),
+  );
+  /** Open longer than `StoreInfo.shiftMaxHours` — probably left open (warning only). */
+  readonly shiftTooLong = computed(() => {
+    const shift = this._shift();
+    const info = this._storeInfo();
+    return !!shift && !!info && shiftOpenTooLong(shift, new Date(), info.shiftMaxHours);
+  });
+
   /** First reason the bill cannot be paid yet (null = ready). */
-  readonly blocker = computed(() => cartError(this.cart()) ?? this.manualProblem());
+  readonly blocker = computed(
+    () => this.shiftProblem() ?? cartError(this.cart()) ?? this.manualProblem(),
+  );
 
   readonly promotionName = computed(
     () => new Map(this._promotions().map((p) => [p.id, `${p.code} ${p.name}`])),
@@ -142,15 +178,52 @@ export class PosStore {
       categories: this.api.categories(),
       methods: this.api.paymentMethods(),
       storeInfo: this.api.storeInfo(),
+      shift: this.api.currentShift(),
     })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ products, promotions, categories, methods, storeInfo }) => {
+      .subscribe(({ products, promotions, categories, methods, storeInfo, shift }) => {
         this._products.set(products);
         this._promotions.set(promotions);
         this._categories.set(categories);
         this._methods.set(methods);
         this._storeInfo.set(storeInfo);
+        this._shift.set(shift);
+        this._shiftLoaded.set(true);
       });
+  }
+
+  /**
+   * Opens a shift at this device. The terminal number is remembered first so the request (and
+   * every later one) carries it in `X-Terminal-Id`.
+   */
+  openShift(payload: ShiftOpenPayload): Observable<Shift> {
+    this.terminal.set(payload.terminalId);
+    return this.api.openShift(payload).pipe(tap((shift) => this._shift.set(shift)));
+  }
+
+  /** Float the last closed shift of this terminal left in the drawer (0 = none). */
+  lastFloatLeft(): Observable<number> {
+    const id = this.terminal.terminalId();
+    return this.api
+      .shifts()
+      .pipe(
+        map(
+          (shifts) =>
+            shifts.find((s) => s.terminalId === id && s.status === 'closed')?.floatLeft ?? 0,
+        ),
+      );
+  }
+
+  shiftSummary(shiftId: number): Observable<ShiftSummary> {
+    return this.api.shiftSummary(shiftId);
+  }
+
+  cashMovements(shiftId: number): Observable<CashMovement[]> {
+    return this.api.cashMovements(shiftId);
+  }
+
+  addCashMovement(shiftId: number, payload: CashMovementPayload): Observable<CashMovement> {
+    return this.api.addCashMovement(shiftId, payload);
   }
 
   product(id: number): Product | undefined {

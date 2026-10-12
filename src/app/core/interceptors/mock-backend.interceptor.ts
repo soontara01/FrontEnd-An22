@@ -159,6 +159,8 @@ interface MockDb {
   /** POS shifts (one open shift per terminal) and their cash in / out of the drawer. */
   shifts: Shift[];
   cashMovements: CashMovement[];
+  /** Set once shifts were switched on for this stored db (see `enableShifts()`). */
+  shiftsEnabled?: boolean;
 }
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
@@ -721,15 +723,9 @@ function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
   return { ...SALE_DEFAULTS, subtotal: s.total, ...s, lines } as Sale;
 }
 
-/**
- * TEMPORARY (docs/shift-plan.md step 2 → 3): shifts stay off in the mock store until the POS has
- * its open-shift screens; step 3 switches this to true and migrates stored data.
- */
-const MOCK_REQUIRE_SHIFT = false;
-
-const SEED_STORE_INFO: StoreInfo = {
+/** Exported for specs that start from a stored db. */
+export const SEED_STORE_INFO: StoreInfo = {
   ...STORE_INFO_DEFAULTS,
-  requireShift: MOCK_REQUIRE_SHIFT,
   name: 'บริษัท ไอทีดี คอมพิวเตอร์ จำกัด',
   placeName: 'ร้านไอทีดี คอมพิวเตอร์',
   taxId: '0105550123451',
@@ -802,11 +798,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
-  db.storeInfo = {
-    ...STORE_INFO_DEFAULTS,
-    ...db.storeInfo,
-    requireShift: db.storeInfo.requireShift ?? MOCK_REQUIRE_SHIFT,
-  };
+  db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
     ...t,
@@ -830,13 +822,14 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   // Serial SKUs with stock but no serials (seed / older data) get sample serials.
   const generated = syncSerials(db);
   const costed = migrateCosting(db);
+  const shiftsOn = enableShifts(db);
   const path = req.url.slice(base.length + 1);
   // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
   actor = requestUser(req, db.users);
   const terminal = Number(req.headers.get('X-Terminal-Id'));
   terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : 1;
   const response$ = handle(req, path, db);
-  if (generated || costed || req.method !== 'GET') storage.set(DB_KEY, db);
+  if (generated || costed || shiftsOn || req.method !== 'GET') storage.set(DB_KEY, db);
 
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
 };
@@ -2397,6 +2390,18 @@ function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpRespon
   const invoice = db.taxInvoices.find((t) => t.saleId === sale.id && !t.cancelledAt);
   if (invoice) Object.assign(invoice, { cancelledAt: now, cancelReason: `ยกเลิกบิล: ${reason}` });
   return ok(sale);
+}
+
+/**
+ * One-time switch-on of POS shifts: step 2 of the shift plan kept `requireShift` off in the mock
+ * until the POS had its shift screens, so a stored `false` without this flag is that temporary
+ * value (there was no setting for it yet). Returns true when the db changed.
+ */
+function enableShifts(db: MockDb): boolean {
+  if (db.shiftsEnabled) return false;
+  db.storeInfo = { ...db.storeInfo, requireShift: true };
+  db.shiftsEnabled = true;
+  return true;
 }
 
 /** The open shift of a terminal (at most one). */
