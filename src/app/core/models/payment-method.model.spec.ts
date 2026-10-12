@@ -2,6 +2,7 @@ import {
   PAYMENT_METHOD_DEFAULTS,
   PaymentMethod,
   allowsChange,
+  closeCheckOf,
   isLastActiveCash,
   isValidPromptPayId,
   netReceived,
@@ -68,6 +69,17 @@ describe('payment method model', () => {
     const inst = payload(method(4, { type: 'installment', installmentMonths: [10, 3, 3, 6] }));
     expect(inst.installmentMonths).toEqual([3, 6, 10]);
     expect(inst.cashRounding).toBe('none');
+  });
+
+  it('checks cash at shift close always, others by setting or type default', () => {
+    expect(closeCheckOf({ type: 'cash', closeCheck: 'none' })).toBe('count');
+    expect(closeCheckOf({ type: 'card' })).toBe('count');
+    expect(closeCheckOf({ type: 'qr' })).toBe('count');
+    expect(closeCheckOf({ type: 'transfer' })).toBe('confirm');
+    expect(closeCheckOf({ type: 'card', closeCheck: 'none' })).toBe('none');
+    expect(payload(method(5, { type: 'cash', closeCheck: 'confirm' })).closeCheck).toBe('count');
+    expect(payload(method(6, { type: 'e_wallet' })).closeCheck).toBe('confirm');
+    expect(payload(method(7, { type: 'qr', closeCheck: 'none' })).closeCheck).toBe('none');
   });
 
   it('validates methods', () => {

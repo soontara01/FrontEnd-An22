@@ -148,6 +148,7 @@ export class PaymentMethodFormDialog {
       code: raw.code.trim().toUpperCase(),
       name: raw.name.trim(),
       sortOrder: this.initial.sortOrder,
+      closeCheck: this.initial.closeCheck,
       minAmount: Number(raw.minAmount) || 0,
       maxAmount: raw.maxAmount ? Number(raw.maxAmount) : null,
       feePercent: Number(raw.feePercent) || 0,

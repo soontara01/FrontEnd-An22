@@ -81,6 +81,8 @@ export interface CreditNote {
   /** VAT reversed */
   vat: number;
   refunds: SalePayment[];
+  /** Shift the refund was paid from (server-set; missing / null = no shift) */
+  shiftId?: number | null;
 }
 
 export interface CreditNoteLineInput {

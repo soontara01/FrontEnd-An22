@@ -31,6 +31,12 @@ export interface StoreInfo {
   exchangeDays: number;
   /** Highest manual discount (% of a line after promotions) staff may give; 0 = none, admins any */
   manualDiscountMaxPercent: number;
+  /** Use POS shifts: every sale / void / refund / cash movement needs an open shift (shift-plan S6) */
+  requireShift: boolean;
+  /** Variance per payment method (baht) above which closing a shift needs admin approval (S3) */
+  shiftVarianceLimit: number;
+  /** A shift open longer than this (hours) is flagged as left open (S5; warning only) */
+  shiftMaxHours: number;
 }
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {
@@ -47,6 +53,9 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
   taxInvoicePaper: 'A4',
   exchangeDays: 7,
   manualDiscountMaxPercent: 5,
+  requireShift: true,
+  shiftVarianceLimit: 100,
+  shiftMaxHours: 12,
 };
 
 /** Receipt title by VAT registration. */
@@ -81,6 +90,13 @@ export function storeInfoError(s: StoreInfo): string | null {
   if (!Number.isFinite(max) || max < 0 || max > 100) {
     return 'เพดานส่วนลดพิเศษต้องอยู่ระหว่าง 0–100%';
   }
+  const limit = s.shiftVarianceLimit;
+  if (!Number.isFinite(limit) || limit < 0 || limit > 100_000) {
+    return 'เกณฑ์ส่วนต่างปิดกะต้องอยู่ระหว่าง 0–100,000 บาท';
+  }
+  if (!Number.isInteger(s.shiftMaxHours) || s.shiftMaxHours < 1 || s.shiftMaxHours > 48) {
+    return 'ชั่วโมงเตือนกะเปิดค้างต้องเป็นจำนวนเต็ม 1–48';
+  }
   return null;
 }
 
@@ -101,5 +117,8 @@ export function normalizeStoreInfo(s: StoreInfo): StoreInfo {
     manualDiscountMaxPercent: Number(
       s.manualDiscountMaxPercent ?? STORE_INFO_DEFAULTS.manualDiscountMaxPercent,
     ),
+    requireShift: s.requireShift ?? STORE_INFO_DEFAULTS.requireShift,
+    shiftVarianceLimit: Number(s.shiftVarianceLimit ?? STORE_INFO_DEFAULTS.shiftVarianceLimit),
+    shiftMaxHours: Number(s.shiftMaxHours ?? STORE_INFO_DEFAULTS.shiftMaxHours),
   };
 }

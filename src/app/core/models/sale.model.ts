@@ -135,6 +135,10 @@ export interface Sale {
   manualDiscountReason: string;
   /** Who gave it (server-set from the logged-in user) */
   manualDiscountBy: string;
+  /** Shift the sale was made in (server-set; missing / null = no shift: before shifts or `requireShift` off) */
+  shiftId?: number | null;
+  /** Shift the void was made in — its money goes out of that drawer (server-set) */
+  voidShiftId?: number | null;
 }
 
 /** Defaults for fields missing from older stored sales (before the POS existed). */

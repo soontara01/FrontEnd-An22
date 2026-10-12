@@ -48,6 +48,8 @@ export interface Exchange {
   cashier: string;
   reason: string;
   lines: ExchangeLine[];
+  /** Open shift of the terminal at the time, if any — counted in its report (no money moves) */
+  shiftId?: number | null;
 }
 
 export interface ExchangeLineInput {

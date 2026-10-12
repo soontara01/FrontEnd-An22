@@ -11,6 +11,7 @@ export * from './product.model';
 export * from './promotion.model';
 export * from './sale.model';
 export * from './serial.model';
+export * from './shift.model';
 export * from './store-info.model';
 export * from './supplier.model';
 export * from './tax-invoice.model';

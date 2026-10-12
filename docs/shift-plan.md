@@ -1,6 +1,6 @@
 # แผนเปิด / ปิดกะ (Shift) + นับเงินตามช่องทางชำระเงิน
 
-สถานะ: **แผนพร้อมเริ่ม (2026-10-11)** · ยังไม่เริ่มทำ · ข้อตัดสินใจ S1–S6 ยืนยันครบแล้ว (2026-10-11) · `requireShift` ย้ายเข้ารอบแรก (2026-10-11)
+สถานะ: **กำลังทำ** · ขั้นที่ 1 เสร็จ (2026-10-12: โมเดล + กติกา + spec) · ข้อตัดสินใจ S1–S6 ยืนยันครบแล้ว (2026-10-11) · `requireShift` อยู่ในรอบแรก
 
 ที่มา: `docs/pos-plan.md` ข้อตัดสินใจ 7 ("เปิด/ปิดกะ + นับเงินลิ้นชัก — รอบถัดไป")
 เป้าหมาย: เมื่อแคชเชียร์เปลี่ยนกะ ต้องนับเงินและยอดแต่ละช่องทางชำระเงินของกะนั้นได้ และรู้ว่าเงินขาด/เกินเป็นความรับผิดชอบของใคร
@@ -116,11 +116,22 @@ interface CashMovement {
 }
 ```
 
-ฟังก์ชันกติกา (ใช้ร่วม UI + mock เหมือน `priceCart()` / `creditNoteError()`):
-`expectedByMethod(shift, sales, voids, creditNotes, movements)`, `shiftSummary()` (X / Z: จำนวนบิล, ยอดขาย,
-ส่วนลด, void, คืนเงิน, เปลี่ยนสินค้า, เงินเข้าออก, ต่อช่องทาง), `closeShiftError()`, `cashMovementError()`
+**ทำแล้ว (ขั้นที่ 1, `core/models/shift.model.ts`)** — กติกาเดียวใช้ร่วม POS + mock เหมือน `priceCart()` / `creditNoteError()`:
 
-`Sale`, `CreditNote` และข้อมูล void เพิ่ม `shiftId` — **server เติมจากกะที่เปิดอยู่ของเครื่อง ไม่รับจาก client**
+- `expectedByMethod(shift, { sales, creditNotes, movements, methods })` — เงินเข้า = payments ของบิลที่ `shiftId` = กะนี้;
+  เงินออก = payments ของบิลที่ **`voidShiftId`** = กะนี้ (void ในกะนี้) + `CreditNote.refunds` ที่ `shiftId` = กะนี้;
+  **payment เงินสดทุก method รวมเป็นบรรทัดลิ้นชักเดียว** (cash method หลัก: active + `sortOrder` ต่ำสุด) พร้อมเงินทอนตั้งต้น
+  และ `CashMovement`; แสดงทุกช่องทางที่ active + ช่องทางที่ปิดใช้แต่มียอดในกะ · `drawerExpected()`
+- `variance()` / `needsApproval()` (รายช่องทาง) / `approvalStatusFor()` / `buildShiftCounts()` (snapshot ตอนปิด)
+- `openShiftError()`, `cashMovementError()`, `closeShiftError()`, `shiftBlocker(action, …)` (sell / void / refund / cash_movement),
+  `requireShiftChangeError()`, `shiftSummary()` (X / Z; `lines` เฉพาะ `detailed`), `shiftOpenTooLong()`, `shiftDay()`,
+  `denominationTotal()` + `THAI_DENOMINATIONS`, labels (`SHIFT_STATUS_LABEL`, `SHIFT_APPROVAL_LABEL` / `_BADGE`, `VARIANCE_REASON_LABEL`)
+- ฟิลด์ใหม่ในโมเดลเดิม (optional / เติมตอนอ่าน — ข้อมูลเก่าใช้ได้):
+  `Sale.shiftId` / `Sale.voidShiftId`, `CreditNote.shiftId`, `Exchange.shiftId` (`?: number | null`, ไม่มี = ไม่มีกะ);
+  `PaymentMethod.closeCheck?` (อ่านผ่าน `closeCheckOf()`; ค่าเริ่มต้นตามประเภท `DEFAULT_CLOSE_CHECK`; เงินสด = `count` เสมอ,
+  `withPaymentTypeRules()` บังคับ); `StoreInfo.requireShift` / `shiftVarianceLimit` / `shiftMaxHours` (+ `storeInfoError()`)
+
+`shiftId` / `voidShiftId` — **server เติมจากกะที่เปิดอยู่ของเครื่อง ไม่รับจาก client**
 
 ## 6. API (เพิ่มใน mock ด้วย)
 
@@ -149,7 +160,7 @@ interface CashMovement {
 
 ## 8. ลำดับงาน (แต่ละขั้น build + test + lint ผ่าน แล้ว commit)
 
-1. โมเดล + ฟังก์ชันกติกา + spec (`shift.model.ts`)
+1. ✅ โมเดล + ฟังก์ชันกติกา + spec (`shift.model.ts`) — เสร็จ 2026-10-12
 2. mock: `/shifts*`, `shiftId` ใน sale / void / credit note, บล็อกเมื่อไม่มีกะ (เฉพาะ `requireShift`), ปิด `requireShift` ไม่ได้ถ้ายังมีกะเปิด
 3. POS: แถบสถานะกะ, เปิดกะ, เงินเข้า / ออก, X report
 4. ปิดกะ + Z report + อนุมัติส่วนต่าง

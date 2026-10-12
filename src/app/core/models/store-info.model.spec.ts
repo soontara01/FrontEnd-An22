@@ -37,6 +37,36 @@ describe('store info model', () => {
     );
   });
 
+  it('validates the shift settings', () => {
+    expect(STORE_INFO_DEFAULTS).toMatchObject({
+      requireShift: true,
+      shiftVarianceLimit: 100,
+      shiftMaxHours: 12,
+    });
+    expect(storeInfoError({ ...valid, shiftVarianceLimit: 0 })).toBeNull();
+    expect(storeInfoError({ ...valid, shiftVarianceLimit: -1 })).toBe(
+      'เกณฑ์ส่วนต่างปิดกะต้องอยู่ระหว่าง 0–100,000 บาท',
+    );
+    expect(storeInfoError({ ...valid, shiftMaxHours: 0 })).toBe(
+      'ชั่วโมงเตือนกะเปิดค้างต้องเป็นจำนวนเต็ม 1–48',
+    );
+    expect(storeInfoError({ ...valid, shiftMaxHours: 8.5 })).toBe(
+      'ชั่วโมงเตือนกะเปิดค้างต้องเป็นจำนวนเต็ม 1–48',
+    );
+  });
+
+  it('fills shift settings missing from older stored data', () => {
+    const old: Partial<typeof valid> = { ...valid };
+    delete old.requireShift;
+    delete old.shiftVarianceLimit;
+    delete old.shiftMaxHours;
+    expect(normalizeStoreInfo(old as typeof valid)).toMatchObject({
+      requireShift: true,
+      shiftVarianceLimit: 100,
+      shiftMaxHours: 12,
+    });
+  });
+
   it('normalizes text and drops the branch number of a head office', () => {
     const n = normalizeStoreInfo({
       ...valid,

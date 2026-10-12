@@ -10,6 +10,12 @@ export type PaymentType =
 /** Cash rounding of the cash part of a bill: none, to 0.25 baht or to whole baht (nearest). */
 export type CashRounding = 'none' | '0.25' | '1';
 
+/**
+ * Check at shift close (docs/shift-plan.md S4): `count` = enter the amount from the evidence
+ * (blind, variance counted), `confirm` = tick "checked", `none` = take the system amount.
+ */
+export type CloseCheck = 'count' | 'confirm' | 'none';
+
 export interface PaymentMethod {
   id: number;
   /** Unique, A-Z 0-9 - */
@@ -38,6 +44,8 @@ export interface PaymentMethod {
   bankAccount: string;
   /** installment only: selectable terms in months */
   installmentMonths: number[];
+  /** Check at shift close; missing = the type's default — read it via `closeCheckOf()` */
+  closeCheck?: CloseCheck;
   note: string;
 }
 
@@ -68,6 +76,27 @@ export const CASH_ROUNDING_LABEL: Record<CashRounding, string> = {
   '0.25': 'ปัดเป็น 25 สตางค์',
   '1': 'ปัดเป็นบาท',
 };
+
+export const CLOSE_CHECK_LABEL: Record<CloseCheck, string> = {
+  count: 'กรอกยอดตรวจ',
+  confirm: 'ติ๊กตรวจแล้ว',
+  none: 'ไม่ต้องตรวจ',
+};
+
+/** Default check at shift close per type: methods with a counter-side total are counted. */
+export const DEFAULT_CLOSE_CHECK: Record<PaymentType, CloseCheck> = {
+  cash: 'count',
+  card: 'count',
+  installment: 'count',
+  qr: 'count',
+  transfer: 'confirm',
+  e_wallet: 'confirm',
+  other: 'confirm',
+};
+
+/** Check at shift close: cash is always counted; missing = the type's default. */
+export const closeCheckOf = (m: Pick<PaymentMethod, 'type' | 'closeCheck'>): CloseCheck =>
+  m.type === 'cash' ? 'count' : (m.closeCheck ?? DEFAULT_CLOSE_CHECK[m.type]);
 
 export const PAYMENT_NAME_MAX = 20;
 export const PAYMENT_FEE_MAX = 10;
@@ -129,6 +158,7 @@ export function withPaymentTypeRules<T extends PaymentMethodPayload>(p: T): T {
     bankAccount: p.type === 'qr' || p.type === 'transfer' ? p.bankAccount.trim() : '',
     installmentMonths:
       p.type === 'installment' ? [...new Set(p.installmentMonths)].sort((a, b) => a - b) : [],
+    closeCheck: closeCheckOf(p),
   };
 }
 
