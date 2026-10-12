@@ -6,6 +6,8 @@ import {
   CategoryPayload,
   PaymentMethod,
   PaymentMethodPayload,
+  PosTerminal,
+  StoreInfo,
   Supplier,
   SupplierPayload,
 } from '@core/models';
@@ -70,5 +72,26 @@ export class MasterDataApi {
 
   removePaymentMethod(id: number): Observable<void> {
     return this.api.delete(`payment-methods/${id}`);
+  }
+
+  posTerminals(): Observable<PosTerminal[]> {
+    return this.api.get<PosTerminal[]>('pos-terminals');
+  }
+
+  createPosTerminal(terminal: PosTerminal): Observable<PosTerminal> {
+    return this.api.post<PosTerminal>('pos-terminals', terminal);
+  }
+
+  updatePosTerminal(terminal: PosTerminal): Observable<PosTerminal> {
+    return this.api.put<PosTerminal>(`pos-terminals/${terminal.id}`, terminal);
+  }
+
+  removePosTerminal(id: number): Observable<void> {
+    return this.api.delete(`pos-terminals/${id}`);
+  }
+
+  /** Store settings (VAT registration decides whether a missing POS ID is flagged). */
+  storeInfo(): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>('settings/store');
   }
 }

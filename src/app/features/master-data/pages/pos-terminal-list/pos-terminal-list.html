@@ -1,0 +1,103 @@
+<section class="stat-grid">
+  <app-stat-card label="เปิดใช้งาน" [value]="store.activeCount()" icon="point_of_sale" />
+  <app-stat-card label="ทั้งหมด" [value]="store.count()" icon="list" />
+  @if (store.vatRegistered()) {
+    <app-stat-card label="ยังไม่มี POS ID" [value]="store.missingPosIdCount()" icon="warning" />
+  }
+</section>
+
+<div class="filter-row">
+  <span class="text-muted">
+    1 เครื่อง = 1 ลิ้นชักเงิน · เลขบิลรันแยกตามเครื่อง ·
+    @if (thisTerminal(); as id) {
+      เครื่องนี้ตั้งเป็น <strong>เครื่อง {{ id }}</strong>
+    } @else {
+      เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง
+    }
+    (ตั้งที่เมนูตั้งค่า)
+  </span>
+  <span class="spacer"></span>
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  @if (isAdmin()) {
+    <button mat-flat-button (click)="openForm()">
+      <mat-icon>add</mat-icon>
+      เพิ่มเครื่อง POS
+    </button>
+  }
+</div>
+
+<mat-card appearance="outlined">
+  @if (store.loading() && store.count() === 0) {
+    <app-loading-spinner />
+  }
+
+  <div class="table-wrap" [hidden]="store.count() === 0">
+    <table mat-table [dataSource]="store.terminals()">
+      <ng-container matColumnDef="id">
+        <th mat-header-cell *matHeaderCellDef>เลขเครื่อง</th>
+        <td mat-cell *matCellDef="let t" class="nowrap">
+          {{ t.id }}
+          @if (t.id === thisTerminal()) {
+            <span class="badge badge-success">เครื่องนี้</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="name">
+        <th mat-header-cell *matHeaderCellDef>ชื่อเครื่อง</th>
+        <td mat-cell *matCellDef="let t">{{ t.name }}</td>
+      </ng-container>
+
+      <ng-container matColumnDef="posId">
+        <th mat-header-cell *matHeaderCellDef>POS ID (กรมสรรพากร)</th>
+        <td mat-cell *matCellDef="let t" class="mono">
+          @if (t.posId) {
+            {{ t.posId }}
+          } @else if (posIdMissing(t)) {
+            <span class="badge badge-warn">ยังไม่มี POS ID</span>
+          } @else {
+            <span class="text-muted">-</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="status">
+        <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+        <td mat-cell *matCellDef="let t">
+          @if (t.active) {
+            <span class="badge badge-success">ใช้งาน</span>
+          } @else {
+            <span class="badge">ปิดใช้งาน</span>
+          }
+        </td>
+      </ng-container>
+
+      <ng-container matColumnDef="actions">
+        <th mat-header-cell *matHeaderCellDef></th>
+        <td mat-cell *matCellDef="let t" class="actions">
+          @if (isAdmin()) {
+            <button mat-icon-button matTooltip="แก้ไข" (click)="openForm(t)">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button mat-icon-button matTooltip="ลบ" aria-label="ลบ" (click)="remove(t)">
+              <mat-icon>delete</mat-icon>
+            </button>
+          }
+        </td>
+      </ng-container>
+
+      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns" [class.inactive]="!row.active"></tr>
+    </table>
+  </div>
+
+  @if (!store.loading() && store.count() === 0) {
+    <app-empty-state icon="point_of_sale" message="ยังไม่มีเครื่อง POS">
+      @if (isAdmin()) {
+        <button mat-flat-button (click)="openForm()">เพิ่มเครื่องแรก</button>
+      }
+    </app-empty-state>
+  }
+</mat-card>

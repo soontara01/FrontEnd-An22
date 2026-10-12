@@ -1,0 +1,51 @@
+<h2 mat-dialog-title>{{ editing ? 'แก้ไขเครื่อง POS' : 'เพิ่มเครื่อง POS' }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="grid">
+      <mat-form-field appearance="outline">
+        <mat-label>เลขเครื่อง</mat-label>
+        <input matInput type="number" min="1" step="1" formControlName="id" />
+        <mat-hint>{{
+          editing ? 'เปลี่ยนไม่ได้หลังสร้าง' : 'ใช้รันเลขบิล POS1-…, POS2-…'
+        }}</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อเครื่อง</mat-label>
+        <input matInput appAutofocus formControlName="name" maxlength="40" />
+        <mat-hint>เช่น แคชเชียร์หน้าร้าน</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>POS ID (กรมสรรพากร)</mat-label>
+        <input matInput formControlName="posId" class="mono" maxlength="30" />
+        <mat-hint>หมายเลขเครื่องที่ได้รับอนุมัติ พิมพ์บนใบกำกับภาษีอย่างย่อของเครื่องนี้</mat-hint>
+      </mat-form-field>
+
+      <div class="toggle span-2">
+        <mat-slide-toggle formControlName="active">เปิดใช้งาน (ขายได้)</mat-slide-toggle>
+      </div>
+    </div>
+
+    @if (problem(); as message) {
+      <p class="problem">
+        <mat-icon inline>error</mat-icon>
+        {{ message }}
+      </p>
+    } @else if (posIdMissing()) {
+      <p class="text-muted small">
+        <mat-icon inline>warning</mat-icon>
+        ร้านจดทะเบียน VAT แต่เครื่องนี้ยังไม่มี POS ID — ใบกำกับภาษีอย่างย่อจะไม่มี POS ID
+      </p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>ยกเลิก</button>
+    <button mat-flat-button type="submit" [disabled]="saving() || !!problem()">
+      <mat-icon>save</mat-icon>
+      บันทึก
+    </button>
+  </mat-dialog-actions>
+</form>
