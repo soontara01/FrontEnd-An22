@@ -1,0 +1,126 @@
+@if (data.hasValue()) {
+  @let d = data.value();
+  <app-page-header
+    [title]="'กะ ' + d.shift.shiftNo"
+    [subtitle]="d.shift.cashier + ' · เครื่อง ' + d.shift.terminalId + ' · ' + statusText()"
+  >
+    <a mat-stroked-button routerLink="/sales/shifts">
+      <mat-icon>arrow_back</mat-icon>
+      รายการกะ
+    </a>
+    @if (canApprove()) {
+      <button mat-flat-button type="button" (click)="approve()">
+        <mat-icon>task_alt</mat-icon>
+        อนุมัติส่วนต่าง
+      </button>
+    }
+    @if (d.shift.status === 'closed') {
+      <button mat-stroked-button type="button" (click)="print()">
+        <mat-icon>print</mat-icon>
+        พิมพ์ใบสรุปปิดกะ (สำเนา)
+      </button>
+    }
+  </app-page-header>
+
+  <div class="layout">
+    <section>
+      @if (d.shift.status === 'closed') {
+        <app-shift-slip
+          #slip
+          [shift]="d.shift"
+          [summary]="d.summary"
+          [store]="store.storeInfo()"
+          [copy]="true"
+        />
+      } @else {
+        <mat-card appearance="outlined">
+          <mat-card-content>
+            <p>
+              กะนี้ยังเปิดอยู่ (เปิดเมื่อ {{ d.shift.openedAt | thaiDate: 'datetime' }}) —
+              ปิดกะได้ที่เครื่อง {{ d.shift.terminalId }} ในหน้าขายหน้าร้าน
+            </p>
+            <div class="grid">
+              <span>บิลขาย {{ d.summary.billCount }} บิล</span>
+              <span>{{ d.summary.salesTotal | number: '1.2-2' }}</span>
+              <span>ยกเลิก {{ d.summary.voidCount }} บิล</span>
+              <span>−{{ d.summary.voidTotal | number: '1.2-2' }}</span>
+              <span>คืนเงิน {{ d.summary.refundCount }} ใบ</span>
+              <span>−{{ d.summary.refundTotal | number: '1.2-2' }}</span>
+              <strong>ยอดขายสุทธิ</strong>
+              <strong>{{ d.summary.netSales | number: '1.2-2' }}</strong>
+            </div>
+            @if (d.summary.lines; as lines) {
+              <h3>ยอดที่ระบบคาดต่อช่องทาง</h3>
+              <div class="grid">
+                @for (l of lines; track l.methodId) {
+                  <span>{{ l.name }}</span>
+                  <span>{{ l.expected | number: '1.2-2' }}</span>
+                }
+              </div>
+            }
+          </mat-card-content>
+        </mat-card>
+      }
+    </section>
+
+    <section>
+      @if (d.movements.length) {
+        <h3>นำเงินเข้า / ออกลิ้นชัก</h3>
+        <mat-card appearance="outlined">
+          <table class="plain">
+            <tbody>
+              @for (m of d.movements; track m.id) {
+                <tr>
+                  <td>{{ m.at | thaiDate: 'datetime' }}</td>
+                  <td>{{ m.type === 'in' ? 'เข้า' : 'ออก' }} · {{ m.reason }}</td>
+                  <td class="text-muted small">{{ m.by }}</td>
+                  <td class="num">
+                    {{ m.type === 'in' ? '+' : '−' }}{{ m.amount | number: '1.2-2' }}
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </mat-card>
+      }
+
+      <h3>บิลในกะ ({{ d.sales.length }})</h3>
+      <mat-card appearance="outlined">
+        @if (d.sales.length) {
+          <table class="plain">
+            <tbody>
+              @for (s of d.sales; track s.id) {
+                <tr>
+                  <td>
+                    <a class="mono" [routerLink]="['/sales', s.id]">{{ s.orderNo }}</a>
+                  </td>
+                  <td>{{ s.date | thaiDate: 'datetime' }}</td>
+                  <td>
+                    <span class="badge" [class]="saleBadge(s)">{{ saleStatus(s) }}</span>
+                    @if (voidedHere(s)) {
+                      <div class="text-muted small">
+                        ยกเลิกในกะนี้{{ soldHere(s) ? '' : ' (ขายในกะอื่น)' }}
+                      </div>
+                    }
+                  </td>
+                  <td class="num">{{ s.total | number: '1.2-2' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        } @else {
+          <p class="empty text-muted">ยังไม่มีบิล</p>
+        }
+      </mat-card>
+    </section>
+  </div>
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+} @else {
+  <app-page-header title="ไม่พบกะ">
+    <a mat-stroked-button routerLink="/sales/shifts">
+      <mat-icon>arrow_back</mat-icon>
+      รายการกะ
+    </a>
+  </app-page-header>
+}

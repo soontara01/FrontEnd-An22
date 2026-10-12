@@ -93,6 +93,28 @@
       >
     </mat-form-field>
 
+    <h3 class="section">ระบบกะ (เปิด / ปิดกะ)</h3>
+    <mat-slide-toggle formControlName="requireShift">ใช้ระบบกะ</mat-slide-toggle>
+    <p class="text-muted small">
+      เปิด = ทุกการขาย ยกเลิกบิล คืนเงิน และนำเงินเข้า/ออก ต้องอยู่ในกะที่เปิดอยู่ของเครื่อง
+      แคชเชียร์นับเงินแยกตามช่องทางตอนปิดกะ · ปิด = ขายได้เลย (เหมาะกับร้านที่เจ้าของขายเองคนเดียว)
+      · ปิดได้เมื่อไม่มีกะที่เปิดค้างอยู่
+    </p>
+    @if (info().requireShift) {
+      <mat-form-field appearance="outline">
+        <mat-label>ส่วนต่างที่ต้องให้ admin อนุมัติ</mat-label>
+        <input matInput type="number" min="0" step="1" formControlName="shiftVarianceLimit" />
+        <span matTextSuffix>บาท</span>
+        <mat-hint>ต่อช่องทาง เมื่อขาด/เกินมากกว่านี้ · ทุกส่วนต่างต้องระบุสาเหตุ</mat-hint>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>เตือนเมื่อกะเปิดนานเกิน</mat-label>
+        <input matInput type="number" min="1" max="48" step="1" formControlName="shiftMaxHours" />
+        <span matTextSuffix>ชั่วโมง</span>
+        <mat-hint>เตือนอย่างเดียว ไม่บล็อกการขาย</mat-hint>
+      </mat-form-field>
+    }
+
     @if (editable()) {
       <div class="actions">
         @if (problem(); as message) {

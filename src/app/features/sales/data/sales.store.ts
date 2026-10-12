@@ -10,6 +10,7 @@ import {
   Promotion,
   Sale,
   SaleStatus,
+  Shift,
   StoreInfo,
   TaxInvoice,
   TaxInvoiceBuyer,
@@ -97,6 +98,28 @@ export class SalesStore {
 
   void(id: number, reason: string): Observable<Sale> {
     return this.api.void(id, reason);
+  }
+
+  /** Shifts opened within the range + the variance per cashier over them. */
+  shiftList(from: string | null, to: string | null) {
+    return forkJoin({
+      shifts: this.api.shifts(from, to),
+      report: this.api.varianceReport(from, to),
+    });
+  }
+
+  /** One shift with its X / Z summary, cash movements and bills. */
+  shiftDetail(id: number) {
+    return forkJoin({
+      shift: this.api.shift(id),
+      summary: this.api.shiftSummary(id),
+      movements: this.api.cashMovements(id),
+      sales: this.api.salesOfShift(id),
+    });
+  }
+
+  approveShift(id: number): Observable<Shift> {
+    return this.api.approveShift(id);
   }
 
   createCreditNote(saleId: number, payload: CreditNotePayload): Observable<CreditNote> {

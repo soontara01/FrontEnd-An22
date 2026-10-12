@@ -1144,6 +1144,8 @@ describe('mockBackendInterceptor – shifts', () => {
     expect(sale.shiftId).toBe(shift.id);
     const voided = await call<Sale>('POST', `sales/${sale.id}/void`, { reason: 'คีย์ผิด' });
     expect(voided.voidShiftId).toBe(shift.id);
+    const ofShift = await call<Sale[]>('GET', `sales?shiftId=${shift.id}`);
+    expect(ofShift.map((s) => s.id)).toEqual([sale.id]);
   });
 
   it('allows one open shift per terminal and per cashier', async () => {

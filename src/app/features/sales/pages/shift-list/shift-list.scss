@@ -1,0 +1,31 @@
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .selected {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.num {
+  text-align: right;
+}
+
+.off {
+  color: var(--mat-sys-error);
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.section-title {
+  font: var(--mat-sys-title-medium);
+  margin: 24px 0 8px;
+}

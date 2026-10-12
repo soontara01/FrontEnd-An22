@@ -55,6 +55,9 @@ export class StoreInfoForm {
     taxInvoicePaper: STORE_INFO_DEFAULTS.taxInvoicePaper,
     exchangeDays: STORE_INFO_DEFAULTS.exchangeDays,
     manualDiscountMaxPercent: STORE_INFO_DEFAULTS.manualDiscountMaxPercent,
+    requireShift: STORE_INFO_DEFAULTS.requireShift,
+    shiftVarianceLimit: STORE_INFO_DEFAULTS.shiftVarianceLimit,
+    shiftMaxHours: STORE_INFO_DEFAULTS.shiftMaxHours,
   });
 
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });

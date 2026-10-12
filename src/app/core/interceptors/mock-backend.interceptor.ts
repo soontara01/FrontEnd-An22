@@ -1845,9 +1845,12 @@ function handleSales(
     const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    // Optional shift: bills sold or voided in it.
+    const shiftId = Number(req.params.get('shiftId')) || null;
     return ok(
       sales
         .filter((s) => (!from || saleDay(s) >= from) && (!to || saleDay(s) <= to))
+        .filter((s) => !shiftId || s.shiftId === shiftId || s.voidShiftId === shiftId)
         .sort((a, b) => b.date.localeCompare(a.date))
         .map(withReturns),
     );

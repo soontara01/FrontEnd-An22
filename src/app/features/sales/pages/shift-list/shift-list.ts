@@ -1,0 +1,131 @@
+import { DecimalPipe } from '@angular/common';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
+import { MatTableModule } from '@angular/material/table';
+import { Router, RouterLink } from '@angular/router';
+import {
+  SHIFT_APPROVAL_BADGE,
+  SHIFT_APPROVAL_LABEL,
+  SHIFT_STATUS_LABEL,
+  Shift,
+  formatDateRange,
+  shiftOpenTooLong,
+  variance,
+} from '@core/models';
+import { EmptyState } from '@shared/components/empty-state/empty-state';
+import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
+import { PageHeader } from '@shared/components/page-header/page-header';
+import { MATERIAL } from '@shared/material';
+import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
+import {
+  DATE_PRESETS,
+  DateRange,
+  DatePreset,
+  matchingPreset,
+  presetRange,
+} from '@shared/utils/date-range';
+import { SalesStore } from '../../data/sales.store';
+
+/**
+ * POS shifts opened within a local-date range (`/sales/shifts?from=&to=`, `?all=1`; default this
+ * month): status, variance, approval (pending first to act on) and the variance per cashier (S3).
+ */
+@Component({
+  selector: 'app-shift-list',
+  imports: [
+    DecimalPipe,
+    RouterLink,
+    MatTableModule,
+    PageHeader,
+    EmptyState,
+    LoadingSpinner,
+    ThaiDatePipe,
+    MATERIAL,
+  ],
+  templateUrl: './shift-list.html',
+  styleUrl: './shift-list.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export default class ShiftList {
+  protected readonly store = inject(SalesStore);
+  private readonly router = inject(Router);
+
+  /** Query params (withComponentInputBinding). */
+  readonly from = input<string>();
+  readonly to = input<string>();
+  readonly all = input<string>();
+
+  protected readonly presets = DATE_PRESETS;
+  protected readonly columns = [
+    'shiftNo',
+    'opened',
+    'terminal',
+    'cashier',
+    'status',
+    'variance',
+    'approval',
+  ];
+  protected readonly reportColumns = ['cashier', 'shifts', 'short', 'over', 'pending'];
+  protected readonly pendingOnly = signal(false);
+
+  protected readonly range = computed<DateRange>(() => {
+    if (this.all()) return presetRange('all');
+    if (!this.from() && !this.to()) return presetRange('thisMonth');
+    return { from: this.from() || null, to: this.to() || null };
+  });
+  protected readonly activePreset = computed(() => matchingPreset(this.range()));
+  protected readonly rangeText = computed(() => {
+    const { from, to } = this.range();
+    if (!from && !to) return 'ทั้งหมด';
+    return formatDateRange({ startDate: from ?? to ?? '', endDate: to });
+  });
+
+  protected readonly data = rxResource({
+    params: () => this.range(),
+    stream: ({ params }) => this.store.shiftList(params.from, params.to),
+  });
+  protected readonly shifts = computed(() => {
+    const list = this.data.hasValue() ? this.data.value().shifts : [];
+    return this.pendingOnly() ? list.filter((s) => s.approvalStatus === 'pending') : list;
+  });
+  protected readonly pendingCount = computed(() =>
+    this.data.hasValue()
+      ? this.data.value().shifts.filter((s) => s.approvalStatus === 'pending').length
+      : 0,
+  );
+  protected readonly report = computed(() =>
+    this.data.hasValue() ? this.data.value().report : [],
+  );
+
+  constructor() {
+    this.store.loadLookups();
+  }
+
+  protected statusText(shift: Shift): string {
+    return SHIFT_STATUS_LABEL[shift.status];
+  }
+
+  protected leftOpen(shift: Shift): boolean {
+    return shiftOpenTooLong(shift, new Date(), this.store.storeInfo()?.shiftMaxHours ?? 12);
+  }
+
+  protected totalVariance(shift: Shift): number {
+    return shift.counts.reduce((sum, c) => sum + variance(c), 0);
+  }
+
+  protected approvalText(shift: Shift): string {
+    return SHIFT_APPROVAL_LABEL[shift.approvalStatus];
+  }
+
+  protected approvalBadge(shift: Shift): string {
+    return SHIFT_APPROVAL_BADGE[shift.approvalStatus];
+  }
+
+  protected applyPreset(preset: DatePreset): void {
+    const { from, to } = presetRange(preset);
+    void this.router.navigate([], {
+      queryParams: preset === 'all' ? { all: '1', from: null, to: null } : { all: null, from, to },
+      queryParamsHandling: 'merge',
+    });
+  }
+}

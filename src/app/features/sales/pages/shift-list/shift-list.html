@@ -1,0 +1,139 @@
+<app-page-header title="กะขาย" [subtitle]="'เปิด/ปิดกะ · ช่วงวันที่เปิดกะ: ' + rangeText()">
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="data.reload()">
+    <mat-icon>refresh</mat-icon>
+  </button>
+  <a mat-stroked-button routerLink="/sales">
+    <mat-icon>receipt_long</mat-icon>
+    บิลขาย
+  </a>
+</app-page-header>
+
+<div class="filter-row">
+  <div class="presets">
+    @for (p of presets; track p.id) {
+      <button
+        mat-stroked-button
+        type="button"
+        [class.selected]="activePreset() === p.id"
+        (click)="applyPreset(p.id)"
+      >
+        {{ p.label }}
+      </button>
+    }
+  </div>
+  <mat-slide-toggle [checked]="pendingOnly()" (change)="pendingOnly.set($event.checked)">
+    เฉพาะรออนุมัติ
+    @if (pendingCount()) {
+      <span class="badge badge-warn">{{ pendingCount() }}</span>
+    }
+  </mat-slide-toggle>
+</div>
+
+<mat-card appearance="outlined">
+  @if (data.isLoading() && !data.hasValue()) {
+    <app-loading-spinner />
+  } @else if (!shifts().length) {
+    <app-empty-state icon="point_of_sale" message="ไม่มีกะในช่วงนี้" />
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="shifts()">
+        <ng-container matColumnDef="shiftNo">
+          <th mat-header-cell *matHeaderCellDef>เลขกะ</th>
+          <td mat-cell *matCellDef="let s">
+            <a class="mono" [routerLink]="['/sales/shifts', s.id]">{{ s.shiftNo }}</a>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="opened">
+          <th mat-header-cell *matHeaderCellDef>เปิด – ปิด</th>
+          <td mat-cell *matCellDef="let s">
+            {{ s.openedAt | thaiDate: 'datetime' }}
+            @if (s.closedAt) {
+              <div class="text-muted small">ถึง {{ s.closedAt | thaiDate: 'datetime' }}</div>
+            }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="terminal">
+          <th mat-header-cell *matHeaderCellDef>เครื่อง</th>
+          <td mat-cell *matCellDef="let s">{{ s.terminalId }}</td>
+        </ng-container>
+        <ng-container matColumnDef="cashier">
+          <th mat-header-cell *matHeaderCellDef>แคชเชียร์</th>
+          <td mat-cell *matCellDef="let s">
+            {{ s.cashier }}
+            @if (s.closedBy && s.closedBy !== s.cashier) {
+              <div class="text-muted small">ปิดแทนโดย {{ s.closedBy }}</div>
+            }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+          <td mat-cell *matCellDef="let s">
+            {{ statusText(s) }}
+            @if (leftOpen(s)) {
+              <span class="badge badge-warn">เปิดค้าง</span>
+            }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="variance">
+          <th mat-header-cell *matHeaderCellDef class="num">ส่วนต่าง</th>
+          <td mat-cell *matCellDef="let s" class="num" [class.off]="totalVariance(s) !== 0">
+            @if (s.status === 'closed') {
+              {{ totalVariance(s) | number: '1.2-2' }}
+            } @else {
+              -
+            }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="approval">
+          <th mat-header-cell *matHeaderCellDef>การอนุมัติ</th>
+          <td mat-cell *matCellDef="let s">
+            @if (s.status === 'closed') {
+              <span class="badge" [class]="approvalBadge(s)">{{ approvalText(s) }}</span>
+              @if (s.approvedBy) {
+                <div class="text-muted small">{{ s.approvedBy }}</div>
+              }
+            }
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+    </div>
+  }
+</mat-card>
+
+@if (report().length) {
+  <h3 class="section-title">ส่วนต่างต่อแคชเชียร์ (กะที่ปิดแล้วในช่วงนี้)</h3>
+  <mat-card appearance="outlined">
+    <div class="table-wrap">
+      <table mat-table [dataSource]="report()">
+        <ng-container matColumnDef="cashier">
+          <th mat-header-cell *matHeaderCellDef>แคชเชียร์</th>
+          <td mat-cell *matCellDef="let r">{{ r.cashier }}</td>
+        </ng-container>
+        <ng-container matColumnDef="shifts">
+          <th mat-header-cell *matHeaderCellDef class="num">กะ</th>
+          <td mat-cell *matCellDef="let r" class="num">{{ r.shifts }}</td>
+        </ng-container>
+        <ng-container matColumnDef="short">
+          <th mat-header-cell *matHeaderCellDef class="num">ขาด (ครั้ง / บาท)</th>
+          <td mat-cell *matCellDef="let r" class="num" [class.off]="r.shortTotal > 0">
+            {{ r.shortCount }} / {{ r.shortTotal | number: '1.2-2' }}
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="over">
+          <th mat-header-cell *matHeaderCellDef class="num">เกิน (ครั้ง / บาท)</th>
+          <td mat-cell *matCellDef="let r" class="num">
+            {{ r.overCount }} / {{ r.overTotal | number: '1.2-2' }}
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="pending">
+          <th mat-header-cell *matHeaderCellDef class="num">รออนุมัติ</th>
+          <td mat-cell *matCellDef="let r" class="num">{{ r.pending }}</td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="reportColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: reportColumns"></tr>
+      </table>
+    </div>
+  </mat-card>
+}

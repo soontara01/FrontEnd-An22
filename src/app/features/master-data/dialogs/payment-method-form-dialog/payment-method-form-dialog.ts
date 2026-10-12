@@ -5,7 +5,9 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import {
   CASH_ROUNDING_LABEL,
+  CLOSE_CHECK_LABEL,
   CashRounding,
+  CloseCheck,
   PAYMENT_FEE_MAX,
   PAYMENT_METHOD_DEFAULTS,
   PAYMENT_NAME_MAX,
@@ -14,6 +16,7 @@ import {
   PaymentMethod,
   PaymentMethodPayload,
   PaymentType,
+  closeCheckOf,
   netReceived,
   paymentMethodError,
   roundCash,
@@ -59,6 +62,8 @@ export class PaymentMethodFormDialog {
   protected readonly typeIcon = PAYMENT_TYPE_ICON;
   protected readonly roundings = Object.keys(CASH_ROUNDING_LABEL) as CashRounding[];
   protected readonly roundingLabel = CASH_ROUNDING_LABEL;
+  protected readonly closeChecks = Object.keys(CLOSE_CHECK_LABEL) as CloseCheck[];
+  protected readonly closeCheckLabel = CLOSE_CHECK_LABEL;
   protected readonly nameMax = PAYMENT_NAME_MAX;
   protected readonly feeMax = PAYMENT_FEE_MAX;
   protected readonly sampleAmount = SAMPLE_AMOUNT;
@@ -97,6 +102,7 @@ export class PaymentMethodFormDialog {
     promptPayId: [this.initial.promptPayId],
     bankAccount: [this.initial.bankAccount],
     installmentMonths: [this.initial.installmentMonths.join(', ')],
+    closeCheck: [closeCheckOf(this.initial)],
     note: [this.initial.note],
   });
 
@@ -148,7 +154,6 @@ export class PaymentMethodFormDialog {
       code: raw.code.trim().toUpperCase(),
       name: raw.name.trim(),
       sortOrder: this.initial.sortOrder,
-      closeCheck: this.initial.closeCheck,
       minAmount: Number(raw.minAmount) || 0,
       maxAmount: raw.maxAmount ? Number(raw.maxAmount) : null,
       feePercent: Number(raw.feePercent) || 0,

@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  CashMovement,
   CreditNote,
   CreditNotePayload,
   Exchange,
@@ -12,7 +13,10 @@ import {
   Sale,
   SaleStatus,
   SerialNumber,
+  Shift,
+  ShiftSummary,
   StoreInfo,
+  VarianceReportRow,
   TaxInvoice,
   TaxInvoiceBuyer,
 } from '@core/models';
@@ -112,6 +116,38 @@ export class SalesApi {
 
   paymentMethods(): Observable<PaymentMethod[]> {
     return this.api.get<PaymentMethod[]>('payment-methods');
+  }
+
+  /** POS shifts opened within a local-date range (null = open end), newest first. */
+  shifts(from: string | null, to: string | null): Observable<Shift[]> {
+    return this.api.get<Shift[]>('shifts', rangeParams(from, to));
+  }
+
+  shift(id: number): Observable<Shift> {
+    return this.api.get<Shift>(`shifts/${id}`);
+  }
+
+  /** X / Z report; per-method lines only for admins while the shift is open. */
+  shiftSummary(id: number): Observable<ShiftSummary> {
+    return this.api.get<ShiftSummary>(`shifts/${id}/summary`);
+  }
+
+  cashMovements(shiftId: number): Observable<CashMovement[]> {
+    return this.api.get<CashMovement[]>(`shifts/${shiftId}/movements`);
+  }
+
+  approveShift(id: number): Observable<Shift> {
+    return this.api.post<Shift>(`shifts/${id}/approve`, {});
+  }
+
+  /** Variance per cashier over shifts opened within the range. */
+  varianceReport(from: string | null, to: string | null): Observable<VarianceReportRow[]> {
+    return this.api.get<VarianceReportRow[]>('shifts/variance-report', rangeParams(from, to));
+  }
+
+  /** Bills sold or voided in a shift, newest first. */
+  salesOfShift(shiftId: number): Observable<Sale[]> {
+    return this.api.get<Sale[]>('sales', { shiftId: String(shiftId) });
   }
 }
 
