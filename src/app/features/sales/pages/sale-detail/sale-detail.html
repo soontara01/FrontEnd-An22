@@ -47,6 +47,15 @@
           </div>
           <div><span class="text-muted">ลูกค้า</span>{{ s.customer || 'ลูกค้าทั่วไป' }}</div>
           <div><span class="text-muted">พนักงาน</span>{{ s.cashier || '-' }}</div>
+          @if (s.terminalId) {
+            <div>
+              <span class="text-muted">เครื่อง</span>
+              {{ store.terminalLabel(s.terminalId) }}
+              @if (s.posId) {
+                <span class="text-muted small">(POS ID {{ s.posId }})</span>
+              }
+            </div>
+          }
           @if (s.manualDiscount) {
             <div>
               <span class="text-muted">ส่วนลดพิเศษ</span>

@@ -1,7 +1,7 @@
 <h2 mat-dialog-title>X report · กะ {{ shift.shiftNo }}</h2>
 <mat-dialog-content>
   <p class="text-muted small">
-    {{ shift.cashier }} · เครื่อง {{ shift.terminalId }} · เปิดเมื่อ {{ time(shift.openedAt) }} ·
+    {{ shift.cashier }} · {{ store.terminalLabel() }} · เปิดเมื่อ {{ time(shift.openedAt) }} ·
     เงินทอนตั้งต้น {{ shift.openingFloat | number: '1.2-2' }} บาท
   </p>
 

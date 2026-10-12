@@ -2,7 +2,9 @@
   @let d = data.value();
   <app-page-header
     [title]="'กะ ' + d.shift.shiftNo"
-    [subtitle]="d.shift.cashier + ' · เครื่อง ' + d.shift.terminalId + ' · ' + statusText()"
+    [subtitle]="
+      d.shift.cashier + ' · ' + store.terminalLabel(d.shift.terminalId) + ' · ' + statusText()
+    "
   >
     <a mat-stroked-button routerLink="/sales/shifts">
       <mat-icon>arrow_back</mat-icon>
@@ -37,7 +39,7 @@
           <mat-card-content>
             <p>
               กะนี้ยังเปิดอยู่ (เปิดเมื่อ {{ d.shift.openedAt | thaiDate: 'datetime' }}) —
-              ปิดกะได้ที่เครื่อง {{ d.shift.terminalId }} ในหน้าขายหน้าร้าน
+              ปิดกะได้ที่{{ store.terminalLabel(d.shift.terminalId) }} ในหน้าขายหน้าร้าน
             </p>
             <div class="grid">
               <span>บิลขาย {{ d.summary.billCount }} บิล</span>

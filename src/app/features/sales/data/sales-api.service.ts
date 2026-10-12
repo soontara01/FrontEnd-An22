@@ -8,6 +8,7 @@ import {
   Exchange,
   ExchangePayload,
   PaymentMethod,
+  PosTerminal,
   Product,
   Promotion,
   Sale,
@@ -108,6 +109,10 @@ export class SalesApi {
 
   storeInfo(): Observable<StoreInfo> {
     return this.api.get<StoreInfo>('settings/store');
+  }
+
+  posTerminals(): Observable<PosTerminal[]> {
+    return this.api.get<PosTerminal[]>('pos-terminals');
   }
 
   promotions(): Observable<Promotion[]> {

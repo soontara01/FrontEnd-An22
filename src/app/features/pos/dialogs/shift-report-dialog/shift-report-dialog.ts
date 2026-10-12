@@ -49,7 +49,7 @@ import { PosStore } from '../../data/pos.store';
 })
 export class ShiftReportDialog {
   protected readonly shift = inject<Shift>(MAT_DIALOG_DATA);
-  private readonly store = inject(PosStore);
+  protected readonly store = inject(PosStore);
 
   protected readonly summary = signal<ShiftSummary | null>(null);
   protected readonly movements = signal<CashMovement[]>([]);

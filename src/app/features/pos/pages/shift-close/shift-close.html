@@ -54,7 +54,7 @@
 } @else {
   @let shift = store.shift()!;
   <p class="text-muted">
-    กะ <strong>{{ shift.shiftNo }}</strong> · {{ shift.cashier }} · เครื่อง {{ shift.terminalId }} ·
+    กะ <strong>{{ shift.shiftNo }}</strong> · {{ shift.cashier }} · {{ store.terminalLabel() }} ·
     เงินทอนตั้งต้น {{ shift.openingFloat | number: '1.2-2' }} บาท
   </p>
 

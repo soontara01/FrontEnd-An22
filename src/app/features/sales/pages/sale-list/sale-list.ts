@@ -107,6 +107,9 @@ export default class SaleList {
   protected readonly filterText = signal('');
   /** A bill status, or 'returned' = bills with credit notes */
   protected readonly statusFilter = signal<SaleStatus | 'all' | 'returned'>('all');
+  /** Bills of one POS terminal (null = all) */
+  protected readonly terminalFilter = signal<number | null>(null);
+  protected readonly terminals = this.store.terminals;
 
   /** Effective range from the URL; no params → today. */
   protected readonly range = computed<DateRange>(() => {
@@ -138,7 +141,9 @@ export default class SaleList {
   private readonly filtered = computed(() => {
     const text = this.filterText().trim().toLowerCase();
     const status = this.statusFilter();
+    const terminal = this.terminalFilter();
     return this.rows()
+      .filter((s) => terminal === null || s.terminalId === terminal)
       .filter(
         (s) =>
           status === 'all' ||
@@ -164,6 +169,7 @@ export default class SaleList {
   });
 
   constructor() {
+    this.store.loadLookups();
     effect(() => {
       this.dataSource.data = this.filtered();
     });

@@ -6,6 +6,7 @@ import {
   Exchange,
   ExchangePayload,
   PaymentMethod,
+  PosTerminal,
   Product,
   Promotion,
   Sale,
@@ -14,6 +15,7 @@ import {
   StoreInfo,
   TaxInvoice,
   TaxInvoiceBuyer,
+  terminalLabel,
   toIsoDate,
 } from '@core/models';
 import { SalesApi } from './sales-api.service';
@@ -30,12 +32,15 @@ export class SalesStore {
   private readonly _storeInfo = signal<StoreInfo | null>(null);
   private readonly _promotions = signal<Promotion[]>([]);
   private readonly _methods = signal<PaymentMethod[]>([]);
+  private readonly _terminals = signal<PosTerminal[]>([]);
   private lookupsLoaded = false;
 
   readonly storeInfo = this._storeInfo.asReadonly();
   /** Every promotion (credit notes re-check free goods against them) */
   readonly promotions = this._promotions.asReadonly();
   readonly methods = this._methods.asReadonly();
+  /** POS terminal registry, by number */
+  readonly terminals = computed(() => [...this._terminals()].sort((a, b) => a.id - b.id));
   readonly promotionNames = computed<ReadonlyMap<number, string>>(
     () => new Map(this._promotions().map((p) => [p.id, `${p.code} ${p.name}`])),
   );
@@ -94,6 +99,12 @@ export class SalesStore {
     this.api.storeInfo().subscribe((info) => this._storeInfo.set(info));
     this.api.promotions().subscribe((list) => this._promotions.set(list));
     this.api.paymentMethods().subscribe((list) => this._methods.set(list));
+    this.api.posTerminals().subscribe((list) => this._terminals.set(list));
+  }
+
+  /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน'; '-' when unknown (bills from before the registry). */
+  terminalLabel(id: number | null | undefined): string {
+    return id ? terminalLabel(id, this._terminals()) : '-';
   }
 
   void(id: number, reason: string): Observable<Sale> {

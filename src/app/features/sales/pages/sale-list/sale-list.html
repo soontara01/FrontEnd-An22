@@ -116,6 +116,17 @@
       <mat-option value="returned">มีใบลดหนี้</mat-option>
     </mat-select>
   </mat-form-field>
+  @if (terminals().length > 1) {
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="status-filter">
+      <mat-label>เครื่อง</mat-label>
+      <mat-select [value]="terminalFilter()" (selectionChange)="terminalFilter.set($event.value)">
+        <mat-option [value]="null">ทุกเครื่อง</mat-option>
+        @for (t of terminals(); track t.id) {
+          <mat-option [value]="t.id">เครื่อง {{ t.id }} · {{ t.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  }
 </div>
 
 <mat-card appearance="outlined">

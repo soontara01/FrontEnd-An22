@@ -54,7 +54,7 @@
         </ng-container>
         <ng-container matColumnDef="terminal">
           <th mat-header-cell *matHeaderCellDef>เครื่อง</th>
-          <td mat-cell *matCellDef="let s">{{ s.terminalId }}</td>
+          <td mat-cell *matCellDef="let s">{{ store.terminalLabel(s.terminalId) }}</td>
         </ng-container>
         <ng-container matColumnDef="cashier">
           <th mat-header-cell *matHeaderCellDef>แคชเชียร์</th>
