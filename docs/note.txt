@@ -35,3 +35,26 @@ git pull แล้ว nvm use (Node 24) แล้ว npm install
 หลังทดสอบแต่ละวัน
 
 ผลที่กรอกจะอยู่ใน docs/test-before-saas.md ให้ commit + push ทุกครั้งก่อนเปลี่ยนเครื่อง ไม่งั้นผลจะค้างอยู่บนเครื่องเดิม
+
+=======================================
+กู้คืน localStorage ของแอปจากไฟล์ใน docs/test-data/ ให้กลับเป็นสถานะหลัง R2 แล้วทดสอบต่อ docs/test-before-saas.md รอบ R3 (ห้ามล้าง mock db)
+
+ขั้นตอน:
+1. ถ้า http://localhost:4200 ยังไม่ทำงาน ให้รัน npm start (nvm use ก่อน)
+2. ใช้ Claude in Chrome เปิดแท็บใหม่ที่ http://localhost:4200
+3. ไฟล์ docs/test-data/mock-db-<key>-after-R2.json เก็บค่าดิบของ localStorage ทีละ key
+   (<key> = an22.mock.db, an22.pos.terminal, an22.token, an22.user, an22.theme)
+   ให้ setItem(<key>, เนื้อหาไฟล์ตามตรง) ครบทุกไฟล์ แล้ว reload
+   - อย่าส่งเนื้อหาไฟล์ผ่าน javascript_tool โดยตรง เพราะเครื่องมือปิดบังบางส่วน
+     (ชื่อ key ที่มีจุด, base64 ของรูป) ทำให้ข้อมูลไม่ครบ
+   - ให้เปิด HTTP server ชั่วคราวบน 127.0.0.1 ที่ส่งไฟล์ใน docs/test-data/
+     พร้อม CORS ให้ http://localhost:4200 แล้วให้หน้าเว็บ fetch แต่ละไฟล์มา setItem
+     เสร็จแล้วปิด server
+4. ตรวจผล:
+   - localStorage มีครบ 5 key และความยาว an22.mock.db ตรงกับไฟล์ (นับเป็นตัวอักษร ไม่ใช่ไบต์)
+   - mock db มี SKU 12 ตัว รวม TST-001 / TST-SN / TST-SV
+   - มีโปร 8 ตัว รวม PRO-T-PCT / PRO-T-FREE
+   - หน้าตั้งค่า "เครื่องนี้" = เครื่อง 1 และ login เป็น Admin
+5. รายงานผลการกู้คืนก่อนเริ่ม R3 ถ้าวันนี้เลย 31 ต.ค. 2569 แล้ว ให้แจ้งว่าราคา TST-001 / PRO-MSKB10 หมดอายุ
+   (ดู "ข้อมูลที่ R2 สร้างไว้ใช้ต่อ" ในเอกสาร)
+====================================================
