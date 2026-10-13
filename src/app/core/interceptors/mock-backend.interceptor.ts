@@ -106,6 +106,12 @@ import {
   ShiftContext,
   ShiftCountInput,
   ShiftOpenPayload,
+  DrawerOpen,
+  DrawerOpenPayload,
+  ShiftAdjustment,
+  ShiftAdjustmentPayload,
+  drawerOpenError,
+  shiftAdjustmentError,
   countCheck,
   countInputsError,
   approvalStatusFor,
@@ -168,6 +174,9 @@ interface MockDb {
   /** POS shifts (one open shift per terminal) and their cash in / out of the drawer. */
   shifts: Shift[];
   cashMovements: CashMovement[];
+  /** Drawer opened without a sale (S7) and corrections of closed shifts (S8). */
+  drawerOpens: DrawerOpen[];
+  shiftAdjustments: ShiftAdjustment[];
   /** Set once shifts were switched on for this stored db (see `enableShifts()`). */
   shiftsEnabled?: boolean;
   /** POS terminal registry: number + Revenue Dept POS ID per cash drawer (terminal plan). */
@@ -781,6 +790,8 @@ const seedDb = (): MockDb => ({
   taxInvoices: [],
   shifts: [],
   cashMovements: [],
+  drawerOpens: [],
+  shiftAdjustments: [],
   posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
 });
 
@@ -2567,12 +2578,21 @@ function handlePosTerminals(
   return notFound(req, path);
 }
 
+/** A shift as read: + Σ of its adjustments after closing (S8), derived on every read. */
+function withAdjustmentTotal(db: MockDb, shift: Shift): Shift {
+  const own = db.shiftAdjustments.filter((a) => a.shiftId === shift.id);
+  return own.length
+    ? { ...shift, adjustmentTotal: round2(own.reduce((sum, a) => sum + a.amount, 0)) }
+    : shift;
+}
+
 const shiftContext = (db: MockDb): ShiftContext => ({
   sales: db.sales,
   creditNotes: db.creditNotes,
   movements: db.cashMovements,
   methods: db.paymentMethods,
   exchanges: db.exchanges,
+  drawerOpens: db.drawerOpens,
 });
 
 /**
@@ -2670,26 +2690,85 @@ function handleShifts(
     const inRange = db.shifts.filter(
       (s) => (!from || shiftDay(s) >= from) && (!to || shiftDay(s) <= to),
     );
-    if (path === 'shifts/variance-report') return ok(varianceReport(inRange));
+    if (path === 'shifts/variance-report') {
+      return ok(
+        varianceReport(inRange, {
+          adjustments: db.shiftAdjustments,
+          drawerOpens: db.drawerOpens,
+        }),
+      );
+    }
     const openOnly = req.params.get('openOnly') === '1';
     return ok(
       inRange
         .filter((s) => !openOnly || s.status === 'open')
-        .sort((a, b) => b.openedAt.localeCompare(a.openedAt)),
+        .sort((a, b) => b.openedAt.localeCompare(a.openedAt))
+        .map((s) => withAdjustmentTotal(db, s)),
     );
   }
 
   const match =
-    /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|count-check|close|approve))?$/.exec(path);
+    /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|count-check|close|approve|drawer-opens|adjustments))?$/.exec(
+      path,
+    );
   if (!match) return notFound(req, path);
   const shift = db.shifts.find((s) => s.id === Number(match[1]));
   if (!shift) return error(404, 'ไม่พบกะ');
   const action = match[2];
   const now = new Date().toISOString();
 
-  if (!action && req.method === 'GET') return ok(shift);
+  if (!action && req.method === 'GET') return ok(withAdjustmentTotal(db, shift));
   if (action === 'movements' && req.method === 'GET') {
     return ok(db.cashMovements.filter((m) => m.shiftId === shift.id));
+  }
+  if (action === 'drawer-opens' && req.method === 'GET') {
+    return ok(db.drawerOpens.filter((d) => d.shiftId === shift.id));
+  }
+  if (action === 'drawer-opens' && req.method === 'POST') {
+    // Drawer opened without a sale (S7): same who / where rules as a cash movement.
+    if (shift.status !== 'open') return error(400, 'กะนี้ปิดไปแล้ว');
+    if (shift.terminalId !== terminalId) return error(400, 'กะนี้ไม่ได้เปิดที่เครื่องนี้');
+    const payload: DrawerOpenPayload = {
+      reason: ((req.body ?? {}) as Partial<DrawerOpenPayload>).reason?.trim() ?? '',
+    };
+    const problem =
+      shiftBlocker('drawer_open', { requireShift: true, shift, user, isAdmin }) ??
+      drawerOpenError(payload);
+    if (problem) return error(400, problem);
+    const opened: DrawerOpen = {
+      id: Math.max(0, ...db.drawerOpens.map((d) => d.id)) + 1,
+      shiftId: shift.id,
+      reason: payload.reason,
+      by: user,
+      at: now,
+    };
+    db.drawerOpens.push(opened);
+    return ok(opened);
+  }
+  if (action === 'adjustments' && req.method === 'GET') {
+    return ok(db.shiftAdjustments.filter((a) => a.shiftId === shift.id));
+  }
+  if (action === 'adjustments' && req.method === 'POST') {
+    // Recorded separately (S8): the counts, the Z report and the approval never change.
+    const body = (req.body ?? {}) as Partial<ShiftAdjustmentPayload>;
+    const payload: ShiftAdjustmentPayload = {
+      methodId: Number(body.methodId),
+      amount: Number(body.amount),
+      reasonCode: body.reasonCode as ShiftAdjustmentPayload['reasonCode'],
+      reason: (body.reason ?? '').trim(),
+    };
+    const problem = shiftAdjustmentError(shift, payload, isAdmin);
+    if (problem) return error(400, problem);
+    const adjustment: ShiftAdjustment = {
+      id: Math.max(0, ...db.shiftAdjustments.map((a) => a.id)) + 1,
+      shiftId: shift.id,
+      ...payload,
+      name: shift.counts.find((c) => c.methodId === payload.methodId)?.name ?? '',
+      by: user,
+      at: now,
+    };
+    db.shiftAdjustments.push(adjustment);
+    return ok(adjustment);
   }
   if (action === 'summary' && req.method === 'GET') {
     // Per-method expected amounts only for admins while the shift is open (blind count, S2).

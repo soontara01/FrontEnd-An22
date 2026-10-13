@@ -66,6 +66,9 @@
         <span>ใบเปลี่ยนสินค้า</span><span>{{ sum.exchangeCount }} ใบ</span>
       </div>
     }
+    <div class="row">
+      <span>เปิดลิ้นชักเปล่า</span><span>{{ sum.drawerOpenCount }} ครั้ง</span>
+    </div>
   </div>
 
   <div class="block">
@@ -123,6 +126,25 @@
       <div class="note">หมายเหตุ: {{ s.note }}</div>
     }
   </div>
+
+  @if (adjustments().length) {
+    <div class="block">
+      <div class="row head"><span>ปรับปรุงหลังปิดกะ</span><span>จำนวน</span></div>
+      @for (a of adjustments(); track a.id) {
+        <div class="row">
+          <span>{{ a.name }} · {{ a.at | thaiDate: 'datetime' }}</span>
+          <span>{{ a.amount > 0 ? '+' : '' }}{{ a.amount | number: '1.2-2' }}</span>
+        </div>
+        <div class="note">{{ adjustmentReason(a) }} (โดย {{ a.by }})</div>
+      }
+      @for (l of adjustedLines(); track l.name) {
+        <div class="row strong">
+          <span>{{ l.name }} ส่วนต่างหลังปรับปรุง</span>
+          <span>{{ l.before | number: '1.2-2' }} → {{ l.after | number: '1.2-2' }}</span>
+        </div>
+      }
+    </div>
+  }
 
   <footer>
     <div class="sign">ลงชื่อ ..................................... แคชเชียร์</div>

@@ -20,6 +20,12 @@
         อนุมัติส่วนต่าง
       </button>
     }
+    @if (canAdjust()) {
+      <button mat-stroked-button type="button" (click)="addAdjustment()">
+        <mat-icon>edit_note</mat-icon>
+        เพิ่มรายการปรับปรุง
+      </button>
+    }
     @if (d.shift.status === 'closed') {
       <button mat-stroked-button type="button" (click)="print()">
         <mat-icon>print</mat-icon>
@@ -37,6 +43,7 @@
           [summary]="d.summary"
           [store]="store.storeInfo()"
           [copy]="true"
+          [adjustments]="d.adjustments"
         />
       } @else {
         <mat-card appearance="outlined">
@@ -82,6 +89,52 @@
     </section>
 
     <section>
+      @if (d.adjustments.length) {
+        <h3>รายการปรับปรุงหลังปิดกะ</h3>
+        <mat-card appearance="outlined">
+          <table class="plain">
+            <tbody>
+              @for (a of d.adjustments; track a.id) {
+                <tr>
+                  <td>{{ a.at | thaiDate: 'datetime' }}</td>
+                  <td>{{ a.name }} · {{ adjustmentReason(a) }}</td>
+                  <td class="text-muted small">{{ a.by }}</td>
+                  <td class="num">{{ a.amount > 0 ? '+' : '' }}{{ a.amount | number: '1.2-2' }}</td>
+                </tr>
+              }
+              @for (l of adjustedLines(); track l.name) {
+                <tr>
+                  <td colspan="3">
+                    <strong>{{ l.name }}</strong> ส่วนต่างเดิม → หลังปรับปรุง
+                  </td>
+                  <td class="num">
+                    {{ l.before | number: '1.2-2' }} →
+                    <strong>{{ l.after | number: '1.2-2' }}</strong>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </mat-card>
+      }
+
+      @if (d.drawerOpens.length) {
+        <h3>เปิดลิ้นชักเปล่า ({{ d.drawerOpens.length }} ครั้ง)</h3>
+        <mat-card appearance="outlined">
+          <table class="plain">
+            <tbody>
+              @for (o of d.drawerOpens; track o.id) {
+                <tr>
+                  <td>{{ o.at | thaiDate: 'datetime' }}</td>
+                  <td>{{ o.reason }}</td>
+                  <td class="text-muted small">{{ o.by }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </mat-card>
+      }
+
       @if (d.movements.length) {
         <h3>นำเงินเข้า / ออกลิ้นชัก</h3>
         <mat-card appearance="outlined">

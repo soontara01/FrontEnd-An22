@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { DecimalPipe } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { forkJoin } from 'rxjs';
-import { CashMovement, Shift, ShiftSummary } from '@core/models';
+import { CashMovement, DrawerOpen, Shift, ShiftSummary } from '@core/models';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { MATERIAL } from '@shared/material';
 import { PosStore } from '../../data/pos.store';
@@ -53,14 +53,17 @@ export class ShiftReportDialog {
 
   protected readonly summary = signal<ShiftSummary | null>(null);
   protected readonly movements = signal<CashMovement[]>([]);
+  protected readonly drawerOpens = signal<DrawerOpen[]>([]);
 
   constructor() {
     forkJoin({
       summary: this.store.shiftSummary(this.shift.id),
       movements: this.store.cashMovements(this.shift.id),
-    }).subscribe(({ summary, movements }) => {
+      drawerOpens: this.store.drawerOpens(this.shift.id),
+    }).subscribe(({ summary, movements, drawerOpens }) => {
       this.summary.set(summary);
       this.movements.set(movements);
+      this.drawerOpens.set(drawerOpens);
     });
   }
 

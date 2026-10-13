@@ -21,6 +21,7 @@ import { RouterLink } from '@angular/router';
 import { filter, switchMap, tap } from 'rxjs';
 import {
   CashMovementPayload,
+  DrawerOpenPayload,
   ManualDiscount,
   PricedLine,
   Product,
@@ -46,6 +47,7 @@ import { SellUnit, findByCode, searchProducts } from '../../data/product-lookup'
 import { PosStore } from '../../data/pos.store';
 import { BuyerDialog } from '../../dialogs/buyer-dialog/buyer-dialog';
 import { CashMovementDialog } from '../../dialogs/cash-movement-dialog/cash-movement-dialog';
+import { DrawerOpenDialog } from '../../dialogs/drawer-open-dialog/drawer-open-dialog';
 import {
   OpenShiftDialog,
   OpenShiftDialogData,
@@ -198,6 +200,26 @@ export default class PosPage {
       .subscribe((m) => {
         const kind = m.type === 'in' ? 'นำเงินเข้า' : 'นำเงินออก';
         this.notify.success(`${kind} ${m.amount.toLocaleString('en-US')} บาทแล้ว`);
+        this.focusScan();
+      });
+  }
+
+  /** Opens the drawer without a sale: a reason is required and the opening is logged (S7). */
+  protected openDrawer(shift: Shift): void {
+    this.dialog
+      .open<DrawerOpenDialog, void, DrawerOpenPayload>(DrawerOpenDialog, {
+        width: '440px',
+        maxWidth: '95vw',
+        autoFocus: false,
+      })
+      .afterClosed()
+      .pipe(
+        filter((payload): payload is DrawerOpenPayload => !!payload),
+        switchMap((payload) => this.store.openDrawer(shift.id, payload)),
+      )
+      .subscribe(() => {
+        // No drawer hardware yet (like `opensDrawer()` at a sale): just say so.
+        this.notify.success('ลิ้นชักเปิด — บันทึกการเปิดลิ้นชักแล้ว');
         this.focusScan();
       });
   }

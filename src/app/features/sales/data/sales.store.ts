@@ -12,6 +12,8 @@ import {
   Sale,
   SaleStatus,
   Shift,
+  ShiftAdjustment,
+  ShiftAdjustmentPayload,
   StoreInfo,
   TaxInvoice,
   TaxInvoiceBuyer,
@@ -132,14 +134,24 @@ export class SalesStore {
     });
   }
 
-  /** One shift with its X / Z summary, cash movements and bills. */
+  /**
+   * One shift with its X / Z summary, cash movements, no-sale drawer openings (S7), adjustments
+   * after closing (S8) and bills.
+   */
   shiftDetail(id: number) {
     return forkJoin({
       shift: this.api.shift(id),
       summary: this.api.shiftSummary(id),
       movements: this.api.cashMovements(id),
+      drawerOpens: this.api.drawerOpens(id),
+      adjustments: this.api.adjustments(id),
       sales: this.api.salesOfShift(id),
     });
+  }
+
+  /** Admin correction of a closed shift's count (S8); the counts themselves never change. */
+  addAdjustment(shiftId: number, payload: ShiftAdjustmentPayload): Observable<ShiftAdjustment> {
+    return this.api.addAdjustment(shiftId, payload);
   }
 
   approveShift(id: number): Observable<Shift> {

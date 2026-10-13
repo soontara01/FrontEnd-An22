@@ -39,6 +39,14 @@
           <mat-icon>currency_exchange</mat-icon>
           <span>นำเงินเข้า / ออกลิ้นชัก</span>
         </button>
+        <button
+          mat-menu-item
+          [disabled]="!!store.shiftProblem() && !store.isAdmin()"
+          (click)="openDrawer(shift)"
+        >
+          <mat-icon>inbox</mat-icon>
+          <span>เปิดลิ้นชัก (ไม่มีการขาย)</span>
+        </button>
         <button mat-menu-item (click)="shiftReport(shift)">
           <mat-icon>summarize</mat-icon>
           <span>X report (ยอดระหว่างกะ)</span>

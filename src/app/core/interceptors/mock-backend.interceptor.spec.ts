@@ -11,6 +11,8 @@ import {
   CartItem,
   PosTerminal,
   CountCheckResult,
+  DrawerOpen,
+  ShiftAdjustment,
   CreditNote,
   CreditNoteLineInput,
   Exchange,
@@ -1232,9 +1234,69 @@ describe('mockBackendInterceptor – shifts', () => {
         shortTotal: 150,
         overTotal: 0,
         pending: 0,
+        drawerOpens: 0,
       },
     ]);
     expect(await call<Shift[]>('GET', 'shifts?from=2026-10-04&to=2026-10-04')).toHaveLength(1);
+  });
+
+  it('logs a drawer opened without a sale in the shift, with a reason (S7)', async () => {
+    const staff = { token: STAFF };
+    const shift = await open(1000, staff);
+    const openDrawer = (reason: string, as: As) =>
+      call('POST', `shifts/${shift.id}/drawer-opens`, { reason }, as);
+    expect(await errorOf(openDrawer(' ', staff))).toBe('กรุณาระบุเหตุผลที่เปิดลิ้นชัก');
+    expect(await errorOf(openDrawer('แลกเหรียญ', { token: 'mock-jwt-token.u3' }))).toBe(
+      'กะนี้เป็นของ สมชาย ใจดี — ทำรายการนี้ได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ',
+    );
+    expect(await errorOf(openDrawer('แลกเหรียญ', { ...staff, terminal: 2 }))).toBe(
+      'กะนี้ไม่ได้เปิดที่เครื่องนี้',
+    );
+    await openDrawer('แลกเหรียญ', staff);
+    await openDrawer('ตรวจนับเงิน', {});
+    const logged = await call<DrawerOpen[]>('GET', `shifts/${shift.id}/drawer-opens`);
+    expect(logged.map((d) => [d.by, d.reason])).toEqual([
+      ['สมชาย ใจดี', 'แลกเหรียญ'],
+      ['Admin', 'ตรวจนับเงิน'],
+    ]);
+    const x = await call<ShiftSummary>('GET', `shifts/${shift.id}/summary`);
+    expect(x.drawerOpenCount).toBe(2);
+    expect(x.lines?.[0].expected).toBe(1000); // no money moved
+    const counts = await countsFor(shift);
+    await call('POST', `shifts/${shift.id}/close`, {
+      counts,
+      cashDenominations: [],
+      depositAmount: 0,
+      note: '',
+    });
+    const [row] = await call<VarianceReportRow[]>('GET', 'shifts/variance-report');
+    expect(row.drawerOpens).toBe(2);
+  });
+
+  it('adjusts a closed shift without changing its counts or approval (S8)', async () => {
+    const staff = { token: STAFF };
+    const shift = await open(1000, staff);
+    const counts = await countsFor(shift, -150);
+    const closed = await call<Shift>(
+      'POST',
+      `shifts/${shift.id}/close`,
+      { counts, cashDenominations: [], depositAmount: 0, note: '' },
+      staff,
+    );
+    expect(closed.approvalStatus).toBe('pending');
+    const adjust = (body: object, as: As = {}) =>
+      call<ShiftAdjustment>('POST', `shifts/${shift.id}/adjustments`, body, as);
+    const found = { methodId: CASH, amount: 150, reasonCode: 'found_cash', reason: 'ตกใต้ลิ้นชัก' };
+    expect(await errorOf(adjust(found, staff))).toBe('ปรับปรุงกะได้เฉพาะผู้ดูแลระบบ');
+    const saved = await adjust(found);
+    expect(saved).toMatchObject({ name: 'เงินสด', amount: 150, by: 'Admin' });
+
+    const after = await call<Shift>('GET', `shifts/${shift.id}`);
+    expect(after).toMatchObject({ approvalStatus: 'pending', adjustmentTotal: 150 });
+    expect(after.counts).toEqual(closed.counts);
+    expect(await call<ShiftAdjustment[]>('GET', `shifts/${shift.id}/adjustments`)).toEqual([saved]);
+    const [row] = await call<VarianceReportRow[]>('GET', 'shifts/variance-report');
+    expect(row).toMatchObject({ shortCount: 0, shortTotal: 0, pending: 1 });
   });
 
   it('sells without a shift when shifts are off and keeps them on while one is open', async () => {

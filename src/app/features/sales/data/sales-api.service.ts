@@ -14,7 +14,10 @@ import {
   Sale,
   SaleStatus,
   SerialNumber,
+  DrawerOpen,
   Shift,
+  ShiftAdjustment,
+  ShiftAdjustmentPayload,
   ShiftSummary,
   StoreInfo,
   VarianceReportRow,
@@ -139,6 +142,18 @@ export class SalesApi {
 
   cashMovements(shiftId: number): Observable<CashMovement[]> {
     return this.api.get<CashMovement[]>(`shifts/${shiftId}/movements`);
+  }
+
+  drawerOpens(shiftId: number): Observable<DrawerOpen[]> {
+    return this.api.get<DrawerOpen[]>(`shifts/${shiftId}/drawer-opens`);
+  }
+
+  adjustments(shiftId: number): Observable<ShiftAdjustment[]> {
+    return this.api.get<ShiftAdjustment[]>(`shifts/${shiftId}/adjustments`);
+  }
+
+  addAdjustment(shiftId: number, payload: ShiftAdjustmentPayload): Observable<ShiftAdjustment> {
+    return this.api.post<ShiftAdjustment>(`shifts/${shiftId}/adjustments`, payload);
   }
 
   approveShift(id: number): Observable<Shift> {

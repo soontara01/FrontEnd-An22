@@ -15,8 +15,24 @@ export type ShiftApproval = 'not_needed' | 'pending' | 'approved';
 export type VarianceReason =
   'wrong_change' | 'wrong_received' | 'wrong_method' | 'unknown' | 'other';
 export type CashMovementType = 'in' | 'out';
-/** Actions that move money and so need an open shift when `StoreInfo.requireShift` is on. */
-export type ShiftAction = 'sell' | 'void' | 'refund' | 'cash_movement';
+/** Actions at the drawer that need an open shift when `StoreInfo.requireShift` is on. */
+export type ShiftAction = 'sell' | 'void' | 'refund' | 'cash_movement' | 'drawer_open';
+/** Why a closed shift's count was adjusted afterwards (S8). */
+export type AdjustmentReason = 'count_error' | 'found_cash' | 'late_settlement' | 'other';
+
+export const ADJUSTMENT_REASON_LABEL: Record<AdjustmentReason, string> = {
+  count_error: 'นับผิด',
+  found_cash: 'พบเงินภายหลัง',
+  late_settlement: 'ยอดโอน / บัตรเข้าช้า',
+  other: 'อื่น ๆ',
+};
+
+/** Quick reasons for opening the drawer without a sale (S7). */
+export const DRAWER_OPEN_REASONS: readonly string[] = [
+  'แลกเหรียญ / แลกแบงก์',
+  'ตรวจนับเงินระหว่างกะ',
+  'ใส่ / หยิบเอกสาร',
+];
 
 export const SHIFT_STATUS_LABEL: Record<ShiftStatus, string> = {
   open: 'เปิดอยู่',
@@ -99,6 +115,47 @@ export interface Shift {
   approvedBy: string | null;
   approvedAt: string | null;
   note: string;
+  /** Read-only, server-derived: Σ adjustments made after closing (S8; missing = none) */
+  adjustmentTotal?: number;
+}
+
+/** The drawer opened without a sale (S7) — no money, logged for control. */
+export interface DrawerOpen {
+  id: number;
+  shiftId: number;
+  reason: string;
+  by: string;
+  /** ISO timestamp */
+  at: string;
+}
+
+export interface DrawerOpenPayload {
+  reason: string;
+}
+
+/**
+ * Correction of a closed shift's count, recorded separately (S8): the counts and the original Z
+ * report never change. `amount` + = more than counted (e.g. cash found), − = less.
+ */
+export interface ShiftAdjustment {
+  id: number;
+  shiftId: number;
+  methodId: number;
+  /** Snapshot of the method name */
+  name: string;
+  amount: number;
+  reasonCode: AdjustmentReason;
+  reason: string;
+  by: string;
+  /** ISO timestamp */
+  at: string;
+}
+
+export interface ShiftAdjustmentPayload {
+  methodId: number;
+  amount: number;
+  reasonCode: AdjustmentReason;
+  reason: string;
 }
 
 /** Cash put into / taken out of the drawer during a shift (not a sale). */
@@ -209,6 +266,7 @@ export interface ShiftContext {
   movements: readonly Pick<CashMovement, 'shiftId' | 'type' | 'amount'>[];
   methods: readonly PaymentMethod[];
   exchanges?: readonly Pick<Exchange, 'shiftId'>[];
+  drawerOpens?: readonly Pick<DrawerOpen, 'shiftId'>[];
 }
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -413,6 +471,51 @@ export function cashMovementError(p: CashMovementPayload, expectedCash: number):
   return null;
 }
 
+/** Rule for logging a drawer opened without a sale (S7): a reason is required. */
+export function drawerOpenError(p: DrawerOpenPayload): string | null {
+  const reason = (p.reason ?? '').trim();
+  if (!reason) return 'กรุณาระบุเหตุผลที่เปิดลิ้นชัก';
+  if (reason.length > 200) return 'เหตุผลต้องไม่เกิน 200 ตัวอักษร';
+  return null;
+}
+
+/**
+ * Rule for adjusting a closed shift (S8): admins only, closed shifts only, a method that was
+ * counted in it, a non-zero amount (2 decimals) and a reason (`other` needs a text).
+ */
+export function shiftAdjustmentError(
+  shift: Pick<Shift, 'status'> & {
+    counts: readonly Pick<ShiftCount, 'methodId' | 'counted'>[];
+  },
+  p: ShiftAdjustmentPayload,
+  isAdmin: boolean,
+): string | null {
+  if (!isAdmin) return 'ปรับปรุงกะได้เฉพาะผู้ดูแลระบบ';
+  if (shift.status !== 'closed') return 'ปรับปรุงได้เฉพาะกะที่ปิดแล้ว';
+  const count = shift.counts.find((c) => c.methodId === p.methodId);
+  if (!count || count.counted === null) return 'ปรับปรุงได้เฉพาะช่องทางที่นับตอนปิดกะ';
+  const amount = Number(p.amount);
+  if (!Number.isFinite(amount) || amount === 0 || round2(amount) !== amount) {
+    return 'จำนวนเงินต้องไม่เป็น 0 (ทศนิยมไม่เกิน 2 ตำแหน่ง)';
+  }
+  if (!(p.reasonCode in ADJUSTMENT_REASON_LABEL)) return 'กรุณาเลือกสาเหตุ';
+  const reason = (p.reason ?? '').trim();
+  if (p.reasonCode === 'other' && !reason) return 'กรุณาอธิบายสาเหตุ';
+  if (reason.length > 200) return 'สาเหตุต้องไม่เกิน 200 ตัวอักษร';
+  return null;
+}
+
+/** Variance of one method after the closed shift's adjustments (S8). */
+export function adjustedVariance(
+  count: Pick<ShiftCount, 'methodId' | 'counted' | 'expected'>,
+  adjustments: readonly Pick<ShiftAdjustment, 'methodId' | 'amount'>[],
+): number {
+  const extra = adjustments
+    .filter((a) => a.methodId === count.methodId)
+    .reduce((sum, a) => sum + a.amount, 0);
+  return round2(variance(count) + extra);
+}
+
 /** Methods to check at close, without their amounts (blind count). */
 export const closeChecklist = (expected: readonly ExpectedLine[]): CloseChecklistItem[] =>
   expected.map(({ methodId, name, type, closeCheck }) => ({ methodId, name, type, closeCheck }));
@@ -523,6 +626,8 @@ export interface ShiftSummary {
   refundCount: number;
   refundTotal: number;
   exchangeCount: number;
+  /** Drawer opened without a sale (S7) */
+  drawerOpenCount: number;
   cashIn: number;
   cashOut: number;
   /** salesTotal − voidTotal − refundTotal */
@@ -558,6 +663,7 @@ export function shiftSummary(
     refundCount: notes.length,
     refundTotal,
     exchangeCount: (ctx.exchanges ?? []).filter((x) => x.shiftId === shift.id).length,
+    drawerOpenCount: (ctx.drawerOpens ?? []).filter((d) => d.shiftId === shift.id).length,
     cashIn: sum(
       moves.filter((m) => m.type === 'in'),
       (m) => m.amount,
@@ -594,13 +700,22 @@ export interface VarianceReportRow {
   overTotal: number;
   /** Shifts still waiting for approval */
   pending: number;
+  /** Drawer opened without a sale in those shifts (S7) */
+  drawerOpens: number;
 }
 
-/** Closed shifts grouped by cashier, biggest shortage first. */
+/**
+ * Closed shifts grouped by cashier, biggest shortage first. Variances are taken after the shifts'
+ * adjustments (S8); `drawerOpens` counts no-sale drawer openings (S7).
+ */
 export function varianceReport(
-  shifts: readonly (Pick<Shift, 'cashier' | 'status' | 'approvalStatus'> & {
-    counts: readonly Pick<ShiftCount, 'counted' | 'expected'>[];
+  shifts: readonly (Pick<Shift, 'id' | 'cashier' | 'status' | 'approvalStatus'> & {
+    counts: readonly Pick<ShiftCount, 'methodId' | 'counted' | 'expected'>[];
   })[],
+  opts: {
+    adjustments?: readonly Pick<ShiftAdjustment, 'shiftId' | 'methodId' | 'amount'>[];
+    drawerOpens?: readonly Pick<DrawerOpen, 'shiftId'>[];
+  } = {},
 ): VarianceReportRow[] {
   const rows = new Map<string, VarianceReportRow>();
   for (const shift of shifts) {
@@ -613,8 +728,11 @@ export function varianceReport(
       shortTotal: 0,
       overTotal: 0,
       pending: 0,
+      drawerOpens: 0,
     };
-    const diffs = shift.counts.map(variance);
+    const adjustments = (opts.adjustments ?? []).filter((a) => a.shiftId === shift.id);
+    const diffs = shift.counts.map((c) => adjustedVariance(c, adjustments));
+    const opens = (opts.drawerOpens ?? []).filter((d) => d.shiftId === shift.id).length;
     const short = round2(diffs.filter((d) => d < 0).reduce((sum, d) => sum - d, 0));
     const over = round2(diffs.filter((d) => d > 0).reduce((sum, d) => sum + d, 0));
     rows.set(shift.cashier, {
@@ -625,6 +743,7 @@ export function varianceReport(
       shortTotal: round2(row.shortTotal + short),
       overTotal: round2(row.overTotal + over),
       pending: row.pending + (shift.approvalStatus === 'pending' ? 1 : 0),
+      drawerOpens: row.drawerOpens + opens,
     });
   }
   return [...rows.values()].sort(

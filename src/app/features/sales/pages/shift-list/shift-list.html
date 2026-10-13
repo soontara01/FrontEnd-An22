@@ -79,9 +79,14 @@
         </ng-container>
         <ng-container matColumnDef="variance">
           <th mat-header-cell *matHeaderCellDef class="num">ส่วนต่าง</th>
-          <td mat-cell *matCellDef="let s" class="num" [class.off]="totalVariance(s) !== 0">
+          <td mat-cell *matCellDef="let s" class="num" [class.off]="adjustedTotal(s) !== 0">
             @if (s.status === 'closed') {
-              {{ totalVariance(s) | number: '1.2-2' }}
+              {{ adjustedTotal(s) | number: '1.2-2' }}
+              @if (s.adjustmentTotal) {
+                <div class="text-muted small">
+                  เดิม {{ totalVariance(s) | number: '1.2-2' }} · ปรับปรุงแล้ว
+                </div>
+              }
             } @else {
               -
             }
@@ -133,6 +138,10 @@
         <ng-container matColumnDef="pending">
           <th mat-header-cell *matHeaderCellDef class="num">รออนุมัติ</th>
           <td mat-cell *matCellDef="let r" class="num">{{ r.pending }}</td>
+        </ng-container>
+        <ng-container matColumnDef="drawerOpens">
+          <th mat-header-cell *matHeaderCellDef class="num">เปิดลิ้นชักเปล่า</th>
+          <td mat-cell *matCellDef="let r" class="num">{{ r.drawerOpens }}</td>
         </ng-container>
         <tr mat-header-row *matHeaderRowDef="reportColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: reportColumns"></tr>

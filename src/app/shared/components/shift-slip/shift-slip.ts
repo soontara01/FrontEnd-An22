@@ -1,12 +1,15 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import {
+  ADJUSTMENT_REASON_LABEL,
   SHIFT_APPROVAL_LABEL,
   Shift,
+  ShiftAdjustment,
   ShiftCount,
   ShiftSummary,
   StoreInfo,
   VARIANCE_REASON_LABEL,
+  adjustedVariance,
   variance,
 } from '@core/models';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
@@ -29,6 +32,11 @@ export class ShiftSlip {
   readonly store = input<StoreInfo | null>(null);
   /** Reprint: marks the slip as a copy */
   readonly copy = input(false);
+  /**
+   * Corrections made after closing (S8), printed in their own section on a copy; the counts
+   * above stay as counted at close.
+   */
+  readonly adjustments = input<readonly ShiftAdjustment[]>([]);
 
   protected readonly approvalLabel = SHIFT_APPROVAL_LABEL;
   /** Closed by someone else than its cashier (an admin closing on their behalf, S1) */
@@ -40,8 +48,24 @@ export class ShiftSlip {
     this.shift().counts.reduce((sum, c) => sum + variance(c), 0),
   );
 
+  /** Counted methods that got adjustments, with their variance after them. */
+  protected readonly adjustedLines = computed(() =>
+    this.shift()
+      .counts.filter((c) => this.adjustments().some((a) => a.methodId === c.methodId))
+      .map((c) => ({
+        name: c.name,
+        before: variance(c),
+        after: adjustedVariance(c, this.adjustments()),
+      })),
+  );
+
   protected diff(count: ShiftCount): number {
     return variance(count);
+  }
+
+  protected adjustmentReason(a: ShiftAdjustment): string {
+    const label = ADJUSTMENT_REASON_LABEL[a.reasonCode];
+    return a.reason ? `${label}: ${a.reason}` : label;
   }
 
   protected reasonText(count: ShiftCount): string {

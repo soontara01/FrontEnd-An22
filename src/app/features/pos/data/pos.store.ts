@@ -7,6 +7,8 @@ import {
   CashMovementPayload,
   Category,
   CountCheckResult,
+  DrawerOpen,
+  DrawerOpenPayload,
   FreeSerial,
   ManualDiscount,
   PaymentInput,
@@ -267,6 +269,15 @@ export class PosStore {
 
   addCashMovement(shiftId: number, payload: CashMovementPayload): Observable<CashMovement> {
     return this.api.addCashMovement(shiftId, payload);
+  }
+
+  drawerOpens(shiftId: number): Observable<DrawerOpen[]> {
+    return this.api.drawerOpens(shiftId);
+  }
+
+  /** Logs the drawer opened without a sale (S7; no drawer hardware yet). */
+  openDrawer(shiftId: number, payload: DrawerOpenPayload): Observable<DrawerOpen> {
+    return this.api.openDrawer(shiftId, payload);
   }
 
   /** Any shift by id — an admin closing another terminal's shift (`/pos/shift-close?shift=`). */

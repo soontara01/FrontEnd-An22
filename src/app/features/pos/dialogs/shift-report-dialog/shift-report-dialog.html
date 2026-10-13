@@ -21,6 +21,8 @@
       <span>+{{ s.cashIn | number: '1.2-2' }} / −{{ s.cashOut | number: '1.2-2' }}</span>
       <span>ใบเปลี่ยนสินค้า</span>
       <span>{{ s.exchangeCount }} ใบ</span>
+      <span>เปิดลิ้นชักเปล่า (ไม่มีการขาย)</span>
+      <span>{{ s.drawerOpenCount }} ครั้ง</span>
     </div>
 
     @if (s.lines; as lines) {
@@ -59,6 +61,20 @@
               <td>{{ m.type === 'in' ? 'เข้า' : 'ออก' }} · {{ m.reason }}</td>
               <td class="text-muted small">{{ m.by }}</td>
               <td class="num">{{ m.type === 'in' ? '+' : '−' }}{{ m.amount | number: '1.2-2' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+    @if (drawerOpens().length) {
+      <h3>เปิดลิ้นชักเปล่า</h3>
+      <table>
+        <tbody>
+          @for (d of drawerOpens(); track d.id) {
+            <tr>
+              <td>{{ time(d.at) }}</td>
+              <td>{{ d.reason }}</td>
+              <td class="text-muted small">{{ d.by }}</td>
             </tr>
           }
         </tbody>

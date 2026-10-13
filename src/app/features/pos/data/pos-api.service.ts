@@ -7,6 +7,8 @@ import {
   CashMovementPayload,
   Category,
   CountCheckResult,
+  DrawerOpen,
+  DrawerOpenPayload,
   PaymentMethod,
   PosTerminal,
   Product,
@@ -69,6 +71,14 @@ export class PosApi {
 
   checkout(payload: SalePayload): Observable<Sale> {
     return this.api.post<Sale>('sales', payload);
+  }
+
+  drawerOpens(shiftId: number): Observable<DrawerOpen[]> {
+    return this.api.get<DrawerOpen[]>(`shifts/${shiftId}/drawer-opens`);
+  }
+
+  openDrawer(shiftId: number, payload: DrawerOpenPayload): Observable<DrawerOpen> {
+    return this.api.post<DrawerOpen>(`shifts/${shiftId}/drawer-opens`, payload);
   }
 
   /** Any shift by id (an admin closing another terminal's shift). */

@@ -65,7 +65,14 @@ export default class ShiftList {
     'variance',
     'approval',
   ];
-  protected readonly reportColumns = ['cashier', 'shifts', 'short', 'over', 'pending'];
+  protected readonly reportColumns = [
+    'cashier',
+    'shifts',
+    'short',
+    'over',
+    'pending',
+    'drawerOpens',
+  ];
   protected readonly pendingOnly = signal(false);
 
   protected readonly range = computed<DateRange>(() => {
@@ -111,6 +118,11 @@ export default class ShiftList {
 
   protected totalVariance(shift: Shift): number {
     return shift.counts.reduce((sum, c) => sum + variance(c), 0);
+  }
+
+  /** Variance after the adjustments made since closing (S8; server-derived `adjustmentTotal`). */
+  protected adjustedTotal(shift: Shift): number {
+    return Math.round((this.totalVariance(shift) + (shift.adjustmentTotal ?? 0)) * 100) / 100;
   }
 
   protected approvalText(shift: Shift): string {

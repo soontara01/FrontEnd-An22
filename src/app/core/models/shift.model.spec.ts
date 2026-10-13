@@ -1,10 +1,14 @@
 import { PAYMENT_METHOD_DEFAULTS, PaymentMethod, PaymentType } from './payment-method.model';
 import { SalePayment } from './sale.model';
 import {
+  DRAWER_OPEN_REASONS,
   ShiftClosePayload,
   ShiftContext,
   ShiftCountInput,
+  adjustedVariance,
   approvalStatusFor,
+  drawerOpenError,
+  shiftAdjustmentError,
   buildShiftCounts,
   cashMovementError,
   closeChecklist,
@@ -387,18 +391,25 @@ describe('shift model', () => {
     expect(countCheck(expected, short, 100).needsApproval).toBe(true);
   });
 
+  const closedShift = (
+    id: number,
+    cashier: string,
+    diffs: number[],
+    approvalStatus = 'not_needed' as const,
+  ) => ({
+    id,
+    cashier,
+    status: 'closed' as const,
+    approvalStatus,
+    counts: diffs.map((d, i) => ({ methodId: i + 1, counted: 1000 + d, expected: 1000 })),
+  });
+
   it('reports variances per cashier over closed shifts', () => {
-    const closed = (cashier: string, diffs: number[], approvalStatus = 'not_needed' as const) => ({
-      cashier,
-      status: 'closed' as const,
-      approvalStatus,
-      counts: diffs.map((d) => ({ counted: 1000 + d, expected: 1000 })),
-    });
     const rows = varianceReport([
-      closed('somchai', [-50, 0]),
-      closed('somchai', [-50, 30]),
-      closed('suda', [-150], 'pending' as never),
-      { ...closed('suda', [-999]), status: 'open' as const },
+      closedShift(1, 'somchai', [-50, 0]),
+      closedShift(2, 'somchai', [-50, 30]),
+      closedShift(3, 'suda', [-150], 'pending' as never),
+      { ...closedShift(4, 'suda', [-999]), status: 'open' as const },
     ]);
     expect(rows).toEqual([
       {
@@ -409,6 +420,7 @@ describe('shift model', () => {
         shortTotal: 150,
         overTotal: 0,
         pending: 1,
+        drawerOpens: 0,
       },
       {
         cashier: 'somchai',
@@ -418,7 +430,66 @@ describe('shift model', () => {
         shortTotal: 100,
         overTotal: 30,
         pending: 0,
+        drawerOpens: 0,
       },
     ]);
+  });
+
+  it('logs a drawer opened without a sale with a reason and counts it (S7)', () => {
+    expect(drawerOpenError({ reason: ' ' })).toBe('กรุณาระบุเหตุผลที่เปิดลิ้นชัก');
+    expect(drawerOpenError({ reason: 'x'.repeat(201) })).toBe('เหตุผลต้องไม่เกิน 200 ตัวอักษร');
+    expect(drawerOpenError({ reason: DRAWER_OPEN_REASONS[0] })).toBeNull();
+    const shift = { status: 'open' as const, cashier: 'somchai' };
+    const as = (user: string, isAdmin = false) =>
+      shiftBlocker('drawer_open', { requireShift: true, shift, user, isAdmin });
+    expect(as('somchai')).toBeNull();
+    expect(as('Admin', true)).toBeNull();
+    expect(as('suda')).toBe('กะนี้เป็นของ somchai — ทำรายการนี้ได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
+    const rows = varianceReport([closedShift(1, 'somchai', [0])], {
+      drawerOpens: [{ shiftId: 1 }, { shiftId: 1 }, { shiftId: 2 }],
+    });
+    expect(rows[0].drawerOpens).toBe(2);
+  });
+
+  it('adjusts a closed shift separately without touching its counts (S8)', () => {
+    const shift = closedShift(1, 'somchai', [-100, 0]);
+    const cash = { methodId: 1, amount: 100, reasonCode: 'found_cash' as const, reason: '' };
+    expect(shiftAdjustmentError(shift, cash, false)).toBe('ปรับปรุงกะได้เฉพาะผู้ดูแลระบบ');
+    expect(shiftAdjustmentError({ ...shift, status: 'open' }, cash, true)).toBe(
+      'ปรับปรุงได้เฉพาะกะที่ปิดแล้ว',
+    );
+    expect(shiftAdjustmentError(shift, { ...cash, methodId: 9 }, true)).toBe(
+      'ปรับปรุงได้เฉพาะช่องทางที่นับตอนปิดกะ',
+    );
+    const confirmed = {
+      ...shift,
+      counts: [{ methodId: 1, counted: null, expected: 1000 }],
+    };
+    expect(shiftAdjustmentError(confirmed, cash, true)).toBe(
+      'ปรับปรุงได้เฉพาะช่องทางที่นับตอนปิดกะ',
+    );
+    expect(shiftAdjustmentError(shift, { ...cash, amount: 0 }, true)).toBe(
+      'จำนวนเงินต้องไม่เป็น 0 (ทศนิยมไม่เกิน 2 ตำแหน่ง)',
+    );
+    expect(shiftAdjustmentError(shift, { ...cash, amount: 0.001 }, true)).toBe(
+      'จำนวนเงินต้องไม่เป็น 0 (ทศนิยมไม่เกิน 2 ตำแหน่ง)',
+    );
+    expect(shiftAdjustmentError(shift, { ...cash, reasonCode: 'x' as never }, true)).toBe(
+      'กรุณาเลือกสาเหตุ',
+    );
+    expect(shiftAdjustmentError(shift, { ...cash, reasonCode: 'other' }, true)).toBe(
+      'กรุณาอธิบายสาเหตุ',
+    );
+    expect(shiftAdjustmentError(shift, cash, true)).toBeNull();
+    expect(shiftAdjustmentError(shift, { ...cash, amount: -50 }, true)).toBeNull();
+
+    const adjustments = [{ shiftId: 1, ...cash }];
+    expect(adjustedVariance(shift.counts[0], adjustments)).toBe(0);
+    expect(adjustedVariance(shift.counts[1], adjustments)).toBe(0);
+    expect(varianceReport([shift])[0].shortTotal).toBe(100);
+    expect(varianceReport([shift], { adjustments })[0]).toMatchObject({
+      shortCount: 0,
+      shortTotal: 0,
+    });
   });
 });

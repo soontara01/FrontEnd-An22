@@ -95,6 +95,8 @@ describe('PosStore', () => {
       openShift: vi.fn(() => of(shift)),
       shiftSummary: vi.fn(),
       cashMovements: vi.fn(() => of([])),
+      drawerOpens: vi.fn(() => of([])),
+      openDrawer: vi.fn(() => of({ id: 1, shiftId: 7, reason: 'แลกเหรียญ', by: '', at: '' })),
       addCashMovement: vi.fn(),
       countCheck: vi.fn(),
       closeShift: vi.fn(() => of({ ...shift, status: 'closed' })),
