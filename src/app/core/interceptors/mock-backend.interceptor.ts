@@ -2886,7 +2886,11 @@ function handleShifts(
     };
     const problem =
       shiftBlocker('cash_movement', { requireShift: true, shift, user, isAdmin }) ??
-      cashMovementError(payload, drawerExpected(expectedByMethod(shift, shiftContext(db))));
+      cashMovementError(
+        payload,
+        drawerExpected(expectedByMethod(shift, shiftContext(db))),
+        isAdmin,
+      );
     if (problem) return error(400, problem);
     const movement: CashMovement = {
       id: Math.max(0, ...db.cashMovements.map((m) => m.id)) + 1,

@@ -457,8 +457,15 @@ export function shiftBlocker(
   return null;
 }
 
-/** Rule for a cash movement (POS + server). `expectedCash` = what the drawer should hold now. */
-export function cashMovementError(p: CashMovementPayload, expectedCash: number): string | null {
+/**
+ * Rule for a cash movement (POS + server). `expectedCash` = what the drawer should hold now; only
+ * admins see it in the "not enough cash" message, so a cashier cannot probe it before a blind count.
+ */
+export function cashMovementError(
+  p: CashMovementPayload,
+  expectedCash: number,
+  isAdmin: boolean,
+): string | null {
   if (p.type !== 'in' && p.type !== 'out') return 'ประเภทรายการไม่ถูกต้อง';
   if (!isMoney(p.amount) || p.amount === 0)
     return 'จำนวนเงินต้องมากกว่า 0 (ทศนิยมไม่เกิน 2 ตำแหน่ง)';
@@ -466,7 +473,10 @@ export function cashMovementError(p: CashMovementPayload, expectedCash: number):
   if (!reason) return 'กรุณาระบุเหตุผล';
   if (reason.length > 200) return 'เหตุผลต้องไม่เกิน 200 ตัวอักษร';
   if (p.type === 'out' && p.amount > expectedCash) {
-    return `เงินสดในลิ้นชักไม่พอ (คาดว่ามี ${baht(expectedCash)} บาท)`;
+    // Blind count (B19): only admins learn the expected cash from the refusal.
+    return isAdmin
+      ? `เงินสดในลิ้นชักไม่พอ (คาดว่ามี ${baht(expectedCash)} บาท)`
+      : 'เงินสดในลิ้นชักไม่พอ';
   }
   return null;
 }

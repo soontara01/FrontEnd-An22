@@ -1194,14 +1194,17 @@ describe('mockBackendInterceptor – shifts', () => {
     const staff = { token: STAFF };
     const shift = await open(1000, staff);
     await sellMouse(staff);
-    const move = (amount: number) =>
+    const move = (amount: number, as: As = staff) =>
       call(
         'POST',
         `shifts/${shift.id}/cash-movements`,
         { type: 'out', amount, reason: 'ค่าส่ง' },
-        staff,
+        as,
       );
-    expect(await errorOf(move(2000))).toBe('เงินสดในลิ้นชักไม่พอ (คาดว่ามี 1,531 บาท)');
+    // Blind count (B19): the cashier is not told the expected cash, an admin is.
+    expect(await errorOf(move(2000))).toBe('เงินสดในลิ้นชักไม่พอ');
+    expect(await errorOf(move(2000, {}))).toBe('เงินสดในลิ้นชักไม่พอ (คาดว่ามี 1,531 บาท)');
+    expect(await call('GET', `shifts/${shift.id}/movements`, undefined, staff)).toEqual([]);
     await move(100);
     const x = await call<ShiftSummary>('GET', `shifts/${shift.id}/summary`, undefined, staff);
     expect(x).toMatchObject({ billCount: 1, salesTotal: 531, cashOut: 100 });

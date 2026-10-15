@@ -271,15 +271,22 @@ describe('shift model', () => {
 
   it('validates cash movements against the drawer', () => {
     const out = { type: 'out' as const, amount: 200, reason: 'ค่าส่งของ' };
-    expect(cashMovementError(out, 6700)).toBeNull();
-    expect(cashMovementError({ ...out, amount: 7000 }, 6700)).toBe(
-      'เงินสดในลิ้นชักไม่พอ (คาดว่ามี 6,700 บาท)',
-    );
-    expect(cashMovementError({ ...out, type: 'in', amount: 7000 }, 6700)).toBeNull();
-    expect(cashMovementError({ ...out, amount: 0 }, 6700)).toBe(
+    expect(cashMovementError(out, 6700, false)).toBeNull();
+    expect(cashMovementError({ ...out, type: 'in', amount: 7000 }, 6700, false)).toBeNull();
+    expect(cashMovementError({ ...out, amount: 0 }, 6700, false)).toBe(
       'จำนวนเงินต้องมากกว่า 0 (ทศนิยมไม่เกิน 2 ตำแหน่ง)',
     );
-    expect(cashMovementError({ ...out, reason: ' ' }, 6700)).toBe('กรุณาระบุเหตุผล');
+    expect(cashMovementError({ ...out, reason: ' ' }, 6700, false)).toBe('กรุณาระบุเหตุผล');
+  });
+
+  it('tells only admins the expected cash when a cash out is too large (B19)', () => {
+    const tooMuch = { type: 'out' as const, amount: 7000, reason: 'ค่าส่งของ' };
+    const staff = cashMovementError(tooMuch, 6700, false);
+    expect(staff).toBe('เงินสดในลิ้นชักไม่พอ');
+    expect(staff).not.toMatch(/\d/);
+    expect(cashMovementError(tooMuch, 6700, true)).toBe(
+      'เงินสดในลิ้นชักไม่พอ (คาดว่ามี 6,700 บาท)',
+    );
   });
 
   it('validates opening a shift', () => {

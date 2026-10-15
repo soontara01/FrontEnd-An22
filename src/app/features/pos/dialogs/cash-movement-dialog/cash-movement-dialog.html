@@ -4,7 +4,7 @@
     class="kind"
     aria-label="ประเภทรายการ"
     [value]="type()"
-    (change)="type.set($event.value)"
+    (change)="setType($event.value)"
   >
     <mat-button-toggle value="in">นำเงินเข้า</mat-button-toggle>
     <mat-button-toggle value="out">นำเงินออก</mat-button-toggle>
@@ -19,7 +19,7 @@
       min="0"
       step="0.25"
       [value]="amount() || ''"
-      (input)="amount.set($any($event.target).value)"
+      (input)="setAmount($any($event.target).value)"
       (keydown.enter)="save()"
     />
     <span matTextSuffix>บาท</span>
@@ -27,21 +27,21 @@
 
   <div class="quick">
     @for (q of quickReasons[type()]; track q) {
-      <button mat-stroked-button type="button" (click)="reason.set(q)">{{ q }}</button>
+      <button mat-stroked-button type="button" (click)="setReason(q)">{{ q }}</button>
     }
   </div>
   <mat-form-field appearance="outline" class="w-full">
     <mat-label>เหตุผล (จำเป็น)</mat-label>
-    <input matInput [value]="reason()" (input)="reason.set($any($event.target).value)" />
+    <input matInput [value]="reason()" (input)="setReason($any($event.target).value)" />
   </mat-form-field>
 
-  @if (problem(); as message) {
-    <div class="problem">{{ message }}</div>
+  @if (problem() || serverError(); as message) {
+    <div class="problem" role="alert">{{ message }}</div>
   }
 </mat-dialog-content>
 <mat-dialog-actions align="end">
   <button mat-button mat-dialog-close>ยกเลิก</button>
-  <button mat-flat-button type="button" [disabled]="!!problem()" (click)="save()">
+  <button mat-flat-button type="button" [disabled]="!!problem() || saving()" (click)="save()">
     <mat-icon>check</mat-icon>
     บันทึก
   </button>

@@ -20,7 +20,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap, tap } from 'rxjs';
 import {
-  CashMovementPayload,
+  CashMovement,
   DrawerOpenPayload,
   ManualDiscount,
   PricedLine,
@@ -46,7 +46,10 @@ import { printElement } from '@shared/utils/print-element';
 import { SellUnit, findByCode, searchProducts } from '../../data/product-lookup';
 import { PosStore } from '../../data/pos.store';
 import { BuyerDialog } from '../../dialogs/buyer-dialog/buyer-dialog';
-import { CashMovementDialog } from '../../dialogs/cash-movement-dialog/cash-movement-dialog';
+import {
+  CashMovementDialog,
+  CashMovementDialogData,
+} from '../../dialogs/cash-movement-dialog/cash-movement-dialog';
 import { DrawerOpenDialog } from '../../dialogs/drawer-open-dialog/drawer-open-dialog';
 import {
   OpenShiftDialog,
@@ -186,17 +189,15 @@ export default class PosPage {
 
   protected cashMovement(shift: Shift): void {
     this.dialog
-      .open<CashMovementDialog, void, CashMovementPayload>(CashMovementDialog, {
+      .open<CashMovementDialog, CashMovementDialogData, CashMovement>(CashMovementDialog, {
         injector: this.injector,
+        data: { shiftId: shift.id },
         width: '440px',
         maxWidth: '95vw',
         autoFocus: false,
       })
       .afterClosed()
-      .pipe(
-        filter((payload): payload is CashMovementPayload => !!payload),
-        switchMap((payload) => this.store.addCashMovement(shift.id, payload)),
-      )
+      .pipe(filter((m): m is CashMovement => !!m))
       .subscribe((m) => {
         const kind = m.type === 'in' ? 'นำเงินเข้า' : 'นำเงินออก';
         this.notify.success(`${kind} ${m.amount.toLocaleString('en-US')} บาทแล้ว`);
