@@ -20,6 +20,8 @@ import {
   PromotionType,
   formatDateRange,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -39,6 +41,7 @@ import { PromotionRow, PromotionsStore } from '../../data/promotions.store';
     StatCard,
     EmptyState,
     LoadingSpinner,
+    AdminOnlyNote,
     MATERIAL,
   ],
   templateUrl: './promotion-list.html',
@@ -48,6 +51,8 @@ import { PromotionRow, PromotionsStore } from '../../data/promotions.store';
 export default class PromotionList {
   protected readonly store = inject(PromotionsStore);
   private readonly router = inject(Router);
+  /** Only admins add / edit / enable / delete promotions (server → 403). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly columns = ['code', 'name', 'type', 'condition', 'reward', 'period', 'status'];
   protected readonly types = Object.keys(PROMOTION_TYPE_LABEL) as PromotionType[];

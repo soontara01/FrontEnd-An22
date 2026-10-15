@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { of } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
 import { ApiService } from '@core/http/api.service';
 import { User } from '@core/models';
@@ -13,16 +14,19 @@ import { MATERIAL } from '@shared/material';
   template: `
     <app-page-header [title]="'สวัสดี ' + (auth.user()?.name ?? '')" subtitle="ภาพรวมของระบบ" />
 
-    <section class="stat-grid">
-      @for (card of stats(); track card.label) {
-        <app-stat-card [label]="card.label" [value]="card.value" [icon]="card.icon" />
-      }
-    </section>
+    <!-- User stats come from GET /users: admin only (server → 403 for others). -->
+    @if (auth.isAdmin()) {
+      <section class="stat-grid">
+        @for (card of stats(); track card.label) {
+          <app-stat-card [label]="card.label" [value]="card.value" [icon]="card.icon" />
+        }
+      </section>
 
-    <a mat-stroked-button href="/users">
-      <mat-icon>group</mat-icon>
-      จัดการผู้ใช้งาน
-    </a>
+      <a mat-stroked-button href="/users">
+        <mat-icon>group</mat-icon>
+        จัดการผู้ใช้งาน
+      </a>
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -30,7 +34,10 @@ export default class Dashboard {
   protected readonly auth = inject(AuthService);
 
   // Uses the shared ApiService directly (no feature store needed for read-only stats).
-  private readonly users = toSignal(inject(ApiService).get<User[]>('users'), { initialValue: [] });
+  private readonly users = toSignal(
+    this.auth.isAdmin() ? inject(ApiService).get<User[]>('users') : of([]),
+    { initialValue: [] },
+  );
 
   protected readonly stats = computed(() => {
     const users = this.users();

@@ -12,7 +12,9 @@ import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { Router } from '@angular/router';
+import { AuthService } from '@core/auth/auth.service';
 import { effectiveCost, formatDateRange } from '@core/models';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -36,6 +38,7 @@ type RowFilter = 'all' | 'none' | 'scheduled' | 'expiring';
     StatCard,
     EmptyState,
     LoadingSpinner,
+    AdminOnlyNote,
     ThaiDatePipe,
     MATERIAL,
   ],
@@ -46,6 +49,8 @@ type RowFilter = 'all' | 'none' | 'scheduled' | 'expiring';
 export default class PriceOverview {
   protected readonly store = inject(PricingStore);
   private readonly router = inject(Router);
+  /** Only admins change prices (server → 403); the SKU page is then read-only. */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly expiringDays = EXPIRING_DAYS;
   protected readonly columns = ['sku', 'name', 'cost', 'current', 'margin', 'period', 'next'];

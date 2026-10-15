@@ -21,6 +21,10 @@
   />
 </section>
 
+@if (!isAdmin()) {
+  <app-admin-only-note />
+}
+
 <div class="filter-row">
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>ค้นหา SKU / ชื่อสินค้า</mat-label>

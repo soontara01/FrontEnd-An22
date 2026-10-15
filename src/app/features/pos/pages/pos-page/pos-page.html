@@ -47,7 +47,8 @@
           <mat-icon>inbox</mat-icon>
           <span>เปิดลิ้นชัก (ไม่มีการขาย)</span>
         </button>
-        <button mat-menu-item (click)="shiftReport(shift)">
+        <!-- Another cashier's shift: only admins may read it (server → 403). -->
+        <button mat-menu-item [disabled]="!store.canCloseShift()" (click)="shiftReport(shift)">
           <mat-icon>summarize</mat-icon>
           <span>X report (ยอดระหว่างกะ)</span>
         </button>

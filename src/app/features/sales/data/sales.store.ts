@@ -11,6 +11,7 @@ import {
   Promotion,
   Sale,
   SaleStatus,
+  VoidPayload,
   Shift,
   ShiftAdjustment,
   ShiftAdjustmentPayload,
@@ -122,8 +123,8 @@ export class SalesStore {
     return id ? terminalLabel(id, this._terminals()) : '-';
   }
 
-  void(id: number, reason: string): Observable<Sale> {
-    return this.api.void(id, reason);
+  void(id: number, payload: VoidPayload): Observable<Sale> {
+    return this.api.void(id, payload);
   }
 
   /** Shifts opened within the range + the variance per cashier over them. */

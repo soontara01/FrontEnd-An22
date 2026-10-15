@@ -21,8 +21,10 @@ import {
   hasStarted,
   promotionStatus,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
@@ -32,7 +34,7 @@ import { PromotionsStore } from '../../data/promotions.store';
 /** Read-only view of one promotion (`/promotions/:id`). */
 @Component({
   selector: 'app-promotion-detail',
-  imports: [RouterLink, PageHeader, LoadingSpinner, PromotionPreview, MATERIAL],
+  imports: [RouterLink, PageHeader, LoadingSpinner, AdminOnlyNote, PromotionPreview, MATERIAL],
   templateUrl: './promotion-detail.html',
   styleUrl: './promotion-detail.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,6 +44,8 @@ export default class PromotionDetail implements OnInit {
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
+  /** Only admins edit / enable / delete promotions (server → 403). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   /** Bound from the `:id` route param. */
   readonly id = input.required<string>();

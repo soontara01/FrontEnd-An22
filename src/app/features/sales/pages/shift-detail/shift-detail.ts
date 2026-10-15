@@ -60,7 +60,7 @@ export default class ShiftDetail {
   /** Route param (withComponentInputBinding). */
   readonly id = input<string>();
 
-  protected readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  protected readonly isAdmin = this.auth.isAdmin;
   protected readonly data = rxResource({
     params: () => Number(this.id()),
     stream: ({ params }) => this.store.shiftDetail(params),

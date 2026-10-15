@@ -40,6 +40,7 @@ import {
   todayIso,
   vatBreakdown,
   voidError,
+  VoidPayload,
 } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -53,7 +54,7 @@ import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { printElement } from '@shared/utils/print-element';
 import { SalesStore } from '../../data/sales.store';
-import { VoidDialog } from '../../dialogs/void-dialog/void-dialog';
+import { VoidDialog, VoidDialogData } from '../../dialogs/void-dialog/void-dialog';
 
 /**
  * One bill (`/sales/:id`): lines with cost / profit, payments, receipt copy, same-day void and
@@ -113,7 +114,7 @@ export default class SaleDetail {
   protected readonly creditNotes = computed<CreditNote[]>(() =>
     this.notes.hasValue() ? this.notes.value() : [],
   );
-  protected readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  protected readonly isAdmin = this.auth.isAdmin;
   protected readonly exchangesRes = rxResource({
     params: () => Number(this.id()),
     stream: ({ params }) => this.store.exchangesOf(params),
@@ -303,11 +304,15 @@ export default class SaleDetail {
 
   protected voidSale(sale: Sale): void {
     this.dialog
-      .open<VoidDialog, Sale, string>(VoidDialog, { data: sale, width: '480px', maxWidth: '95vw' })
+      .open<VoidDialog, VoidDialogData, VoidPayload>(VoidDialog, {
+        data: { sale, needsApproval: !this.isAdmin() },
+        width: '480px',
+        maxWidth: '95vw',
+      })
       .afterClosed()
       .pipe(
-        filter((reason): reason is string => !!reason),
-        switchMap((reason) => this.store.void(sale.id, reason)),
+        filter((payload): payload is VoidPayload => !!payload),
+        switchMap((payload) => this.store.void(sale.id, payload)),
       )
       .subscribe((voided) => {
         this.sale.set(voided);

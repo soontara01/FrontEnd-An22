@@ -9,8 +9,10 @@ import {
   PAYMENT_TYPE_LABEL,
   PaymentMethod,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
@@ -31,6 +33,7 @@ import {
     StatCard,
     EmptyState,
     LoadingSpinner,
+    AdminOnlyNote,
     MATERIAL,
   ],
   templateUrl: './payment-method-list.html',
@@ -42,6 +45,8 @@ export default class PaymentMethodList {
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
   private readonly notify = inject(NotificationService);
+  /** Only admins add / edit / reorder / delete methods (server → 403). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly columns = [
     'order',
@@ -52,7 +57,7 @@ export default class PaymentMethodList {
     'details',
     'status',
     'actions',
-  ];
+  ].filter((c) => this.isAdmin() || (c !== 'order' && c !== 'actions'));
   protected readonly typeIcon = PAYMENT_TYPE_ICON;
   /** Row being moved (disables the order buttons meanwhile). */
   protected readonly moving = signal(false);

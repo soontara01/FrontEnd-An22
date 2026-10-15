@@ -54,6 +54,7 @@ import {
   SupplierPayload,
   User,
   UserPayload,
+  userChangeError,
   allBarcodes,
   canPurchase,
   categoryPath,
@@ -83,6 +84,7 @@ import {
   priceCart,
   manualDiscountError,
   voidError,
+  VoidPayload,
   saleDay,
   normalizeStoreInfo,
   creditNoteError,
@@ -887,6 +889,8 @@ function handle(
     const user = checkCredentials(username, password, db.users);
     return typeof user === 'string' ? error(400, user) : ok({ user });
   }
+  const forbidden = adminOnlyError(req, path);
+  if (forbidden) return error(403, forbidden);
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
   if (path === 'products' || path.startsWith('products/')) return handleProducts(req, path, db);
   if (path === 'prices' || path.startsWith('prices/')) return handlePrices(req, path, db);
@@ -929,6 +933,51 @@ function handle(
   return notFound(req, path);
 }
 
+/** Writes per master that only admins may make (`saas-plan.md` section 17); reads stay open. */
+const ADMIN_WRITES: [prefix: string, what: string][] = [
+  ['categories', 'หมวดหมู่'],
+  ['suppliers', 'ผู้จำหน่าย'],
+  ['payment-methods', 'ช่องทางชำระเงิน'],
+  ['prices', 'ราคาขาย'],
+  ['promotions', 'โปรโมชั่น'],
+];
+
+/**
+ * Admin-only endpoints (permission table, `saas-plan.md` section 17): a non-admin gets this
+ * message as a 403. Rules that need the record (shift owner, void approval) live in the handlers.
+ */
+function adminOnlyError(req: HttpRequest<unknown>, path: string): string | null {
+  if (actorIsAdmin()) return null;
+  const write = req.method !== 'GET';
+  if (path === 'users' || path.startsWith('users/')) return 'จัดการผู้ใช้ได้เฉพาะผู้ดูแลระบบ';
+  for (const [prefix, what] of ADMIN_WRITES) {
+    if (write && (path === prefix || path.startsWith(prefix + '/'))) {
+      return `แก้ไข${what}ได้เฉพาะผู้ดูแลระบบ`;
+    }
+  }
+  const stockOut =
+    (req.method === 'PUT' &&
+      /^products\/\d+\/stock$/.test(path) &&
+      Number((req.body as { delta?: unknown } | null)?.delta) < 0) ||
+    (req.method === 'POST' && /^products\/\d+\/serials\/remove$/.test(path));
+  if (stockOut) return 'ตัดสต็อกออกได้เฉพาะผู้ดูแลระบบ';
+  if (req.method === 'POST' && /^sales\/\d+\/credit-notes$/.test(path)) {
+    return 'ออกใบลดหนี้ได้เฉพาะผู้ดูแลระบบ';
+  }
+  if (req.method === 'POST' && /^sales\/\d+\/tax-invoice\/reissue$/.test(path)) {
+    return 'ยกเลิกและออกใบกำกับภาษีใหม่ได้เฉพาะผู้ดูแลระบบ';
+  }
+  if (path === 'tax-invoices' && req.method === 'GET') return 'ดูรายงานภาษีขายได้เฉพาะผู้ดูแลระบบ';
+  if (path === 'settings/store' && write) return 'แก้ข้อมูลร้านได้เฉพาะผู้ดูแลระบบ';
+  if (req.method === 'POST' && /^shifts\/\d+\/approve$/.test(path)) {
+    return 'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ';
+  }
+  if (req.method === 'POST' && /^shifts\/\d+\/adjustments$/.test(path)) {
+    return 'ปรับปรุงกะได้เฉพาะผู้ดูแลระบบ';
+  }
+  return null;
+}
+
 function handleUsers(
   req: HttpRequest<unknown>,
   path: string,
@@ -954,12 +1003,27 @@ function handleUsers(
     switch (req.method) {
       case 'GET':
         return ok(users[index]);
-      case 'PUT':
-        users[index] = { ...users[index], ...(req.body as UserPayload) };
+      case 'PUT': {
+        const payload = { ...users[index], ...(req.body as Partial<UserPayload>) };
+        const problem = userChangeError(
+          users,
+          { kind: 'update', id: users[index].id, payload },
+          actor?.id ?? null,
+        );
+        if (problem) return error(400, problem);
+        users[index] = payload;
         return ok(users[index]);
-      case 'DELETE':
+      }
+      case 'DELETE': {
+        const problem = userChangeError(
+          users,
+          { kind: 'delete', id: users[index].id },
+          actor?.id ?? null,
+        );
+        if (problem) return error(400, problem);
         users.splice(index, 1);
         return ok(null);
+      }
     }
   }
   return notFound(req, path);
@@ -1906,8 +1970,17 @@ function handleSales(
 
   if (!action && req.method === 'GET') return ok(withReturns(sale));
   if (action === 'void' && req.method === 'POST') {
-    const { reason } = req.body as { reason: string };
-    return voidSale(sale, (reason ?? '').trim(), db);
+    const { reason, approval } = (req.body ?? {}) as Partial<VoidPayload>;
+    // A non-admin voids only with an admin's login typed at the terminal (P3, like shift close).
+    let approver: string | null = null;
+    if (!actorIsAdmin()) {
+      if (!approval) return error(403, 'ยกเลิกบิลต้องให้ผู้ดูแลระบบอนุมัติ');
+      const found = checkCredentials(approval.username, approval.password, db.users);
+      if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
+      if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
+      approver = found.name;
+    }
+    return voidSale(sale, (reason ?? '').trim(), approver, db);
   }
   const invoicesOfSale = () => db.taxInvoices.filter((t) => t.saleId === sale.id);
   if (action === 'tax-invoice' && req.method === 'GET') {
@@ -2390,7 +2463,12 @@ function createTaxInvoice(
  * Cancels a paid sale of today (`voidError()`) and puts its goods back at their sale-time cost (serials back in stock,
  * non-serial re-averaged). Orders from before the POS have no lines and just change status.
  */
-function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpResponse<unknown>> {
+function voidSale(
+  sale: Sale,
+  reason: string,
+  approvedBy: string | null,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
   const problem = voidError(sale, reason, todayIso());
   if (problem) return error(400, problem);
   // The money goes back out of the drawer of the shift the void is made in.
@@ -2445,6 +2523,8 @@ function voidSale(sale: Sale, reason: string, db: MockDb): Observable<HttpRespon
     voidedAt: now,
     voidReason: reason,
     voidShiftId: shift.shiftId,
+    voidedBy: actorName(),
+    voidApprovedBy: approvedBy,
   });
   // A full tax invoice of a voided bill is cancelled with it.
   const invoice = db.taxInvoices.find((t) => t.saleId === sale.id && !t.cancelledAt);
@@ -2687,8 +2767,12 @@ function handleShifts(
     const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    // Non-admins see only their own shifts (P6).
     const inRange = db.shifts.filter(
-      (s) => (!from || shiftDay(s) >= from) && (!to || shiftDay(s) <= to),
+      (s) =>
+        (isAdmin || s.cashier === user) &&
+        (!from || shiftDay(s) >= from) &&
+        (!to || shiftDay(s) <= to),
     );
     if (path === 'shifts/variance-report') {
       return ok(
@@ -2707,6 +2791,14 @@ function handleShifts(
     );
   }
 
+  if (path === 'shifts/last-float' && req.method === 'GET') {
+    // Float the last closed shift of this terminal left in the drawer (opening a new shift).
+    const last = db.shifts
+      .filter((s) => s.terminalId === terminalId && s.status === 'closed')
+      .sort((a, b) => b.openedAt.localeCompare(a.openedAt))[0];
+    return ok({ floatLeft: last?.floatLeft ?? 0 });
+  }
+
   const match =
     /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|count-check|close|approve|drawer-opens|adjustments))?$/.exec(
       path,
@@ -2716,6 +2808,12 @@ function handleShifts(
   if (!shift) return error(404, 'ไม่พบกะ');
   const action = match[2];
   const now = new Date().toISOString();
+  // Someone else's shift: only admins may read it or count / close it (P6).
+  const others = shift.cashier !== user && !isAdmin;
+  if (others && req.method === 'GET') return error(403, 'ดูได้เฉพาะกะของตัวเอง');
+  if (others && (action === 'count-check' || action === 'close')) {
+    return error(403, 'ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
+  }
 
   if (!action && req.method === 'GET') return ok(withAdjustmentTotal(db, shift));
   if (action === 'movements' && req.method === 'GET') {
@@ -2801,9 +2899,6 @@ function handleShifts(
   if (action === 'count-check' && req.method === 'POST') {
     // Reveals expected amounts / variances only after a full blind count (S2); stores nothing.
     if (shift.status !== 'open') return error(400, 'กะนี้ปิดไปแล้ว');
-    if (user !== shift.cashier && !isAdmin) {
-      return error(400, 'ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
-    }
     const counts = ((req.body ?? {}) as { counts?: ShiftCountInput[] }).counts ?? [];
     const expected = expectedByMethod(shift, shiftContext(db));
     const problem = countInputsError(expected, counts);
@@ -2855,7 +2950,6 @@ function handleShifts(
     return ok(shift);
   }
   if (action === 'approve' && req.method === 'POST') {
-    if (!isAdmin) return error(400, 'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ');
     if (shift.approvalStatus !== 'pending') return error(400, 'กะนี้ไม่ได้รออนุมัติ');
     Object.assign(shift, { approvalStatus: 'approved', approvedBy: user, approvedAt: now });
     return ok(shift);

@@ -4,11 +4,17 @@
       <mat-icon>arrow_back</mat-icon>
       กลับ
     </a>
-    <button mat-flat-button (click)="openForm()">
-      <mat-icon>add</mat-icon>
-      เพิ่มช่วงราคา
-    </button>
+    @if (isAdmin()) {
+      <button mat-flat-button (click)="openForm()">
+        <mat-icon>add</mat-icon>
+        เพิ่มช่วงราคา
+      </button>
+    }
   </app-page-header>
+
+  @if (!isAdmin()) {
+    <app-admin-only-note />
+  }
 
   <section class="summary">
     <div>
@@ -115,7 +121,9 @@
       </div>
     } @else {
       <app-empty-state icon="sell" message="SKU นี้ยังไม่มีช่วงราคา">
-        <button mat-flat-button (click)="openForm()">เพิ่มช่วงราคาแรก</button>
+        @if (isAdmin()) {
+          <button mat-flat-button (click)="openForm()">เพิ่มช่วงราคาแรก</button>
+        }
       </app-empty-state>
     }
   </mat-card>

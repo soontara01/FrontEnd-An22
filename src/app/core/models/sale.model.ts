@@ -2,6 +2,7 @@ import type { Exchange } from './exchange.model';
 import type { PaymentType } from './payment-method.model';
 import { toIsoDate } from './price.model';
 import type { ItemType, VatType } from './product.model';
+import type { ApprovalCredentials } from './shift.model';
 import type { TaxInvoiceBuyer } from './tax-invoice.model';
 
 export type SaleStatus = 'pending' | 'paid' | 'cancelled';
@@ -139,6 +140,10 @@ export interface Sale {
   shiftId?: number | null;
   /** Shift the void was made in — its money goes out of that drawer (server-set) */
   voidShiftId?: number | null;
+  /** Who voided the bill (server-set; missing = before this was recorded) */
+  voidedBy?: string | null;
+  /** Admin who approved a non-admin's void at the terminal (server-set; null = voided by an admin) */
+  voidApprovedBy?: string | null;
   /** Terminal (POS device) the bill was made at (server-set snapshot; missing = before the registry) */
   terminalId?: number | null;
   /** That terminal's Revenue Dept POS ID when the bill was made — printed on its receipts */
@@ -203,6 +208,12 @@ export function voidError(
   if (saleDay(sale) !== today) return 'ยกเลิกได้เฉพาะบิลของวันนี้ บิลข้ามวันต้องออกใบลดหนี้';
   if (!reason.trim()) return 'กรุณาระบุเหตุผลการยกเลิก';
   return null;
+}
+
+/** `POST /sales/:id/void`: a non-admin needs an admin's login typed at the terminal (else 403). */
+export interface VoidPayload {
+  reason: string;
+  approval?: ApprovalCredentials | null;
 }
 
 /** One cart line as entered by the cashier (prices and promotions are derived). */

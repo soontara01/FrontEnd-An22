@@ -75,7 +75,7 @@ export default class CreditNoteForm {
 
   protected readonly icon = PAYMENT_TYPE_ICON;
   protected readonly quickReasons = ['สินค้าชำรุด', 'ลูกค้าคืนสินค้า', 'เปลี่ยนสินค้า'];
-  protected readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  protected readonly isAdmin = this.auth.isAdmin;
 
   protected readonly data = rxResource({
     params: () => Number(this.id()),

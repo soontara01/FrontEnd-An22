@@ -91,9 +91,9 @@ export class PosApi {
     return this.api.get<Shift | null>('shifts/current');
   }
 
-  /** All shifts, newest first (to find the float the last shift left in the drawer). */
-  shifts(): Observable<Shift[]> {
-    return this.api.get<Shift[]>('shifts');
+  /** Float the last closed shift of this terminal (`X-Terminal-Id`) left in the drawer. */
+  lastFloat(): Observable<{ floatLeft: number }> {
+    return this.api.get<{ floatLeft: number }>('shifts/last-float');
   }
 
   openShift(payload: ShiftOpenPayload): Observable<Shift> {

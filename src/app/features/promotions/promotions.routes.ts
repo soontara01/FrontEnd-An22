@@ -1,5 +1,6 @@
 import { provideNativeDateAdapter } from '@angular/material/core';
 import { Routes } from '@angular/router';
+import { adminGuardTo } from '@core/auth/auth.guard';
 import { PromotionsApi } from './data/promotions-api.service';
 import { PromotionsStore } from './data/promotions.store';
 import PromotionDetail from './pages/promotion-detail/promotion-detail';
@@ -14,9 +15,20 @@ export default [
     providers: [PromotionsApi, PromotionsStore, provideNativeDateAdapter()],
     children: [
       { path: '', component: PromotionList },
-      { path: 'new', title: 'เพิ่มโปรโมชั่น', component: PromotionForm },
+      // Only admins create / edit promotions (server → 403); others go back to the list.
+      {
+        path: 'new',
+        title: 'เพิ่มโปรโมชั่น',
+        component: PromotionForm,
+        canMatch: [adminGuardTo('/promotions')],
+      },
       { path: ':id', title: 'โปรโมชั่น', component: PromotionDetail },
-      { path: ':id/edit', title: 'แก้ไขโปรโมชั่น', component: PromotionForm },
+      {
+        path: ':id/edit',
+        title: 'แก้ไขโปรโมชั่น',
+        component: PromotionForm,
+        canMatch: [adminGuardTo('/promotions')],
+      },
     ],
   },
 ] satisfies Routes;

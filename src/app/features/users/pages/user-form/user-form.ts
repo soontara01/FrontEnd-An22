@@ -7,9 +7,11 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { UserRole } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
+import { UserRole, userChangeError } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -36,6 +38,7 @@ export default class UserForm implements OnInit {
   private readonly store = inject(UsersStore);
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
+  private readonly auth = inject(AuthService);
 
   /** Bound from the `:id` route param (withComponentInputBinding). */
   readonly id = input<string>();
@@ -51,8 +54,21 @@ export default class UserForm implements OnInit {
     role: ['user' as UserRole, Validators.required],
     active: [true],
   });
+  private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+
+  /** Same rule as the server: not yourself, never the last active admin (`userChangeError()`). */
+  protected readonly problem = computed(() => {
+    if (!this.isEdit()) return null;
+    const { role = 'user', active = true } = this.value();
+    return userChangeError(
+      this.store.users(),
+      { kind: 'update', id: Number(this.id()), payload: { role, active } },
+      this.auth.user()?.id ?? null,
+    );
+  });
 
   ngOnInit(): void {
+    this.store.load(); // the other admins, for the last-admin rule
     const id = Number(this.id());
     if (!id) return;
     this.loading.set(true);
@@ -66,7 +82,7 @@ export default class UserForm implements OnInit {
   }
 
   protected save(): void {
-    if (this.form.invalid) {
+    if (this.form.invalid || this.problem()) {
       this.form.markAllAsTouched();
       return;
     }

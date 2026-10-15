@@ -1,5 +1,5 @@
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -48,7 +48,10 @@ export class MainLayout {
   protected readonly auth = inject(AuthService);
   protected readonly loading = inject(LoadingService);
   protected readonly theme = inject(ThemeService);
-  protected readonly menu = MENU;
+  /** Menus this user may open (admin-only ones hidden for others). */
+  protected readonly menu = computed(() =>
+    MENU.filter((item) => !item.adminOnly || this.auth.isAdmin()),
+  );
 
   private readonly router = inject(Router);
   protected readonly activeMenu = toSignal(

@@ -129,14 +129,16 @@
         <td mat-cell *matCellDef="let p" class="actions">
           @if (p.serialControl) {
             <!-- Serial SKU: stock moves only by serial number -->
-            <button
-              mat-icon-button
-              matTooltip="ตัดออก Serial"
-              [disabled]="p.stock === 0"
-              (click)="openRemove(p)"
-            >
-              <mat-icon>remove_circle</mat-icon>
-            </button>
+            @if (isAdmin()) {
+              <button
+                mat-icon-button
+                matTooltip="ตัดออก Serial"
+                [disabled]="p.stock === 0"
+                (click)="openRemove(p)"
+              >
+                <mat-icon>remove_circle</mat-icon>
+              </button>
+            }
             <button
               mat-icon-button
               matTooltip="รับเข้า Serial"
@@ -157,14 +159,16 @@
               <mat-icon>print</mat-icon>
             </a>
           } @else {
-            <button
-              mat-icon-button
-              matTooltip="ตัดออก (ระบุจำนวน)"
-              [disabled]="p.stock === 0"
-              (click)="openStockIssue(p)"
-            >
-              <mat-icon>remove_circle_outline</mat-icon>
-            </button>
+            @if (isAdmin()) {
+              <button
+                mat-icon-button
+                matTooltip="ตัดออก (ระบุจำนวน)"
+                [disabled]="p.stock === 0"
+                (click)="openStockIssue(p)"
+              >
+                <mat-icon>remove_circle_outline</mat-icon>
+              </button>
+            }
             <button
               mat-icon-button
               matTooltip="รับเข้า (ระบุต้นทุน)"

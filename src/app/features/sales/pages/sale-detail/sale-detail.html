@@ -69,6 +69,12 @@
             <div class="voided">
               <span class="text-muted">ยกเลิกเมื่อ</span>
               {{ s.voidedAt | thaiDate: 'datetime' }} — {{ s.voidReason }}
+              @if (s.voidedBy) {
+                <span class="text-muted small">
+                  (โดย {{ s.voidedBy
+                  }}{{ s.voidApprovedBy ? ' · อนุมัติโดย ' + s.voidApprovedBy : '' }})
+                </span>
+              }
             </div>
           }
           @if (isPos() && s.status === 'paid' && voidBlocker()) {

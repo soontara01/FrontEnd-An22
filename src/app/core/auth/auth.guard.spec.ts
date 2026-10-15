@@ -1,15 +1,16 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Route, UrlSegment, UrlTree, provideRouter } from '@angular/router';
-import { authGuard, guestGuard } from './auth.guard';
+import { adminGuard, adminGuardTo, authGuard, guestGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 
 describe('auth guards', () => {
   const isLoggedIn = signal(false);
+  const isAdmin = signal(false);
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: AuthService, useValue: { isLoggedIn } }],
+      providers: [provideRouter([]), { provide: AuthService, useValue: { isLoggedIn, isAdmin } }],
     });
   });
 
@@ -33,5 +34,17 @@ describe('auth guards', () => {
   it('guestGuard redirects home when logged in', () => {
     isLoggedIn.set(true);
     expect(String(run(guestGuard))).toBe('/');
+  });
+
+  it('adminGuard sends non-admins home and lets admins in', () => {
+    isAdmin.set(false);
+    expect(String(run(adminGuard))).toBe('/');
+    isAdmin.set(true);
+    expect(run(adminGuard)).toBe(true);
+  });
+
+  it('adminGuardTo redirects non-admins within the feature', () => {
+    isAdmin.set(false);
+    expect(String(run(adminGuardTo('/promotions')))).toBe('/promotions');
   });
 });

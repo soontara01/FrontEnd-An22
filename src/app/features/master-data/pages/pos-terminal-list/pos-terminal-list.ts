@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Injector, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
 import { filter, switchMap } from 'rxjs';
@@ -37,7 +37,7 @@ export default class PosTerminalList {
   /** The terminal this device is set to (null = none) */
   protected readonly thisTerminal = inject(TerminalService).terminalId;
 
-  protected readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  protected readonly isAdmin = this.auth.isAdmin;
   protected readonly columns = ['id', 'name', 'posId', 'status', 'actions'];
 
   constructor() {

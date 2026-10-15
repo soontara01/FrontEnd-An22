@@ -21,8 +21,10 @@ import {
   marginPercent,
   priceStatus,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -48,6 +50,7 @@ const STATUS_BADGE: Record<PriceStatus, string> = {
     PageHeader,
     EmptyState,
     LoadingSpinner,
+    AdminOnlyNote,
     ThaiDatePipe,
     MATERIAL,
   ],
@@ -61,6 +64,8 @@ export default class SkuPrices {
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
   private readonly notify = inject(NotificationService);
+  /** Only admins add / edit / delete price periods (server → 403). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   /** Bound from the `:productId` route param. */
   readonly productId = input.required<string>();
@@ -73,7 +78,7 @@ export default class SkuPrices {
     'margin',
     'note',
     'actions',
-  ];
+  ].filter((c) => c !== 'actions' || this.isAdmin());
 
   protected readonly row = computed(() =>
     this.store.rows().find((r) => r.product.id === Number(this.productId())),

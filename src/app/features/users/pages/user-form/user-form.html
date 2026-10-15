@@ -39,11 +39,14 @@
         </mat-form-field>
 
         <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
+        @if (problem(); as p) {
+          <p class="problem">{{ p }}</p>
+        }
       </mat-card-content>
 
       <mat-card-actions align="end">
         <a mat-button routerLink="/users">ยกเลิก</a>
-        <button mat-flat-button type="submit" [disabled]="saving()">
+        <button mat-flat-button type="submit" [disabled]="saving() || !!problem()">
           <mat-icon>save</mat-icon>
           บันทึก
         </button>

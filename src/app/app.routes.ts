@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard } from '@core/auth/auth.guard';
+import { adminGuard, authGuard, guestGuard } from '@core/auth/auth.guard';
 import { MENU } from '@core/navigation/menu.config';
 
 export const routes: Routes = [
@@ -16,7 +16,12 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: MENU[0].path },
       // 1 menu = 1 lazy feature module (built from MENU)
-      ...MENU.map(({ path, label, loadChildren }) => ({ path, title: label, loadChildren })),
+      ...MENU.map(({ path, label, loadChildren, adminOnly }) => ({
+        path,
+        title: label,
+        loadChildren,
+        ...(adminOnly ? { canMatch: [adminGuard] } : {}),
+      })),
     ],
   },
   {

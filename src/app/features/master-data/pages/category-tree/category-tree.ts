@@ -15,8 +15,10 @@ import {
   CategoryLevel,
   CategoryNode,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
@@ -36,13 +38,15 @@ interface TreeRow {
 /** 3-level category tree (แผนก > หมวด > หมวดย่อย) with add / edit / delete. */
 @Component({
   selector: 'app-category-tree',
-  imports: [StatCard, EmptyState, LoadingSpinner, MATERIAL],
+  imports: [StatCard, EmptyState, LoadingSpinner, AdminOnlyNote, MATERIAL],
   templateUrl: './category-tree.html',
   styleUrl: './category-tree.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export default class CategoryTree {
   protected readonly store = inject(CategoryStore);
+  /** Only admins add / edit / delete categories (server → 403). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
   private readonly notify = inject(NotificationService);

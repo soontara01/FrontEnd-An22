@@ -12,6 +12,8 @@ import {
   shiftOpenTooLong,
   variance,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -39,6 +41,7 @@ import { SalesStore } from '../../data/sales.store';
     PageHeader,
     EmptyState,
     LoadingSpinner,
+    AdminOnlyNote,
     ThaiDatePipe,
     MATERIAL,
   ],
@@ -49,6 +52,8 @@ import { SalesStore } from '../../data/sales.store';
 export default class ShiftList {
   protected readonly store = inject(SalesStore);
   private readonly router = inject(Router);
+  /** Non-admins get only their own shifts from the server (P6). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();

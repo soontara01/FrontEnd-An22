@@ -28,6 +28,7 @@ import {
   stockInPacks,
   stockLevel,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -67,6 +68,8 @@ export default class ProductList {
   private readonly notify = inject(NotificationService);
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
+  /** Taking stock out (issue / serial removal) is admin only (P2, server → 403); receiving is not. */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly columns = [
     'sku',

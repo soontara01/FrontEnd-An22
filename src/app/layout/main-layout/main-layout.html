@@ -10,7 +10,7 @@
       <span>FrontEnd An22</span>
     </div>
     <mat-nav-list>
-      @for (item of menu; track item.path) {
+      @for (item of menu(); track item.path) {
         <a mat-list-item [href]="'/' + item.path" [activated]="activeMenu() === item.path">
           <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
           <span matListItemTitle>{{ item.label }}</span>

@@ -8,6 +8,10 @@
   </a>
 </app-page-header>
 
+@if (!isAdmin()) {
+  <app-admin-only-note message="แสดงเฉพาะกะของคุณ — กะของคนอื่นดูได้เฉพาะผู้ดูแลระบบ" />
+}
+
 <div class="filter-row">
   <div class="presets">
     @for (p of presets; track p.id) {

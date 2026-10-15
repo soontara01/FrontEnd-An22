@@ -8,6 +8,8 @@ export interface MenuItem {
   path: string;
   /** Lazy-loaded feature routes: 1 menu = 1 feature module = 1 chunk, loaded once */
   loadChildren: LoadChildren;
+  /** Only admins see the menu and may open it (`adminGuard`); the server answers 403 too. */
+  adminOnly?: boolean;
 }
 
 /**
@@ -68,6 +70,7 @@ export const MENU: MenuItem[] = [
     icon: 'group',
     path: 'users',
     loadChildren: () => import('@features/users/users.routes'),
+    adminOnly: true,
   },
   {
     label: 'ตั้งค่า',

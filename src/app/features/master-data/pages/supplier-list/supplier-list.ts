@@ -13,9 +13,11 @@ import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { Router, RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
+import { AuthService } from '@core/auth/auth.service';
 import { Supplier, branchLabel, creditLabel } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
@@ -33,6 +35,7 @@ import { SupplierStore } from '../../data/supplier.store';
     StatCard,
     EmptyState,
     LoadingSpinner,
+    AdminOnlyNote,
     MATERIAL,
   ],
   templateUrl: './supplier-list.html',
@@ -44,6 +47,8 @@ export default class SupplierList {
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
+  /** Only admins add / edit / delete suppliers (server → 403); others open the form read-only. */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly columns = [
     'code',
@@ -54,7 +59,7 @@ export default class SupplierList {
     'productCount',
     'active',
     'actions',
-  ];
+  ].filter((c) => c !== 'actions' || this.isAdmin());
   protected readonly dataSource = new MatTableDataSource<Supplier>([]);
   protected readonly filterText = signal('');
   protected readonly includeInactive = signal(false);

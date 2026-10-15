@@ -4,6 +4,10 @@
   <app-stat-card label="SKU ที่ผูกแล้ว" [value]="store.linkedSkuCount()" icon="link" />
 </section>
 
+@if (!isAdmin()) {
+  <app-admin-only-note />
+}
+
 <div class="filter-row">
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>ค้นหา รหัส / ชื่อ / เลขภาษี / ผู้ติดต่อ</mat-label>
@@ -17,10 +21,12 @@
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
     <mat-icon>refresh</mat-icon>
   </button>
-  <a mat-flat-button routerLink="new">
-    <mat-icon>add</mat-icon>
-    เพิ่มผู้จำหน่าย
-  </a>
+  @if (isAdmin()) {
+    <a mat-flat-button routerLink="new">
+      <mat-icon>add</mat-icon>
+      เพิ่มผู้จำหน่าย
+    </a>
+  }
 </div>
 
 <mat-card appearance="outlined">
@@ -111,7 +117,9 @@
 
   @if (!store.loading() && store.count() === 0) {
     <app-empty-state icon="local_shipping" message="ยังไม่มีผู้จำหน่าย">
-      <a mat-flat-button routerLink="new">เพิ่มผู้จำหน่ายรายแรก</a>
+      @if (isAdmin()) {
+        <a mat-flat-button routerLink="new">เพิ่มผู้จำหน่ายรายแรก</a>
+      }
     </app-empty-state>
   }
 </mat-card>

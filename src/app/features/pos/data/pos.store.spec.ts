@@ -91,7 +91,7 @@ describe('PosStore', () => {
       buyerByTaxId: vi.fn(() => of(null)),
       currentShift: vi.fn(() => of(null)),
       shift: vi.fn(() => of(shift)),
-      shifts: vi.fn(() => of([])),
+      lastFloat: vi.fn(() => of({ floatLeft: 0 })),
       openShift: vi.fn(() => of(shift)),
       shiftSummary: vi.fn(),
       cashMovements: vi.fn(() => of([])),
@@ -331,18 +331,12 @@ describe('PosStore', () => {
       expect(store.locked()).toBe(false);
     });
 
-    it("defaults the opening float to what this terminal's last shift left", () => {
-      localStorage.setItem('an22.pos.terminal', '2');
-      api.shifts.mockReturnValue(
-        of([
-          { ...shift, id: 9, terminalId: 1, status: 'closed', floatLeft: 300 },
-          { ...shift, id: 8, terminalId: 2, status: 'closed', floatLeft: 500 },
-        ]),
-      );
+    it("defaults the opening float to what this terminal's last shift left (asked of the server)", () => {
+      api.lastFloat.mockReturnValue(of({ floatLeft: 500 }));
       let float = -1;
-      TestBed.inject(TerminalService).set(2);
       store.lastFloatLeft().subscribe((f) => (float = f));
       expect(float).toBe(500);
+      expect(api.lastFloat).toHaveBeenCalled();
     });
   });
 });

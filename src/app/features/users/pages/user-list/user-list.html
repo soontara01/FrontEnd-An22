@@ -54,9 +54,16 @@
           <a mat-icon-button matTooltip="แก้ไข" [routerLink]="[u.id, 'edit']">
             <mat-icon>edit</mat-icon>
           </a>
-          <button mat-icon-button matTooltip="ลบ" (click)="remove(u)">
-            <mat-icon>delete</mat-icon>
-          </button>
+          <span [matTooltip]="deleteBlocker(u) || 'ลบ'">
+            <button
+              mat-icon-button
+              aria-label="ลบ"
+              [disabled]="!!deleteBlocker(u)"
+              (click)="remove(u)"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </span>
         </td>
       </ng-container>
 

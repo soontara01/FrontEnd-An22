@@ -13,6 +13,7 @@ import {
   Promotion,
   Sale,
   SaleStatus,
+  VoidPayload,
   SerialNumber,
   DrawerOpen,
   Shift,
@@ -39,8 +40,9 @@ export class SalesApi {
     return this.api.get<Sale>(`sales/${id}`);
   }
 
-  void(id: number, reason: string): Observable<Sale> {
-    return this.api.post<Sale>(`sales/${id}/void`, { reason });
+  /** Non-admins send an admin's login in `approval` (P3). */
+  void(id: number, payload: VoidPayload): Observable<Sale> {
+    return this.api.post<Sale>(`sales/${id}/void`, payload);
   }
 
   setStatus(id: number, status: SaleStatus): Observable<Sale> {

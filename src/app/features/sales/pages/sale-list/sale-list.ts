@@ -31,6 +31,7 @@ import {
   fromIsoDate,
   toIsoDate,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
@@ -82,6 +83,8 @@ export default class SaleList {
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
+  /** The sales tax report is admin only (P4). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();

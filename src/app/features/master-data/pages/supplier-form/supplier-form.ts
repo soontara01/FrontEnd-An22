@@ -25,7 +25,9 @@ import {
   creditLabel,
   isValidThaiTaxId,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
+import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
@@ -42,6 +44,7 @@ const taxIdValidator: ValidatorFn = (control: AbstractControl<string>): Validati
     RouterLink,
     MatButtonToggleModule,
     LoadingSpinner,
+    AdminOnlyNote,
     AutofocusDirective,
     MATERIAL,
   ],
@@ -53,6 +56,8 @@ export default class SupplierForm implements OnInit {
   private readonly store = inject(SupplierStore);
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
+  /** Non-admins see the supplier read-only (also when opening `new` / `:id/edit` by URL). */
+  protected readonly isAdmin = inject(AuthService).isAdmin;
 
   /** Bound from the `:id` route param. */
   readonly id = input<string>();
@@ -96,6 +101,7 @@ export default class SupplierForm implements OnInit {
 
   ngOnInit(): void {
     this.store.load(); // for the duplicate-code check
+    if (!this.isAdmin()) this.form.disable();
 
     const id = Number(this.id());
     if (!id) return;
@@ -124,6 +130,7 @@ export default class SupplierForm implements OnInit {
   }
 
   protected save(): void {
+    if (!this.isAdmin()) return;
     const raw = this.form.getRawValue();
     if (raw.branchType === 'branch' && !/^\d{5}$/.test(raw.branchNo)) {
       this.form.controls.branchNo.setErrors({ required: true });

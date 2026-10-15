@@ -13,7 +13,8 @@ import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
-import { User } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
+import { User, userChangeError } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
@@ -45,6 +46,7 @@ export default class UserList {
   protected readonly store = inject(UsersStore);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
+  private readonly auth = inject(AuthService);
 
   protected readonly columns = ['name', 'email', 'role', 'active', 'createdAt', 'actions'];
   protected readonly dataSource = new MatTableDataSource<User>([]);
@@ -66,6 +68,17 @@ export default class UserList {
       this.dataSource.paginator = this.paginator() ?? null;
       this.dataSource.sort = this.sort() ?? null;
     });
+  }
+
+  /** Why this user cannot be deleted ('' = can): yourself / the last active admin. */
+  protected deleteBlocker(user: User): string {
+    return (
+      userChangeError(
+        this.store.users(),
+        { kind: 'delete', id: user.id },
+        this.auth.user()?.id ?? null,
+      ) ?? ''
+    );
   }
 
   protected remove(user: User): void {

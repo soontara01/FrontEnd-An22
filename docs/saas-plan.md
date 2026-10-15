@@ -372,7 +372,7 @@ Platform (เจ้าของ SaaS)
 ## 17. ตารางสิทธิ์ (ก่อน SaaS) — ยืนยันแล้ว 2026-10-15
 
 ที่มา: `docs/before-do-saas-plan.md` ข้อ 0 · ผลทดสอบ R1 / R7 และ B2 ใน `docs/test-before-saas.md` · อ่านโค้ดจริง 2026-10-15
-ยืนยันครบ P1–P7 เมื่อ 2026-10-15 (ท้ายหัวข้อ) · ใช้ทำ `before-do-saas-plan.md` ข้อ 1 (ตรวจสิทธิ์ที่ server) และเป็นฐานของ owner / admin / user ในหัวข้อ 6
+ยืนยันครบ P1–P7 เมื่อ 2026-10-15 (ท้ายหัวข้อ) · **ทำแล้ว 2026-10-15** (`before-do-saas-plan.md` ข้อ 1, กฎใน CLAUDE.md → Permissions) · ใช้ทำ `before-do-saas-plan.md` ข้อ 1 (ตรวจสิทธิ์ที่ server) และเป็นฐานของ owner / admin / user ในหัวข้อ 6
 
 - role ในโค้ดคือ `UserRole = 'admin' | 'user'` (เอกสารทดสอบเรียก user ว่า staff)
 - **admin ทำได้ทุกแถว** ทั้งตอนนี้และที่เสนอ (เว้นข้อจำกัดที่เขียนไว้ในแถว) — คอลัมน์ "ตอนนี้" จึงบอกเฉพาะ **user**

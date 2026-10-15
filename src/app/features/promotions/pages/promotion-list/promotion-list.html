@@ -2,11 +2,17 @@
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
     <mat-icon>refresh</mat-icon>
   </button>
-  <a mat-flat-button routerLink="new">
-    <mat-icon>add</mat-icon>
-    เพิ่มโปรโมชั่น
-  </a>
+  @if (isAdmin()) {
+    <a mat-flat-button routerLink="new">
+      <mat-icon>add</mat-icon>
+      เพิ่มโปรโมชั่น
+    </a>
+  }
 </app-page-header>
+
+@if (!isAdmin()) {
+  <app-admin-only-note />
+}
 
 <section class="stat-grid">
   <app-stat-card label="ใช้อยู่" [value]="store.countByStatus().active" icon="campaign" />
@@ -129,7 +135,9 @@
 
   @if (!store.loading() && store.rows().length === 0) {
     <app-empty-state icon="campaign" message="ยังไม่มีโปรโมชั่น">
-      <a mat-flat-button routerLink="new">เพิ่มโปรโมชั่นแรก</a>
+      @if (isAdmin()) {
+        <a mat-flat-button routerLink="new">เพิ่มโปรโมชั่นแรก</a>
+      }
     </app-empty-state>
   }
 </mat-card>

@@ -1528,3 +1528,220 @@ describe('mockBackendInterceptor – POS terminals', () => {
     expect((await call<Shift>('GET', 'shifts/1')).posId).toBe('E0OLD');
   });
 });
+
+/** Permission table (`docs/saas-plan.md` section 17): admin-only endpoints answer 403 to users. */
+describe('mockBackendInterceptor – permissions', () => {
+  let http: HttpClient;
+  const MOUSE = 2; // 531 after promo 1, stock 3
+  const CASH = 1;
+  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+
+  const call = <T>(method: string, url: string, body?: unknown, token?: string, terminal = 1) => {
+    let headers = new HttpHeaders().set('X-Terminal-Id', String(terminal));
+    if (token) headers = headers.set('Authorization', `Bearer ${token}`);
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      // An empty body may also make a handler throw a plain error (status 0): only 403 matters here.
+      (e: { status?: number; error?: { message?: string } }) => ({
+        status: e.status ?? 0,
+        message: e.error?.message ?? '',
+      }),
+    );
+  const statusOf = async (p: Promise<unknown>) => (await failure(p))?.status ?? 200;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it.each([
+    ['GET', 'users'],
+    ['POST', 'users', { name: 'x', email: 'x@x.co', role: 'user', active: true }],
+    ['PUT', 'users/2', { role: 'admin' }],
+    ['DELETE', 'users/4'],
+    ['POST', 'categories', {}],
+    ['PUT', 'categories/1', {}],
+    ['DELETE', 'categories/1'],
+    ['POST', 'suppliers', {}],
+    ['PUT', 'suppliers/1', {}],
+    ['DELETE', 'suppliers/1'],
+    ['POST', 'payment-methods', {}],
+    ['PUT', 'payment-methods/order', { ids: [] }],
+    ['DELETE', 'payment-methods/1'],
+    ['POST', 'prices', {}],
+    ['PUT', 'prices/1', {}],
+    ['DELETE', 'prices/1'],
+    ['POST', 'promotions', {}],
+    ['PUT', 'promotions/1', {}],
+    ['DELETE', 'promotions/1'],
+    ['PUT', `products/${MOUSE}/stock`, { delta: -1, note: 'x' }],
+    ['POST', 'products/1/serials/remove', { ids: [], status: 'damaged', note: 'x' }],
+    ['POST', 'sales/1/credit-notes', {}],
+    ['POST', 'sales/1/tax-invoice/reissue', {}],
+    ['GET', 'tax-invoices'],
+    ['PUT', 'settings/store', {}],
+    ['POST', 'shifts/1/approve'],
+    ['POST', 'shifts/1/adjustments', {}],
+  ])('%s /%s is admin only (403 for users)', async (method, url, body?: unknown) => {
+    const denied = await failure(call(method, url, body, STAFF));
+    expect(denied?.status).toBe(403);
+    expect(denied?.message).toMatch(/เฉพาะผู้ดูแลระบบ/);
+    expect(await statusOf(call(method, url, body))).not.toBe(403);
+  });
+
+  it('leaves day-to-day work open to users', async () => {
+    expect(await statusOf(call('GET', 'categories', undefined, STAFF))).toBe(200);
+    expect(await statusOf(call('GET', 'promotions', undefined, STAFF))).toBe(200);
+    expect(await statusOf(call('GET', 'tax-invoices/buyer?taxId=1', undefined, STAFF))).toBe(200);
+    // Receiving stock (P2 only blocks taking it out) and SKU edits (P1) stay open.
+    const received = await call<Product>(
+      'PUT',
+      `products/${MOUSE}/stock`,
+      { delta: 1, unitCost: 300, note: 'รับเข้า' },
+      STAFF,
+    );
+    expect(received.stock).toBe(4);
+    const sku = await call<Product>('GET', `products/${MOUSE}`, undefined, STAFF);
+    expect(await statusOf(call('PUT', `products/${MOUSE}`, sku, STAFF))).toBe(200);
+  });
+
+  it('never lets an admin demote, deactivate or delete themselves', async () => {
+    const me = { name: 'Admin', email: 'admin@example.com', role: 'admin', active: true };
+    expect((await failure(call('PUT', 'users/1', { ...me, role: 'user' })))?.message).toBe(
+      'ลดสิทธิ์ผู้ดูแลระบบของตัวเองไม่ได้',
+    );
+    expect((await failure(call('PUT', 'users/1', { ...me, active: false })))?.message).toBe(
+      'ปิดใช้งานบัญชีของตัวเองไม่ได้',
+    );
+    expect((await failure(call('DELETE', 'users/1')))?.message).toBe('ลบบัญชีของตัวเองไม่ได้');
+    expect(await statusOf(call('DELETE', 'users/4'))).toBe(200);
+  });
+
+  describe('void (P3)', () => {
+    const sellMouse = async () => {
+      // Without the shift rule, so the bill and the void need no open shift.
+      const info = await call<StoreInfo>('GET', 'settings/store');
+      await call('PUT', 'settings/store', { ...info, requireShift: false });
+      return call<Sale>(
+        'POST',
+        'sales',
+        {
+          items: [{ productId: MOUSE, factor: 1, qty: 1, serial: null }],
+          freeSerials: [],
+          payments: [{ methodId: CASH, amount: 531, reference: '', installmentMonths: null }],
+          customer: '',
+          expectedTotal: 531,
+        },
+        STAFF,
+      );
+    };
+    const voidAs = (sale: Sale, token?: string, approval?: unknown) =>
+      call<Sale>('POST', `sales/${sale.id}/void`, { reason: 'คีย์ผิด', approval }, token);
+
+    it("needs an admin's login typed at the terminal for a user", async () => {
+      const sale = await sellMouse();
+      expect(await failure(voidAs(sale, STAFF))).toEqual({
+        status: 403,
+        message: 'ยกเลิกบิลต้องให้ผู้ดูแลระบบอนุมัติ',
+      });
+      expect(await failure(voidAs(sale, STAFF, { username: 'admin', password: 'wrong' }))).toEqual({
+        status: 400,
+        message: 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง',
+      });
+      expect(await failure(voidAs(sale, STAFF, { username: 'john', password: '1234' }))).toEqual({
+        status: 400,
+        message: 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ',
+      });
+      const voided = await voidAs(sale, STAFF, { username: 'admin', password: 'admin' });
+      expect(voided).toMatchObject({
+        status: 'cancelled',
+        voidedBy: 'สมชาย ใจดี',
+        voidApprovedBy: 'Admin',
+      });
+    });
+
+    it('lets an admin void without approval', async () => {
+      const sale = await sellMouse();
+      expect(await voidAs(sale)).toMatchObject({
+        status: 'cancelled',
+        voidedBy: 'Admin',
+        voidApprovedBy: null,
+      });
+    });
+  });
+
+  describe('shifts (P6)', () => {
+    const shift = (
+      id: number,
+      terminalId: number,
+      cashier: string,
+      status: string,
+      floatLeft = 0,
+    ) => ({
+      id,
+      shiftNo: `SH-20261003-0${id}`,
+      terminalId,
+      cashier,
+      status,
+      openedAt: `2026-10-03T0${id}:00:00Z`,
+      openingFloat: 1000,
+      openingDenominations: [],
+      closedAt: status === 'closed' ? `2026-10-03T0${id}:30:00Z` : null,
+      closedBy: status === 'closed' ? cashier : null,
+      counts: [],
+      cashDenominations: [],
+      depositAmount: 0,
+      floatLeft,
+      approvalStatus: 'not_needed',
+      approvedBy: null,
+      approvedAt: null,
+      note: '',
+    });
+
+    beforeEach(() => {
+      localStorage.setItem(
+        'an22.mock.db',
+        JSON.stringify({
+          shiftsEnabled: true,
+          shifts: [
+            shift(1, 1, 'John Doe', 'closed', 300),
+            shift(2, 2, 'สมชาย ใจดี', 'closed', 500),
+            shift(3, 1, 'John Doe', 'open'),
+          ],
+        }),
+      );
+    });
+
+    it('lists and reads only their own shifts for a user', async () => {
+      const mine = await call<Shift[]>('GET', 'shifts', undefined, STAFF);
+      expect(mine.map((s) => s.id)).toEqual([2]);
+      expect((await call<Shift[]>('GET', 'shifts')).map((s) => s.id)).toEqual([3, 2, 1]);
+      const rows = await call<VarianceReportRow[]>(
+        'GET',
+        'shifts/variance-report',
+        undefined,
+        STAFF,
+      );
+      expect(rows.every((r) => r.cashier === 'สมชาย ใจดี')).toBe(true);
+      expect(await statusOf(call('GET', 'shifts/2/summary', undefined, STAFF))).toBe(200);
+      for (const url of ['shifts/1', 'shifts/1/summary', 'shifts/1/movements']) {
+        expect(await statusOf(call('GET', url, undefined, STAFF))).toBe(403);
+      }
+      expect(await statusOf(call('POST', 'shifts/3/count-check', { counts: [] }, STAFF))).toBe(403);
+    });
+
+    it("tells any cashier the float this terminal's last shift left", async () => {
+      const at = (terminal: number) =>
+        call<{ floatLeft: number }>('GET', 'shifts/last-float', undefined, STAFF, terminal);
+      expect(await at(1)).toEqual({ floatLeft: 300 });
+      expect(await at(2)).toEqual({ floatLeft: 500 });
+      expect(await at(9)).toEqual({ floatLeft: 0 });
+    });
+  });
+});

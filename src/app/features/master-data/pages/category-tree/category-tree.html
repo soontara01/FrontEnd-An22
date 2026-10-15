@@ -8,6 +8,10 @@
   <app-stat-card label="ปิดใช้งาน" [value]="store.inactiveCount()" icon="block" tone="warn" />
 </section>
 
+@if (!isAdmin()) {
+  <app-admin-only-note />
+}
+
 <div class="filter-row">
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-label>ค้นหา รหัส / ชื่อหมวดหมู่</mat-label>
@@ -18,10 +22,12 @@
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
     <mat-icon>refresh</mat-icon>
   </button>
-  <button mat-flat-button (click)="openForm({})">
-    <mat-icon>add</mat-icon>
-    เพิ่มแผนก
-  </button>
+  @if (isAdmin()) {
+    <button mat-flat-button (click)="openForm({})">
+      <mat-icon>add</mat-icon>
+      เพิ่มแผนก
+    </button>
+  }
 </div>
 
 <mat-card appearance="outlined">
@@ -57,7 +63,7 @@
 
           <span class="spacer"></span>
 
-          @if (canAddChild(row.node)) {
+          @if (isAdmin() && canAddChild(row.node)) {
             <button
               mat-icon-button
               [matTooltip]="'เพิ่ม' + childLabel(row.node)"
@@ -66,19 +72,21 @@
               <mat-icon>add</mat-icon>
             </button>
           }
-          <button mat-icon-button matTooltip="แก้ไข" (click)="openForm({ category: row.node })">
-            <mat-icon>edit</mat-icon>
-          </button>
-          <span [matTooltip]="deleteBlocker(row.node)">
-            <button
-              mat-icon-button
-              aria-label="ลบ"
-              [disabled]="!!deleteBlocker(row.node)"
-              (click)="remove(row.node)"
-            >
-              <mat-icon>delete</mat-icon>
+          @if (isAdmin()) {
+            <button mat-icon-button matTooltip="แก้ไข" (click)="openForm({ category: row.node })">
+              <mat-icon>edit</mat-icon>
             </button>
-          </span>
+            <span [matTooltip]="deleteBlocker(row.node)">
+              <button
+                mat-icon-button
+                aria-label="ลบ"
+                [disabled]="!!deleteBlocker(row.node)"
+                (click)="remove(row.node)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            </span>
+          }
         </li>
       }
     </ul>

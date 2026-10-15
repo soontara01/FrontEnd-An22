@@ -4,16 +4,24 @@
   <app-stat-card label="มีค่าธรรมเนียม" [value]="store.withFeeCount()" icon="percent" />
 </section>
 
+@if (!isAdmin()) {
+  <app-admin-only-note />
+}
+
 <div class="filter-row">
-  <span class="text-muted">เรียงตามลำดับปุ่มที่หน้าขาย · ใช้ ▲▼ เพื่อจัดลำดับ</span>
+  <span class="text-muted">
+    เรียงตามลำดับปุ่มที่หน้าขาย{{ isAdmin() ? ' · ใช้ ▲▼ เพื่อจัดลำดับ' : '' }}
+  </span>
   <span class="spacer"></span>
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
     <mat-icon>refresh</mat-icon>
   </button>
-  <button mat-flat-button (click)="openForm()">
-    <mat-icon>add</mat-icon>
-    เพิ่มช่องทางชำระเงิน
-  </button>
+  @if (isAdmin()) {
+    <button mat-flat-button (click)="openForm()">
+      <mat-icon>add</mat-icon>
+      เพิ่มช่องทางชำระเงิน
+    </button>
+  }
 </div>
 
 @if (store.posButtons().length) {
@@ -142,7 +150,9 @@
 
   @if (!store.loading() && store.count() === 0) {
     <app-empty-state icon="payments" message="ยังไม่มีช่องทางชำระเงิน">
-      <button mat-flat-button (click)="openForm()">เพิ่มช่องทางแรก</button>
+      @if (isAdmin()) {
+        <button mat-flat-button (click)="openForm()">เพิ่มช่องทางแรก</button>
+      }
     </app-empty-state>
   }
 </mat-card>

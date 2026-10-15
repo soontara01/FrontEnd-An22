@@ -19,6 +19,8 @@ export class AuthService {
   readonly token = this._token.asReadonly();
   readonly user = this._user.asReadonly();
   readonly isLoggedIn = computed(() => !!this._token());
+  /** Admin-only screens and buttons (the server checks the same rules → 403). */
+  readonly isAdmin = computed(() => this._user()?.role === 'admin');
 
   login(credentials: LoginRequest): Observable<LoginResponse> {
     return this.api.post<LoginResponse>('auth/login', credentials).pipe(

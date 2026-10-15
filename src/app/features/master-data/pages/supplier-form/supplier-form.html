@@ -3,11 +3,15 @@
     <mat-icon>arrow_back</mat-icon>
     กลับ
   </a>
-  <h2>{{ isEdit() ? 'แก้ไขผู้จำหน่าย' : 'เพิ่มผู้จำหน่าย' }}</h2>
+  <h2>{{ !isAdmin() ? 'ผู้จำหน่าย' : isEdit() ? 'แก้ไขผู้จำหน่าย' : 'เพิ่มผู้จำหน่าย' }}</h2>
   @if (productCount()) {
     <span class="badge">ผูกกับ SKU {{ productCount() }} รายการ</span>
   }
 </div>
+
+@if (!isAdmin()) {
+  <app-admin-only-note />
+}
 
 @if (loading()) {
   <app-loading-spinner />
@@ -139,6 +143,7 @@
                 mat-stroked-button
                 type="button"
                 [class.selected]="form.controls.creditDays.value === days"
+                [disabled]="!isAdmin()"
                 (click)="form.controls.creditDays.setValue(days)"
               >
                 {{ credit(days) }}
@@ -174,11 +179,13 @@
         <div class="footer">
           <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
           <span class="spacer"></span>
-          <a mat-button routerLink="/master-data/suppliers">ยกเลิก</a>
-          <button mat-flat-button type="submit" [disabled]="saving()">
-            <mat-icon>save</mat-icon>
-            บันทึก
-          </button>
+          <a mat-button routerLink="/master-data/suppliers">{{ isAdmin() ? 'ยกเลิก' : 'กลับ' }}</a>
+          @if (isAdmin()) {
+            <button mat-flat-button type="submit" [disabled]="saving()">
+              <mat-icon>save</mat-icon>
+              บันทึก
+            </button>
+          }
         </div>
       </mat-card-content>
     </mat-card>

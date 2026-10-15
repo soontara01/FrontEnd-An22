@@ -108,7 +108,7 @@ export class PosStore {
   readonly billManual = this._billManual.asReadonly();
   /** Why manual discounts are given (one reason per bill) */
   readonly manualReason = this._manualReason.asReadonly();
-  readonly isAdmin = computed(() => this.auth.user()?.role === 'admin');
+  readonly isAdmin = this.auth.isAdmin;
   /** Staff ceiling for manual discounts (% of a line after promotions) */
   readonly manualMaxPercent = computed(() => this._storeInfo()?.manualDiscountMaxPercent ?? 0);
   readonly holds = this._holds.asReadonly();
@@ -248,15 +248,8 @@ export class PosStore {
 
   /** Float the last closed shift of this terminal left in the drawer (0 = none). */
   lastFloatLeft(): Observable<number> {
-    const id = this.terminal.terminalId();
-    return this.api
-      .shifts()
-      .pipe(
-        map(
-          (shifts) =>
-            shifts.find((s) => s.terminalId === id && s.status === 'closed')?.floatLeft ?? 0,
-        ),
-      );
+    // Asked of the server: non-admins may list only their own shifts (P6).
+    return this.api.lastFloat().pipe(map((r) => r.floatLeft));
   }
 
   shiftSummary(shiftId: number): Observable<ShiftSummary> {

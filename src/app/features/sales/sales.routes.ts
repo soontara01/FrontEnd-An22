@@ -1,5 +1,6 @@
 import { provideNativeDateAdapter } from '@angular/material/core';
 import { Routes } from '@angular/router';
+import { adminGuardTo } from '@core/auth/auth.guard';
 import { SalesApi } from './data/sales-api.service';
 import { SalesStore } from './data/sales.store';
 import CreditNoteForm from './pages/credit-note-form/credit-note-form';
@@ -20,7 +21,13 @@ export default [
     children: [
       { path: '', component: SaleList },
       // Before ':id' so the literal path wins.
-      { path: 'tax-report', title: 'รายงานภาษีขาย', component: SalesTaxReportPage },
+      // Accounting report: admin only (P4, server → 403); others go back to the bill list.
+      {
+        path: 'tax-report',
+        title: 'รายงานภาษีขาย',
+        component: SalesTaxReportPage,
+        canMatch: [adminGuardTo('/sales')],
+      },
       { path: 'shifts', title: 'กะขาย', component: ShiftList },
       { path: 'shifts/:id', title: 'กะขาย', component: ShiftDetail },
       { path: ':id', title: 'บิลขาย', component: SaleDetail },

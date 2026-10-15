@@ -4,21 +4,27 @@
       <mat-icon>arrow_back</mat-icon>
       กลับ
     </a>
-    @if (!started()) {
-      <button mat-stroked-button (click)="remove(p)">
-        <mat-icon>delete</mat-icon>
-        ลบ
+    @if (isAdmin()) {
+      @if (!started()) {
+        <button mat-stroked-button (click)="remove(p)">
+          <mat-icon>delete</mat-icon>
+          ลบ
+        </button>
+      }
+      <button mat-stroked-button [disabled]="busy()" (click)="toggleEnabled(p)">
+        <mat-icon>{{ p.enabled ? 'pause_circle' : 'play_circle' }}</mat-icon>
+        {{ p.enabled ? 'ปิดใช้งาน' : 'เปิดใช้งาน' }}
       </button>
+      <a mat-flat-button [routerLink]="['/promotions', p.id, 'edit']">
+        <mat-icon>edit</mat-icon>
+        แก้ไข
+      </a>
     }
-    <button mat-stroked-button [disabled]="busy()" (click)="toggleEnabled(p)">
-      <mat-icon>{{ p.enabled ? 'pause_circle' : 'play_circle' }}</mat-icon>
-      {{ p.enabled ? 'ปิดใช้งาน' : 'เปิดใช้งาน' }}
-    </button>
-    <a mat-flat-button [routerLink]="['/promotions', p.id, 'edit']">
-      <mat-icon>edit</mat-icon>
-      แก้ไข
-    </a>
   </app-page-header>
+
+  @if (!isAdmin()) {
+    <app-admin-only-note />
+  }
 
   <div class="tags">
     @if (status(); as s) {
