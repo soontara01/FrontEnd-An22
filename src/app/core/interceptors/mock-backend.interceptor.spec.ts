@@ -9,6 +9,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
+  LoginResponse,
   PosTerminal,
   CountCheckResult,
   DrawerOpen,
@@ -40,6 +41,14 @@ import { SEED_STORE_INFO, mockBackendInterceptor } from './mock-backend.intercep
 const atTerminal1: HttpInterceptorFn = (req, next) =>
   next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
 
+/** What `authInterceptor` adds after an admin login; requests that name another user keep theirs. */
+const asAdminByDefault: HttpInterceptorFn = (req, next) =>
+  next(
+    req.headers.has('Authorization')
+      ? req
+      : req.clone({ setHeaders: { Authorization: 'Bearer mock-jwt-token' } }),
+  );
+
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
 describe('mockBackendInterceptor – serials', () => {
   let http: HttpClient;
@@ -49,7 +58,7 @@ describe('mockBackendInterceptor – serials', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -131,7 +140,7 @@ describe('mockBackendInterceptor – prices', () => {
     vi.setSystemTime(new Date(2026, 9, 3));
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -202,7 +211,7 @@ describe('mockBackendInterceptor – retail SKU master', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -308,7 +317,7 @@ describe('mockBackendInterceptor – suppliers', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -377,7 +386,7 @@ describe('mockBackendInterceptor – costing', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -505,7 +514,11 @@ describe('mockBackendInterceptor – POS sales', () => {
       }),
     );
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([atTerminal1, mockBackendInterceptor]))],
+      providers: [
+        provideHttpClient(
+          withInterceptors([asAdminByDefault, atTerminal1, mockBackendInterceptor]),
+        ),
+      ],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -1052,7 +1065,7 @@ describe('mockBackendInterceptor – store info', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -1134,7 +1147,7 @@ describe('mockBackendInterceptor – shifts', () => {
     vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -1246,7 +1259,7 @@ describe('mockBackendInterceptor – shifts', () => {
     const openDrawer = (reason: string, as: As) =>
       call('POST', `shifts/${shift.id}/drawer-opens`, { reason }, as);
     expect(await errorOf(openDrawer(' ', staff))).toBe('กรุณาระบุเหตุผลที่เปิดลิ้นชัก');
-    expect(await errorOf(openDrawer('แลกเหรียญ', { token: 'mock-jwt-token.u3' }))).toBe(
+    expect(await errorOf(openDrawer('แลกเหรียญ', { token: 'mock-jwt-token.u4' }))).toBe(
       'กะนี้เป็นของ สมชาย ใจดี — ทำรายการนี้ได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ',
     );
     expect(await errorOf(openDrawer('แลกเหรียญ', { ...staff, terminal: 2 }))).toBe(
@@ -1362,7 +1375,7 @@ describe('mockBackendInterceptor – shifts', () => {
     await sellMouse({ token: STAFF, terminal: 2 });
     const counts = await countsFor(shift);
     const body = { counts, cashDenominations: [], depositAmount: 0, note: '' };
-    const OTHER = 'mock-jwt-token.u3';
+    const OTHER = 'mock-jwt-token.u4';
     expect(
       await errorOf(call('POST', `shifts/${shift.id}/close`, body, { token: OTHER, terminal: 2 })),
     ).toBe('ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
@@ -1419,7 +1432,7 @@ describe('mockBackendInterceptor – POS terminals', () => {
     localStorage.clear();
     if (stored) localStorage.setItem('an22.mock.db', JSON.stringify(stored));
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   };
@@ -1555,7 +1568,7 @@ describe('mockBackendInterceptor – permissions', () => {
   beforeEach(() => {
     localStorage.clear();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
@@ -1743,5 +1756,62 @@ describe('mockBackendInterceptor – permissions', () => {
       expect(await at(2)).toEqual({ floatLeft: 500 });
       expect(await at(9)).toEqual({ floatLeft: 0 });
     });
+  });
+});
+
+describe('mockBackendInterceptor – auth (B3)', () => {
+  let http: HttpClient;
+  const ADMIN = 'mock-jwt-token';
+  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+
+  // No `asAdminByDefault`: a request without a token must not be served as the admin.
+  const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
+    const headers = token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined;
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const statusOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('answers 401 to a missing, unknown or malformed token', async () => {
+    expect(await statusOf(call('GET', 'products'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'garbage'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'mock-jwt-token.u999'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'xmock-jwt-token.u2'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, ADMIN))).toBe(200);
+    expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(200);
+  });
+
+  it('answers 401 once the user is deactivated', async () => {
+    expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(200);
+    await call('PUT', 'users/2', { active: false }, ADMIN);
+    expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(401);
+  });
+
+  it('keeps login open and auth/verify at 400 without a token', async () => {
+    const login = await call<LoginResponse>('POST', 'auth/login', {
+      username: 'somchai',
+      password: '1234',
+    });
+    expect(login.token).toBe(STAFF);
+    expect(await statusOf(call('POST', 'auth/login', { username: 'admin', password: 'x' }))).toBe(
+      401,
+    );
+    expect(await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'x' }))).toBe(
+      400,
+    );
+    expect(
+      await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'admin' })),
+    ).toBe(200);
   });
 });

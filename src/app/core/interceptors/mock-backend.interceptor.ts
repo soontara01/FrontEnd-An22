@@ -889,6 +889,8 @@ function handle(
     const user = checkCredentials(username, password, db.users);
     return typeof user === 'string' ? error(400, user) : ok({ user });
   }
+  // No fallback user: SaaS reads the company from the token, so an unknown one must never pass.
+  if (!actor) return error(401, 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
   const forbidden = adminOnlyError(req, path);
   if (forbidden) return error(403, forbidden);
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
@@ -3016,11 +3018,17 @@ const ADMIN_TOKEN = 'mock-jwt-token';
 /** Password of every non-admin mock user. */
 const MOCK_USER_PASSWORD = '1234';
 
-/** Who sent the request: the user named by the token, else the admin (also specs without a token). */
+/**
+ * Who sent the request: the active user the token names (`ADMIN_TOKEN` = the first user,
+ * `ADMIN_TOKEN.u<id>` = that user). Missing / unknown token or an inactive user → undefined (401).
+ */
 function requestUser(req: HttpRequest<unknown>, users: User[]): User | undefined {
   const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
-  const id = /^mock-jwt-token\.u(\d+)$/.exec(token)?.[1];
-  return (id && users.find((u) => u.id === Number(id))) || users[0];
+  const user =
+    token === ADMIN_TOKEN
+      ? users[0]
+      : users.find((u) => token === `${ADMIN_TOKEN}.u${u.id}` && u.id !== users[0]?.id);
+  return user?.active ? user : undefined;
 }
 
 function ok<T>(body: T): Observable<HttpResponse<T>> {
