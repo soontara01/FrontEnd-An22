@@ -10,7 +10,7 @@
 - base path `/api` (หน้าบ้าน `environment.apiUrl`; dev proxy `proxy.conf.json` → `http://localhost:8080`) — path ในไฟล์นี้ไม่รวม `/api`
 - JSON ทั้งขาเข้าและขาออก, UTF-8, ชื่อ field camelCase ตรงกับ TypeScript
 - **ห้ามละ field ที่เป็น `null`** — ส่ง `"x": null` เสมอ (B24: หน้าบ้านบางจุดเทียบ `=== null`; บรรทัดบิลที่ไม่มี
-  `freeOfPromotionId` เคยถูกนับเป็นของแถม) — field ใหม่ที่ข้อมูลเก่าไม่มี หน้าบ้านเติม default ผ่าน `normalizeSale()` ฯลฯ
+  `freeOfPromotionId` เคยถูกนับเป็นของแถม) — field ใหม่ที่ข้อมูลเก่าไม่มี หน้าบ้านเติม default ผ่าน `normalizeSale()` / `normalizeShift()` ฯลฯ
 - เงิน: number บาท ทศนิยมไม่เกิน 2 ตำแหน่ง, ราคาขายรวม VAT, ต้นทุนไม่รวม VAT
 - เวลา (`date`, `openedAt`, `at`, …): ISO-8601 พร้อม offset / `Z` · วันที่ธุรกิจ (`startDate`, `?from`, `?to`, `?month`):
   `YYYY-MM-DD` / `YYYY-MM` **ตามเวลาท้องถิ่น Asia/Bangkok** ทั้งสองปลายนับรวม — "วันขาย" ของบิล = วันท้องถิ่นของ `Sale.date`

@@ -19,6 +19,7 @@ import {
   drawerExpected,
   expectedByMethod,
   needsApproval,
+  normalizeShift,
   openShiftError,
   requireShiftChangeError,
   shiftBlocker,
@@ -539,5 +540,30 @@ describe('shift model', () => {
       shortCount: 0,
       shortTotal: 0,
     });
+  });
+
+  it('fills fields a stored shift or an API response may lack, keeping counted null (B24)', () => {
+    const shift = normalizeShift({
+      id: 3,
+      shiftNo: 'SH-20261016-01',
+      terminalId: 1,
+      cashier: 'Admin',
+      openedAt: '2026-10-16T02:00:00.000Z',
+      status: 'closed',
+      counts: [
+        { methodId: 2, name: 'บัตร', expected: 531, counted: undefined },
+        { methodId: 1, name: 'เงินสด', expected: 1000, counted: 990, firstCount: null },
+      ],
+    } as unknown as Parameters<typeof normalizeShift>[0]);
+    expect(shift).toMatchObject({
+      status: 'closed',
+      closedAt: null,
+      approvalStatus: 'not_needed',
+      openingDenominations: [],
+      cashDenominations: [],
+      note: '',
+    });
+    expect(shift.counts[0]).toMatchObject({ counted: null, closeCheck: 'count', reason: '' });
+    expect(shift.counts[1]).toMatchObject({ counted: 990, firstCount: null, reasonCode: null });
   });
 });

@@ -25,6 +25,7 @@ import {
   TaxInvoice,
   TaxInvoiceBuyer,
   normalizeSale,
+  normalizeShift,
 } from '@core/models';
 
 /** HTTP calls for the sales feature (provided in sales.routes.ts). */
@@ -133,11 +134,13 @@ export class SalesApi {
 
   /** POS shifts opened within a local-date range (null = open end), newest first. */
   shifts(from: string | null, to: string | null): Observable<Shift[]> {
-    return this.api.get<Shift[]>('shifts', rangeParams(from, to));
+    return this.api
+      .get<Shift[]>('shifts', rangeParams(from, to))
+      .pipe(map((l) => l.map(normalizeShift)));
   }
 
   shift(id: number): Observable<Shift> {
-    return this.api.get<Shift>(`shifts/${id}`);
+    return this.api.get<Shift>(`shifts/${id}`).pipe(map(normalizeShift));
   }
 
   /** X / Z report; per-method lines only for admins while the shift is open. */
@@ -162,7 +165,7 @@ export class SalesApi {
   }
 
   approveShift(id: number): Observable<Shift> {
-    return this.api.post<Shift>(`shifts/${id}/approve`, {});
+    return this.api.post<Shift>(`shifts/${id}/approve`, {}).pipe(map(normalizeShift));
   }
 
   /** Variance per cashier over shifts opened within the range. */

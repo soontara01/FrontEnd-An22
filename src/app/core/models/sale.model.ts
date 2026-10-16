@@ -1,6 +1,7 @@
 import type { Exchange } from './exchange.model';
 import type { PaymentType } from './payment-method.model';
 import { toIsoDate } from './price.model';
+import { withDefaults } from './defaults';
 import type { ItemType, VatType } from './product.model';
 import type { ApprovalCredentials } from './shift.model';
 import type { TaxInvoiceBuyer } from './tax-invoice.model';
@@ -217,13 +218,6 @@ export function normalizeSale(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
     listPrice: l.listPrice ?? l.unitPrice,
   }));
   return { ...withDefaults({ ...SALE_DEFAULTS, subtotal: s.total }, s), lines } as Sale;
-}
-
-/** `o` over `defaults`, where a missing or `null` value takes the default; other nulls stay. */
-function withDefaults<D extends object, T extends object>(defaults: D, o: T): D & T {
-  const merged = { ...defaults, ...o } as Record<string, unknown>;
-  for (const [key, value] of Object.entries(defaults)) merged[key] ??= value;
-  return merged as D & T;
 }
 
 /** A free-goods line (price 0); `!= null` so a missing field never makes every line free (B24). */

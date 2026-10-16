@@ -17,7 +17,7 @@
   ร้านไม่จด VAT (`vatRegistered: false`) → ทุกบรรทัด `vat = 0`
 - **วันที่**: `todayIso()` / `toIsoDate()` = วันท้องถิ่น (Asia/Bangkok) ไม่ใช่ UTC; ช่วงวันที่นับรวมทั้งสองปลาย, `endDate: null` = ไม่มีวันสิ้นสุด
 - **ลำดับการตรวจ** มีผลกับข้อความที่ผู้ใช้เห็น — ใช้ลำดับเดียวกับ mock (เช่น `POST /sales` ใน `api-contract.md`)
-- `null` vs ไม่มี field: ข้อมูลเก่าอาจไม่มี field — หน้าบ้านเติม default (`normalizeSale()`, `SALE_DEFAULTS`, `PRODUCT_DEFAULTS`)
+- `null` vs ไม่มี field: ข้อมูลเก่าอาจไม่มี field — หน้าบ้านเติม default (`normalizeSale()`, `normalizeShift()`, `SALE_DEFAULTS`, `SHIFT_DEFAULTS`, `PRODUCT_DEFAULTS`)
   ฝั่ง api ให้ DB มี default และตอบ field ครบเสมอ
 
 ## ตารางกฎ

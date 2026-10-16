@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { PosTerminal, Shift, StoreInfo } from '@core/models';
+import { PosTerminal, Shift, StoreInfo, normalizeShift } from '@core/models';
 
 /** HTTP calls for the settings feature (provided in settings.routes.ts). */
 @Injectable()
@@ -22,6 +22,8 @@ export class SettingsApi {
 
   /** Open shift of the terminal this device is set to (`X-Terminal-Id`), null = none. */
   currentShift(): Observable<Shift | null> {
-    return this.api.get<Shift | null>('shifts/current');
+    return this.api
+      .get<Shift | null>('shifts/current')
+      .pipe(map((s) => (s ? normalizeShift(s) : null)));
   }
 }

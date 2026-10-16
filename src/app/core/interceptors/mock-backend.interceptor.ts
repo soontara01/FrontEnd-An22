@@ -93,6 +93,7 @@ import {
   moneyProblem,
   moneyProblemText,
   normalizeSale,
+  normalizeShift,
   normalizeStoreInfo,
   creditNoteError,
   draftCreditNote,
@@ -837,6 +838,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
+  db.shifts = db.shifts.map(normalizeShift);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,

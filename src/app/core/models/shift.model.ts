@@ -3,6 +3,7 @@ import { Exchange } from './exchange.model';
 import { CloseCheck, PaymentMethod, PaymentType, closeCheckOf } from './payment-method.model';
 import { moneyInputError } from './money.model';
 import { toIsoDate } from './price.model';
+import { withDefaults } from './defaults';
 import { Sale } from './sale.model';
 
 /**
@@ -118,6 +119,48 @@ export interface Shift {
   note: string;
   /** Read-only, server-derived: Σ adjustments made after closing (S8; missing = none) */
   adjustmentTotal?: number;
+}
+
+/** Defaults for shift fields an older record or an API that drops `null` may leave out (B24). */
+export const SHIFT_DEFAULTS: Omit<
+  Shift,
+  'id' | 'shiftNo' | 'terminalId' | 'posId' | 'cashier' | 'openedAt' | 'adjustmentTotal'
+> = {
+  status: 'open',
+  openingFloat: 0,
+  openingDenominations: [],
+  closedAt: null,
+  closedBy: null,
+  counts: [],
+  cashDenominations: [],
+  depositAmount: 0,
+  floatLeft: 0,
+  approvalStatus: 'not_needed',
+  approvedBy: null,
+  approvedAt: null,
+  note: '',
+};
+
+/** Defaults per count line; `counted: null` keeps its meaning (`confirm` / `none`, no variance). */
+export const SHIFT_COUNT_DEFAULTS: Omit<ShiftCount, 'methodId' | 'name' | 'expected'> = {
+  counted: null,
+  closeCheck: 'count',
+  confirmedBy: null,
+  firstCount: null,
+  reasonCode: null,
+  reason: '',
+};
+
+type StoredShift = Pick<Shift, 'id' | 'shiftNo' | 'terminalId' | 'cashier' | 'openedAt'> &
+  Partial<Shift>;
+
+/**
+ * A shift as read from the server or the mock db with every field that may be missing filled in
+ * (like `normalizeSale()`). Call it wherever a `Shift` comes in.
+ */
+export function normalizeShift(s: StoredShift): Shift {
+  const counts = (s.counts ?? []).map((c) => withDefaults(SHIFT_COUNT_DEFAULTS, c));
+  return { ...withDefaults(SHIFT_DEFAULTS, s), counts } as Shift;
 }
 
 /** The drawer opened without a sale (S7) — no money, logged for control. */
