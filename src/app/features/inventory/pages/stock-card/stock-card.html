@@ -106,9 +106,10 @@
           </tr>
         </thead>
         <tbody>
-          @if (c.from) {
+          <!-- Also without a range: stock from before costing is brought forward, not received (B17). -->
+          @if (c.from || c.opening.qty || c.opening.value) {
             <tr class="balance-row">
-              <td class="nowrap">{{ c.from | thaiDate }}</td>
+              <td class="nowrap">{{ c.from ? (c.from | thaiDate) : '-' }}</td>
               <td colspan="4"><strong>ยอดยกมา</strong></td>
               <td class="num strong">{{ c.opening.qty }}</td>
               <td class="num">{{ c.opening.avgCost | number: '1.2-2' }}</td>

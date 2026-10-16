@@ -35,7 +35,7 @@ import {
   StockCardResult,
   Supplier,
 } from '../models';
-import { addDaysIso, storeInfoError, todayIso } from '../models';
+import { addDaysIso, serialMovements, storeInfoError, todayIso } from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor } from './mock-backend.interceptor';
 
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
@@ -111,7 +111,21 @@ describe('mockBackendInterceptor – serials', () => {
       serials: [first.serial],
     });
     expect(back.product.stock).toBe(11);
-    expect(back.received[0]).toMatchObject({ id: first.id, status: 'in_stock' });
+    expect(back.received[0]).toMatchObject({
+      id: first.id,
+      status: 'in_stock',
+      note: 'รับคืนเข้าคลัง',
+    });
+
+    // B18: the record is reused, but the stock card keeps the removal and the return, with the
+    // same note on the receive line as on the serial.
+    const card = await get<StockCardResult>(`products/${NOTEBOOK}/movements`);
+    const all = [...card.openingMovements, ...card.movements];
+    expect(serialMovements(first.serial, all).map((m) => [m.type, m.note])).toEqual([
+      ['opening', 'ยอดยกมา'],
+      ['issue', 'ขายแล้ว · INV-1'],
+      ['receive', 'รับคืนเข้าคลัง'],
+    ]);
   });
 
   it('blocks quantity adjustment on serial SKUs but not on others', async () => {
@@ -408,12 +422,16 @@ describe('mockBackendInterceptor – costing', () => {
     const issued = await put<Product>(`products/${MOUSE}/stock`, { delta: -1 });
     expect(issued.avgCost).toBeCloseTo(306.5217, 4); // unchanged by issues
 
-    const card = (await get<StockCardResult>(`products/${MOUSE}/movements`)).movements;
-    expect(card.map((m) => m.type)).toEqual(['opening', 'receive', 'issue']);
-    expect(card[0]).toMatchObject({ qty: 3, unitCost: 350, balanceValue: 1050 });
-    expect(card[1]).toMatchObject({ qty: 20, totalCost: 6000, balanceQty: 23, note: 'INV-001' });
-    expect(card[2]).toMatchObject({ qty: -1, unitCost: 306.52, balanceQty: 22 });
-    expect(card[2].balanceValue).toBeCloseTo(22 * 306.5217, 1);
+    const stockCard = await get<StockCardResult>(`products/${MOUSE}/movements`);
+    // The opening line is the brought-forward balance, not a receipt (B17).
+    expect(stockCard.opening).toEqual({ qty: 3, avgCost: 350, value: 1050 });
+    expect(stockCard.openingMovements.map((m) => m.type)).toEqual(['opening']);
+    expect(stockCard.totals.inQty).toBe(20);
+    const card = stockCard.movements;
+    expect(card.map((m) => m.type)).toEqual(['receive', 'issue']);
+    expect(card[0]).toMatchObject({ qty: 20, totalCost: 6000, balanceQty: 23, note: 'INV-001' });
+    expect(card[1]).toMatchObject({ qty: -1, unitCost: 306.52, balanceQty: 22 });
+    expect(card[1].balanceValue).toBeCloseTo(22 * 306.5217, 1);
   });
 
   it('issues several units at once and rejects issuing more than the stock', async () => {
@@ -458,7 +476,8 @@ describe('mockBackendInterceptor – costing', () => {
     await put<Product>('products/7/stock', { delta: 10, unitCost: 70 });
     const today = todayIso();
     const all = await get<StockCardResult>('products/7/movements');
-    expect(all.movements.map((m) => m.type)).toEqual(['opening', 'receive']);
+    expect(all.openingMovements.map((m) => m.type)).toEqual(['opening']);
+    expect(all.movements.map((m) => m.type)).toEqual(['receive']);
 
     const future = addDaysIso(today, 1);
     const empty = await get<StockCardResult>(`products/7/movements?from=${future}&to=${future}`);
@@ -485,10 +504,12 @@ describe('mockBackendInterceptor – costing', () => {
     );
     const product = await get<Product>('products/80');
     expect(product.avgCost).toBe(50);
-    const card = (await get<StockCardResult>('products/80/movements')).movements;
-    expect(card).toEqual([
+    const card = await get<StockCardResult>('products/80/movements');
+    expect(card.movements).toEqual([]);
+    expect(card.openingMovements).toEqual([
       expect.objectContaining({ type: 'opening', qty: 4, unitCost: 50, balanceValue: 200 }),
     ]);
+    expect(card.opening).toEqual({ qty: 4, avgCost: 50, value: 200 });
   });
 });
 

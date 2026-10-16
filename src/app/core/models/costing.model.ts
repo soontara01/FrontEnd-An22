@@ -70,6 +70,8 @@ export interface StockCardResult {
   from: string | null;
   to: string | null;
   opening: StockBalance;
+  /** `opening` lines folded into `opening` (B17) — not movements; kept for serial history */
+  openingMovements: StockMovement[];
   movements: StockMovement[];
   closing: StockBalance;
   totals: { inQty: number; inCost: number; outQty: number; outCost: number };
@@ -86,6 +88,9 @@ const balanceOf = (m: StockMovement): StockBalance => ({
 /**
  * Slices a SKU's movements (oldest first) to [from, to] by local calendar date and derives
  * the opening (last movement before `from`) and closing (last movement ≤ `to`) balances.
+ * `opening` lines (stock that existed before costing) are a brought-forward balance, never a
+ * receipt (B17): the ones at the start of the range fold into `opening`, any other is left out of
+ * the totals, so opening + in − out = closing.
  */
 export function buildStockCard(
   movements: readonly StockMovement[],
@@ -95,14 +100,30 @@ export function buildStockCard(
   const day = (m: StockMovement) => toIsoDate(new Date(m.date));
   const before = from ? movements.filter((m) => day(m) < from) : [];
   const inRange = movements.filter((m) => (!from || day(m) >= from) && (!to || day(m) <= to));
-  const opening = before.length ? balanceOf(before[before.length - 1]) : ZERO_BALANCE;
-  const closing = inRange.length ? balanceOf(inRange[inRange.length - 1]) : opening;
-  const totals = inRange.reduce(
+  const firstReal = inRange.findIndex((m) => m.type !== 'opening');
+  const leading = firstReal < 0 ? inRange : inRange.slice(0, firstReal);
+  const shown = inRange.slice(leading.length);
+  const broughtForward = [...before, ...leading];
+  const opening = broughtForward.length
+    ? balanceOf(broughtForward[broughtForward.length - 1])
+    : ZERO_BALANCE;
+  const closing = shown.length ? balanceOf(shown[shown.length - 1]) : opening;
+  const totals = shown.reduce(
     (t, m) =>
-      m.qty > 0
-        ? { ...t, inQty: t.inQty + m.qty, inCost: round2(t.inCost + m.totalCost) }
-        : { ...t, outQty: t.outQty - m.qty, outCost: round2(t.outCost - m.totalCost) },
+      m.type === 'opening'
+        ? t
+        : m.qty > 0
+          ? { ...t, inQty: t.inQty + m.qty, inCost: round2(t.inCost + m.totalCost) }
+          : { ...t, outQty: t.outQty - m.qty, outCost: round2(t.outCost - m.totalCost) },
     { inQty: 0, inCost: 0, outQty: 0, outCost: 0 },
   );
-  return { from, to, opening: { ...opening }, movements: inRange, closing: { ...closing }, totals };
+  return {
+    from,
+    to,
+    opening: { ...opening },
+    openingMovements: leading,
+    movements: shown,
+    closing: { ...closing },
+    totals,
+  };
 }

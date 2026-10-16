@@ -1,3 +1,4 @@
+import type { StockMovement } from './costing.model';
 import { Product } from './product.model';
 
 /** `in_stock` = in the warehouse; the others are "removed" states kept as history. */
@@ -48,3 +49,16 @@ export function serialFormatError(
   }
   return null;
 }
+
+/**
+ * Everything that happened to one serial, oldest first, from the SKU's stock movements (B18): a
+ * unit removed and later received again keeps one `SerialNumber` record whose status / note are
+ * overwritten, so its history is read from the stock card instead (no history field to keep in sync).
+ */
+export const serialMovements = (
+  serial: string,
+  movements: readonly StockMovement[],
+): StockMovement[] =>
+  movements
+    .filter((m) => m.serials.includes(serial))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);

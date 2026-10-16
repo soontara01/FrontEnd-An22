@@ -51,6 +51,29 @@ describe('buildStockCard', () => {
     expect(card.closing).toEqual({ qty: 10, avgCost: 90, value: 900 });
   });
 
+  it('treats opening lines as brought forward, never as receipts (B17)', () => {
+    const opening = {
+      ...m(1, '2026-10-01', 25, 25, 850),
+      type: 'opening' as const,
+      note: 'ยอดยกมา',
+    };
+    const card = [opening, m(2, '2026-10-05', 3, 28, 850), m(3, '2026-10-06', -1, 27, 850)];
+    for (const range of [
+      ['2026-10-01', '2026-10-31'],
+      [null, null],
+    ] as const) {
+      const c = buildStockCard(card as never, range[0], range[1]);
+      expect(c.opening).toEqual({ qty: 25, avgCost: 850, value: 21250 });
+      expect(c.movements.map((x) => x.id)).toEqual([2, 3]);
+      expect(c.openingMovements.map((x) => x.id)).toEqual([1]);
+      expect(c.totals).toEqual({ inQty: 3, inCost: 2550, outQty: 1, outCost: 850 });
+      expect(c.closing.qty).toBe(c.opening.qty + c.totals.inQty - c.totals.outQty);
+    }
+    // A range holding only the opening line shows it as the balance, with no movements.
+    const only = buildStockCard(card as never, '2026-10-01', '2026-10-01');
+    expect(only).toMatchObject({ movements: [], opening: { qty: 25 }, closing: { qty: 25 } });
+  });
+
   it('uses zero opening without `from` and keeps closing = opening for an empty range', () => {
     expect(buildStockCard(moves, null, null).opening).toEqual({ qty: 0, avgCost: 0, value: 0 });
     const empty = buildStockCard(moves, '2026-09-20', '2026-09-25');

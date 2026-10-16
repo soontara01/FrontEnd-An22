@@ -1318,16 +1318,28 @@ function handleSerials(
     if (problems.length) return error(400, `รับเข้าไม่ได้ — ${problems.join(', ')}`);
 
     const now = new Date().toISOString();
+    const typed = (body.note ?? '').trim();
+    // Units removed earlier and received again: the serial and its stock-card line say so (B18).
+    const returning = serials.filter((serial) => db.serials.some((s) => s.serial === serial));
+    const returnNote = typed || 'รับคืนเข้าคลัง';
+    const movementNote =
+      typed ||
+      (!returning.length
+        ? ''
+        : returning.length === serials.length
+          ? 'รับคืนเข้าคลัง'
+          : `รับคืนเข้าคลัง ${returning.join(', ')}`);
     const received = serials.map((serial) => {
       const existing = db.serials.find((s) => s.serial === serial);
       if (existing) {
-        // A previously removed unit coming back (e.g. customer return).
+        // A previously removed unit coming back (e.g. customer return). The record is reused, so
+        // its removal shows only in the stock movements (`serialMovements()`).
         Object.assign(existing, {
           productId,
           status: 'in_stock',
           receivedAt: now,
           removedAt: null,
-          note: 'รับคืนเข้าคลัง',
+          note: returnNote,
           cost: unitCost,
         });
         return existing;
@@ -1354,7 +1366,7 @@ function handleSerials(
       unitCost,
       received.length * unitCost,
       received.map((s) => s.serial),
-      body.note ?? '',
+      movementNote,
     );
     const result: SerialReceiveResult = { product: updated, received };
     return ok(result);
