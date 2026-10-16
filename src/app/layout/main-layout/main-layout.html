@@ -30,7 +30,8 @@
       >
         <mat-icon>{{ menuOpen() && !isCompact() ? 'menu_open' : 'menu' }}</mat-icon>
       </button>
-      <span class="spacer"></span>
+      <!-- Always visible so nobody sells in the wrong company / branch (saas-plan section 8). -->
+      <span class="tenant" [title]="tenantLabel()">{{ tenantLabel() }}</span>
 
       <button
         mat-icon-button

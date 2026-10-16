@@ -55,6 +55,11 @@ export class MainLayout {
     MENU.filter((item) => (!item.adminOnly || this.auth.isAdmin()) && this.menus.canSee(item.path)),
   );
 
+  /** "บริษัท · สาขา" on the toolbar. */
+  protected readonly tenantLabel = computed(() =>
+    [this.auth.company()?.name, this.auth.currentBranch()?.name].filter(Boolean).join(' · '),
+  );
+
   private readonly router = inject(Router);
   protected readonly activeMenu = toSignal(
     this.router.events.pipe(

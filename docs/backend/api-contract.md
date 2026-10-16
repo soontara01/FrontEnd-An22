@@ -19,10 +19,11 @@
 
 ### Header ขาเข้า
 
-| header                          | ใส่โดย                                          | ความหมาย                                                                              |
-| ------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `Authorization: Bearer <token>` | `authInterceptor` ทุก request ที่ login แล้ว    | token จาก `POST /auth/login` — JWT claims หัวข้อ "Token" ด้านล่าง                     |
-| `X-Terminal-Id: <n>`            | `terminalInterceptor` เมื่อเครื่องนี้ถูกตั้งไว้ | เลขเครื่อง POS ของอุปกรณ์ (ไม่มี = ไม่ใช่เครื่อง POS) — กะ, เลขบิล, POS ID ต่อเครื่อง |
+| header                          | ใส่โดย                                          | ความหมาย                                                                                                                                                                                             |
+| ------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Authorization: Bearer <token>` | `authInterceptor` ทุก request ที่ login แล้ว    | token จาก `POST /auth/login` — JWT claims หัวข้อ "Token" ด้านล่าง                                                                                                                                    |
+| `X-Terminal-Id: <n>`            | `terminalInterceptor` เมื่อเครื่องนี้ถูกตั้งไว้ | เลขเครื่อง POS ของอุปกรณ์ (ไม่มี = ไม่ใช่เครื่อง POS) — กะ, เลขบิล, POS ID ต่อเครื่อง                                                                                                                |
+| `X-Branch-Id: <id>`             | `branchInterceptor` เมื่อเลือกสาขาแล้ว          | สาขาที่ทำงานอยู่ — server ตรวจว่าเป็นสาขาที่ใช้งานอยู่และผู้ใช้เข้าได้ ไม่ใช่ → **403** "ไม่มีสิทธิ์ทำงานในสาขานี้" (ยกเว้น `GET /me`); ไม่ส่ง → ขั้น 1 ผ่าน, ขั้น 3–4 endpoint ระดับสาขา → 400 (E2) |
 
 ### Token (JWT)
 
@@ -159,8 +160,7 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 
 ## ที่จะเปลี่ยนตาม SaaS (ขั้นถัดไป — `docs/saas-plan.md`)
 
-ทำแล้วในขั้น 1: login แบบรหัสบริษัท, token มี tenant, `GET /me` (หัวข้อด้านบน)
+ทำแล้วในขั้น 1: login แบบรหัสบริษัท, token มี tenant, `GET /me`, header `X-Branch-Id` + 403 (หัวข้อด้านบน)
 
-- header ใหม่ `X-Branch-Id` ทุก request; server ตรวจสิทธิ์สาขา (ไม่อยู่ในสิทธิ์ → 403)
 - รายงานรับ `?branchId=<id>|all`; endpoint ใหม่ `/branches`, `/settings/company`, `/settings/branch`, `/products/:id/branch-stock`, `/transfers`
 - role ใหม่ `owner`, `platform_admin`; เลขเอกสารมีรหัสสาขา (หัวข้อ 3 ของ saas-plan)

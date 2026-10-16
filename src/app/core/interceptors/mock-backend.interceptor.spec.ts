@@ -1961,6 +1961,28 @@ describe('mockBackendInterceptor – auth (B3)', () => {
     });
   });
 
+  it("checks X-Branch-Id: not sent passes (E2), a branch outside the user's rights is 403", async () => {
+    const withBranch = (branch: string) =>
+      statusOf(
+        firstValueFrom(
+          http.get('/api/products', {
+            headers: { Authorization: `Bearer ${STAFF}`, 'X-Branch-Id': branch },
+          }),
+        ),
+      );
+    expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(200);
+    expect(await withBranch('1')).toBe(200);
+    expect(await withBranch('2')).toBe(403);
+    expect(await withBranch('x')).toBe(403);
+    // `/me` still answers, so a client with a stale branch can recover.
+    const me = await firstValueFrom(
+      http.get<MeResponse>('/api/me', {
+        headers: { Authorization: `Bearer ${STAFF}`, 'X-Branch-Id': '2' },
+      }),
+    );
+    expect(me.branches.map((b) => b.id)).toEqual([1]);
+  });
+
   it('refuses a suspended company only after a correct login', async () => {
     localStorage.setItem(
       'an22.mock.db',

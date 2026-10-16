@@ -116,7 +116,7 @@ Platform (เจ้าของ SaaS)
 - `user.model.ts`: role ใหม่, `branchIds`, `allBranches`
 - `AuthService`: เก็บ `company`, `branches` และสาขาปัจจุบัน (`StorageService` key `branch`); รหัสบริษัทที่เครื่องจำไว้ (key `companyCode`) ไม่ถูกล้างตอน logout
   ถ้ามีสาขาเดียวให้เลือกอัตโนมัติ
-- `branchInterceptor` (ใหม่): ใส่ `X-Branch-Id` ลำดับ: loading → auth → **branch** → error → mockBackend
+- `branchInterceptor` (ใหม่): ใส่ `X-Branch-Id` ลำดับ: loading → auth → terminal → **branch** → error → mockBackend
 - การเลือกสาขา: หน้า `/select-branch` ใน `AuthLayout` (หลัง login เมื่อเข้าได้มากกว่า 1 สาขา)
   ตัวสลับสาขาบน toolbar ของ `MainLayout` → `document.location.reload()` (ตรงกับกฎ SPA ต่อเมนู: state ในหน่วยความจำล้างเอง)
 - toolbar แสดง "บริษัท · สาขา" ตลอดเวลา เพื่อกันขายผิดสาขา
@@ -145,7 +145,7 @@ Platform (เจ้าของ SaaS)
    - หลังบ้าน: schema `tenant_id` / `branch_id` ทุกตาราง + RLS + JWT claims
    - หน้าบ้าน: `company.model.ts`, `AuthService` เก็บบริษัท/สาขา, `branchInterceptor`, toolbar แสดงบริษัท · สาขา
    - mock: 1 บริษัท 1 สาขา
-   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ · 1.3 login รหัสบริษัท + token มี tenant + `GET /me` + `AuthService` เก็บบริษัท / สาขา ✅ 2026-10-16
+   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ · 1.3 login รหัสบริษัท + token มี tenant + `GET /me` + `AuthService` เก็บบริษัท / สาขา ✅ · 1.4 `branchInterceptor` (`X-Branch-Id`, mock 403) + toolbar "บริษัท · สาขา" ✅ 2026-10-16
 2. **ข้อมูลสาขา**: แท็บสาขาใน master-data, แยก `StoreInfo` → `CompanyInfo` + `BranchInfo`, settings 2 หน้า,
    ผู้ใช้กำหนดสาขาได้, หน้าเลือกสาขา + ตัวสลับ, โปรโมชั่นจำกัดสาขา (`branchIds`)
 3. **สต็อกแยกสาขา**: `branch_stock`, serial/movement มีสาขา, ทุนเฉลี่ยต่อสาขา, reorder ต่อสาขา, ดูสต็อกทุกสาขา

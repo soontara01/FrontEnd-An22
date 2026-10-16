@@ -835,6 +835,11 @@ const actorName = (): string => actor?.name ?? '';
 const actorIsAdmin = (): boolean => actor?.role === 'admin';
 /** POS terminal (cash drawer) of the request: header `X-Terminal-Id`, null = not set on the device. */
 let terminalId: number | null = null;
+/**
+ * Raw `X-Branch-Id` of the request (null = not sent — allowed in SaaS step 1, E2); checked against
+ * the user's branches in `handle()` (403). Branch-level data uses it from step 3.
+ */
+let branchHeader: string | null = null;
 
 /**
  * Fake backend for development without a real API.
@@ -896,6 +901,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   actor = requestUser(req, db);
   const terminal = Number(req.headers.get('X-Terminal-Id'));
   terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
+  branchHeader = req.headers.get('X-Branch-Id');
   const response$ = handle(req, path, db);
   if (generated || costed || shiftsOn || registered || branched || req.method !== 'GET') {
     storage.set(DB_KEY, db);
@@ -922,8 +928,12 @@ function handle(
   }
   // No fallback user: the company comes only from the token, an unknown one never passes.
   if (!actor) return error(401, 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  // `/me` answers whatever branch the client remembers, so a stale one can be corrected (step 2).
   if (path === 'me' && req.method === 'GET') {
     return ok({ user: actor, ...companySession(db) } satisfies MeResponse);
+  }
+  if (branchHeader !== null && !allowedBranch(db, branchHeader)) {
+    return error(403, 'ไม่มีสิทธิ์ทำงานในสาขานี้');
   }
   const forbidden = adminOnlyError(req, path);
   if (forbidden) return error(403, forbidden);
@@ -3168,6 +3178,14 @@ function companySession(db: MockDb): { company: Company; branches: Branch[] } {
     company: { ...stored, name: db.storeInfo.name, taxId: db.storeInfo.taxId },
     branches: db.branches.filter((b) => b.active),
   };
+}
+
+/**
+ * The branch an `X-Branch-Id` names when the user may work in it: an active branch of the company
+ * (step 1: every user may work in all; step 2 adds `branchIds` / `allBranches`). undefined → 403.
+ */
+function allowedBranch(db: MockDb, header: string): Branch | undefined {
+  return companySession(db).branches.find((b) => String(b.id) === header.trim());
 }
 
 /** Older stored data (and the seed) get one branch made from the store's details. */
