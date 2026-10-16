@@ -202,6 +202,44 @@ describe('shift model', () => {
     expect(closeShiftError(shift, close({}, [input(4)]), noCheck, owner)).toBeNull();
   });
 
+  it('counts a non-cash method net of refunds, below zero when refunds exceed sales (S9 / B23)', () => {
+    // Card: 1,000 sold here, 25,160 refunded by a credit note; QR: a bill of another shift voided here.
+    const refundCtx: ShiftContext = {
+      sales: [sale([pay(card, 1000)]), sale([pay(qr, 500)], { shiftId: 2, voidShiftId: 1 })],
+      creditNotes: [{ shiftId: 1, refunds: [pay(card, 25160)], total: 25160 }],
+      movements: [],
+      methods,
+    };
+    const lines = expectedByMethod({ id: 1, openingFloat: 1000 }, refundCtx);
+    expect(lines.map((l) => [l.name, l.expected])).toEqual([
+      ['เงินสด', 1000],
+      ['บัตร', -24160],
+      ['QR', -500],
+      ['โอน', 0],
+    ]);
+    const counts = [
+      input(1, { counted: 1000 }),
+      input(2, { counted: -24160, firstCount: -24000 }),
+      input(3, { counted: -500 }),
+      input(4, { confirmed: true }),
+    ];
+    expect(countInputsError(lines, counts)).toBeNull();
+    const check = countCheck(lines, counts, 100);
+    expect(check.lines.map((l) => l.variance)).toEqual([0, 0, 0, 0]);
+    expect(check.needsApproval).toBe(false);
+    expect(closeShiftError(shift, close({}, counts), lines, owner)).toBeNull();
+    // Cash cannot be negative; any amount keeps at most 2 decimals.
+    expect(countInputsError(lines, [...counts.slice(1), input(1, { counted: -1 })])).toBe(
+      'กรุณากรอกยอดที่นับได้ของ เงินสด',
+    );
+    expect(
+      countInputsError(lines, [counts[0], input(2, { counted: -24160.005 }), ...counts.slice(2)]),
+    ).toBe('กรุณากรอกยอดที่นับได้ของ บัตร');
+    expect(countInputsError(lines, [{ ...counts[0], firstCount: -1 }, ...counts.slice(1)])).toBe(
+      'ยอดนับครั้งแรกของ เงินสด ไม่ถูกต้อง',
+    );
+  });
+
   it('checks the banknote count and the deposit', () => {
     const notes = [
       { value: 1000, qty: 6 },

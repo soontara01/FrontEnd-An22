@@ -117,12 +117,12 @@
                 <input
                   matInput
                   type="number"
-                  min="0"
                   step="0.01"
                   [value]="counted()[item.methodId] ?? ''"
                   (input)="setCounted(item.methodId, $any($event.target).value)"
                 />
                 <span matTextSuffix>บาท</span>
+                <mat-hint>ยอดสุทธิ — ติดลบได้ถ้าคืนเงินมากกว่ารับ</mat-hint>
               </mat-form-field>
             } @else if (item.closeCheck === 'confirm') {
               <mat-slide-toggle

@@ -1190,6 +1190,51 @@ describe('mockBackendInterceptor – shifts', () => {
     expect((await sellMouse({ terminal: 2 })).shiftId).toBe(second.id);
   });
 
+  it('closes a shift whose card line is below zero from a void of another shift (S9 / B23)', async () => {
+    const first = await open(1000);
+    const sale = await call<Sale>('POST', 'sales', {
+      items: [{ productId: MOUSE, factor: 1, qty: 1, serial: null }],
+      freeSerials: [],
+      payments: [{ methodId: 2, amount: 531, reference: 'A1', installmentMonths: null }],
+      customer: '',
+      expectedTotal: 531,
+    });
+    const closeBody = (counts: unknown) => ({
+      counts,
+      cashDenominations: [],
+      depositAmount: 0,
+      note: '',
+      approval: null,
+    });
+    await call('POST', `shifts/${first.id}/close`, closeBody(await countsFor(first)));
+
+    const second = await open(1000);
+    await call('POST', `sales/${sale.id}/void`, { reason: 'คีย์ผิด' });
+    const counts = await countsFor(second);
+    const card = counts.find((c) => c.methodId === 2)!;
+    expect(card.counted).toBe(-531);
+    const negativeCash = counts.map((c) => (c.methodId === CASH ? { ...c, counted: -1 } : c));
+    expect(
+      await errorOf(call('POST', `shifts/${second.id}/count-check`, { counts: negativeCash })),
+    ).toBe('กรุณากรอกยอดที่นับได้ของ เงินสด');
+    const check = await call<CountCheckResult>('POST', `shifts/${second.id}/count-check`, {
+      counts,
+    });
+    expect(check.lines.find((l) => l.methodId === 2)).toMatchObject({
+      expected: -531,
+      counted: -531,
+      variance: 0,
+    });
+    expect(check.needsApproval).toBe(false);
+    const closed = await call<Shift>('POST', `shifts/${second.id}/close`, closeBody(counts));
+    expect(closed.approvalStatus).toBe('not_needed');
+    expect(closed.counts.find((c) => c.methodId === 2)).toMatchObject({
+      expected: -531,
+      counted: -531,
+      reasonCode: null,
+    });
+  });
+
   it('moves cash, hides the X-report lines from staff and closes a matching count', async () => {
     const staff = { token: STAFF };
     const shift = await open(1000, staff);

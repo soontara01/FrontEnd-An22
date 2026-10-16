@@ -274,6 +274,9 @@ const baht = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 2
 /** A non-negative amount with at most 2 decimals. */
 const isMoney = (n: unknown): n is number =>
   typeof n === 'number' && Number.isFinite(n) && n >= 0 && round2(n) === n;
+/** An amount with at most 2 decimals that may be negative (net of refunds, S9). */
+const isSignedMoney = (n: unknown): n is number =>
+  typeof n === 'number' && Number.isFinite(n) && round2(n) === n;
 
 export const denominationTotal = (counts: readonly DenominationCount[]): number =>
   round2(counts.reduce((sum, c) => sum + c.value * c.qty, 0));
@@ -530,9 +533,14 @@ export function adjustedVariance(
 export const closeChecklist = (expected: readonly ExpectedLine[]): CloseChecklistItem[] =>
   expected.map(({ methodId, name, type, closeCheck }) => ({ methodId, name, type, closeCheck }));
 
-/** Every `count` method has an amount (≥ 0, 2 decimals) and every `confirm` one is ticked. */
+/**
+ * Every `count` method has an amount (2 decimals) and every `confirm` one is ticked. Cash is ≥ 0;
+ * other counted methods may be negative — their evidence (e.g. the EDC settlement) is net of
+ * refunds, which can exceed what came in (S9 / B23). Always allowed, not only when the expected
+ * amount is negative, so the input never hints at it (blind count).
+ */
 export function countInputsError(
-  expected: readonly Pick<ExpectedLine, 'methodId' | 'name' | 'closeCheck'>[],
+  expected: readonly Pick<ExpectedLine, 'methodId' | 'name' | 'type' | 'closeCheck'>[],
   inputs: readonly ShiftCountInput[],
 ): string | null {
   for (const line of expected) {
@@ -542,8 +550,9 @@ export function countInputsError(
       if (!input?.confirmed) return `กรุณาตรวจยอด ${line.name} แล้วติ๊ก "ตรวจแล้ว"`;
       continue;
     }
-    if (!input || !isMoney(input.counted)) return `กรุณากรอกยอดที่นับได้ของ ${line.name}`;
-    if (input.firstCount !== null && !isMoney(input.firstCount)) {
+    const valid = line.type === 'cash' ? isMoney : isSignedMoney;
+    if (!input || !valid(input.counted)) return `กรุณากรอกยอดที่นับได้ของ ${line.name}`;
+    if (input.firstCount !== null && !valid(input.firstCount)) {
       return `ยอดนับครั้งแรกของ ${line.name} ไม่ถูกต้อง`;
     }
   }
