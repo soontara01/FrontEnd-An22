@@ -1,6 +1,7 @@
 import { CreditNote } from './credit-note.model';
 import { Exchange } from './exchange.model';
 import { CloseCheck, PaymentMethod, PaymentType, closeCheckOf } from './payment-method.model';
+import { moneyInputError } from './money.model';
 import { toIsoDate } from './price.model';
 import { Sale } from './sale.model';
 
@@ -422,7 +423,8 @@ export function openShiftError(
   ctx: { terminalHasOpenShift: boolean; userHasOpenShift: boolean },
 ): string | null {
   if (!Number.isInteger(p.terminalId) || p.terminalId <= 0) return 'ไม่ได้ระบุเครื่อง POS';
-  if (!isMoney(p.openingFloat)) return 'เงินทอนตั้งต้นต้องเป็นจำนวนเงินที่ไม่ติดลบ';
+  const floatProblem = moneyInputError(p.openingFloat, 'เงินทอนตั้งต้น');
+  if (floatProblem) return floatProblem;
   if (!denominationsValid(p.openingDenominations)) return 'จำนวนแบงก์/เหรียญไม่ถูกต้อง';
   if (
     p.openingDenominations.length &&

@@ -133,6 +133,13 @@ export function buyerIdError(idType: BuyerIdType | undefined, id: string): strin
   return isValidThaiTaxId(id) ? null : 'เลขประจำตัวผู้เสียภาษีผู้ซื้อต้องเป็น 13 หลักที่ถูกต้อง';
 }
 
+/**
+ * Error of the ID as soon as something is typed (shown under the field, B21) — `buyerError()`
+ * reports one problem at a time, so with the name still empty the ID error would stay hidden.
+ */
+export const typedBuyerIdError = (b: Pick<TaxInvoiceBuyer, 'idType' | 'taxId'>): string | null =>
+  b.taxId ? buyerIdError(b.idType, b.taxId) : null;
+
 export function normalizeBuyer(b: TaxInvoiceBuyer): TaxInvoiceBuyer {
   const idType: BuyerIdType = b.idType === 'passport' ? 'passport' : 'tax_id';
   const branchType: BuyerBranchType =

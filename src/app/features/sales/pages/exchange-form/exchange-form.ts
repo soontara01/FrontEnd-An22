@@ -136,7 +136,13 @@ export default class ExchangeForm {
     if (!ctx || !this.data.hasValue() || !this.store.storeInfo() || !this.products.hasValue()) {
       return null;
     }
-    return exchangeError(this.data.value().sale, this.payload(), ctx);
+    return (
+      exchangeError(this.data.value().sale, this.payload(), ctx) ??
+      this.rows()
+        .map((r) => this.serialWarning(r))
+        .find(Boolean) ??
+      null
+    );
   });
   /** 'YYYY-MM-DD' last day staff may exchange (null = no limit). */
   protected readonly deadline = computed(() => {
@@ -177,6 +183,18 @@ export default class ExchangeForm {
     return p ? { stock: p.stock, unit: p.unit } : null;
   }
 
+  /**
+   * Warns before sending when the typed replacement serial is not one of the SKU's in-stock serials
+   * (B22) — the server would refuse it. null while the stock list is loading.
+   */
+  protected serialWarning(row: Row): string | null {
+    const typed = row.newSerial.trim();
+    if (!row.qty || !row.serial || !typed || !this.stockSerials.hasValue()) return null;
+    return this.serialOptions(row).includes(typed)
+      ? null
+      : `ซีเรียล ${typed} ไม่อยู่ในคลังของ ${this.line(row).sku} — เลือกจากรายการ`;
+  }
+
   /** Replacement serials on offer for a row (in stock, same SKU). */
   protected serialOptions(row: Row): string[] {
     const map = this.stockSerials.hasValue() ? this.stockSerials.value() : {};
@@ -201,9 +219,10 @@ export default class ExchangeForm {
         this.notify.success(`บันทึกการเปลี่ยนสินค้า ${exchange.exNo} แล้ว`);
         void this.router.navigate(['/sales', sale.id], { queryParams: { printEx: exchange.id } });
       },
+      // Keep what was typed (B22): the bill did not change, so only the stock is reloaded —
+      // reloading the bill would rebuild the rows and clear the ticks / serials / reason.
       error: () => {
         this.saving.set(false);
-        this.data.reload();
         this.stockSerials.reload();
         this.products.reload();
       },

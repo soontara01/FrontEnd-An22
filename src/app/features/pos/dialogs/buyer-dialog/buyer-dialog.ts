@@ -14,6 +14,7 @@ import {
   isPassportBuyer,
   normalizeBuyerId,
   normalizeBuyer,
+  typedBuyerIdError,
 } from '@core/models';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
@@ -50,7 +51,8 @@ import { PosStore } from '../../data/pos.store';
     .branch-no {
       flex: 0 1 140px;
     }
-    .problem {
+    .problem,
+    .field-error {
       color: var(--mat-sys-error);
       font: var(--mat-sys-body-small);
     }
@@ -76,6 +78,8 @@ export class BuyerDialog {
     normalizeBuyer({ ...EMPTY_BUYER, ...this.value() } as TaxInvoiceBuyer),
   );
   protected readonly problem = computed(() => buyerError(this.buyer()));
+  /** ID error under the field as soon as it is typed (B21). */
+  protected readonly idError = computed(() => typedBuyerIdError(this.buyer()));
   /** Foreign buyer identified by passport (no branch). */
   protected readonly passport = computed(() => isPassportBuyer(this.buyer()));
   private readonly idType = () => this.form.controls.idType.value;

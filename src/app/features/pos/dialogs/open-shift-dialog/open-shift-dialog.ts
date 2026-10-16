@@ -55,9 +55,11 @@ export class OpenShiftDialog {
 
   private readonly payload = computed<ShiftOpenPayload>(() => {
     const counted = this.counting() ? this.counted() : [];
+    // An empty field is NaN → "กรุณากรอกเงินทอนตั้งต้น", never a silent 0 (B1).
+    const typed = String(this.float()).trim();
     return {
       terminalId: this.data.terminalId,
-      openingFloat: counted.length ? this.countTotal() : Number(this.float()),
+      openingFloat: counted.length ? this.countTotal() : typed === '' ? NaN : Number(typed),
       openingDenominations: counted,
     };
   });

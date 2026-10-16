@@ -71,3 +71,7 @@ form {
 .mono {
   font-family: ui-monospace, monospace;
 }
+
+.field-error {
+  color: var(--mat-sys-error);
+}

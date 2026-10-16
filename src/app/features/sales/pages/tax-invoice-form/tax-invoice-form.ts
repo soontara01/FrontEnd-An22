@@ -24,6 +24,7 @@ import {
   normalizeBuyer,
   reissueError,
   taxInvoiceError,
+  typedBuyerIdError,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
@@ -100,6 +101,8 @@ export default class TaxInvoiceForm {
   );
   /** Foreign buyer identified by passport (no branch). */
   protected readonly passport = computed(() => isPassportBuyer(this.buyer()));
+  /** ID error under the field as soon as it is typed (B21). */
+  protected readonly idError = computed(() => typedBuyerIdError(this.buyer()));
   private readonly idType = () => this.form.controls.idType.value;
   protected readonly problem = computed(() => {
     const info = this.store.storeInfo();

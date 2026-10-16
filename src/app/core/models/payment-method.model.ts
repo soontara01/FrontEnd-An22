@@ -1,3 +1,4 @@
+import { moneyInputError } from './money.model';
 import { isValidThaiTaxId } from './supplier.model';
 
 /**
@@ -189,7 +190,8 @@ export function paymentMethodError(
   if (!name) return 'กรุณากรอกชื่อช่องทางชำระเงิน';
   if (name.length > PAYMENT_NAME_MAX) return `ชื่อต้องไม่เกิน ${PAYMENT_NAME_MAX} ตัวอักษร`;
   if (!(p.type in PAYMENT_TYPE_LABEL)) return 'ประเภทไม่ถูกต้อง';
-  if (!(p.minAmount >= 0)) return 'ยอดขั้นต่ำต้องไม่ติดลบ';
+  const minProblem = moneyInputError(p.minAmount, 'ยอดขั้นต่ำ');
+  if (minProblem) return minProblem;
   if (p.maxAmount !== null && !(p.maxAmount > 0 && p.maxAmount >= p.minAmount)) {
     return 'ยอดสูงสุดต้องมากกว่า 0 และไม่น้อยกว่ายอดขั้นต่ำ';
   }

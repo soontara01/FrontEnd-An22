@@ -11,6 +11,7 @@ import {
   normalizeBuyer,
   reissueError,
   taxInvoiceError,
+  typedBuyerIdError,
 } from './tax-invoice.model';
 
 describe('tax invoice model', () => {
@@ -72,6 +73,17 @@ describe('tax invoice model', () => {
     expect(defaultBuyerBranch('0-1055-50123-45-1')).toBe('head');
     expect(defaultBuyerBranch('1101700230708')).toBe('none');
     expect(defaultBuyerBranch('')).toBe('none');
+  });
+
+  it('reports a wrong ID as soon as it is typed, before the rest is filled (B21)', () => {
+    expect(typedBuyerIdError({ idType: 'passport', taxId: '' })).toBeNull();
+    expect(typedBuyerIdError({ idType: 'passport', taxId: 'AB12' })).toBe(
+      'เลขที่หนังสือเดินทางต้องเป็นตัวอักษรอังกฤษ/ตัวเลข 6–20 ตัว',
+    );
+    expect(typedBuyerIdError({ idType: 'passport', taxId: 'AB1234567' })).toBeNull();
+    expect(typedBuyerIdError({ idType: 'tax_id', taxId: '123' })).toBe(
+      'เลขประจำตัวผู้เสียภาษีผู้ซื้อต้องเป็น 13 หลักที่ถูกต้อง',
+    );
   });
 
   it('validates the buyer', () => {

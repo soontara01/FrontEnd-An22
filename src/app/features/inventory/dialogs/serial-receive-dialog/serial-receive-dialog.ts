@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
-import { Product, effectiveCost, mainSupplier } from '@core/models';
+import { Product, effectiveCost, mainSupplier, moneyInputError } from '@core/models';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
@@ -38,9 +38,9 @@ export class SerialReceiveDialog {
   );
   protected readonly errorCount = computed(() => this.lines().filter((l) => l.error).length);
   protected readonly validCount = computed(() => this.lines().length - this.errorCount());
-  protected readonly costValid = computed(
-    () => Number.isFinite(this.unitCost()) && this.unitCost() >= 0,
-  );
+  /** Empty / negative / more than 2 decimals, as its own message (B14); null = fine. */
+  protected readonly costError = computed(() => moneyInputError(this.unitCost(), 'ต้นทุน'));
+  protected readonly costValid = computed(() => !this.costError());
   protected readonly total = computed(() => this.validCount() * this.unitCost());
   protected readonly canSave = computed(
     () =>
@@ -50,6 +50,11 @@ export class SerialReceiveDialog {
       this.validCount() > 0 &&
       this.errorCount() === 0,
   );
+
+  /** An empty field stays empty (NaN → "กรุณากรอกต้นทุน"), never a silent 0. */
+  protected setCost(raw: string): void {
+    this.unitCost.set(raw.trim() === '' ? NaN : Number(raw));
+  }
 
   constructor() {
     this.store.serials(this.product.id).subscribe({

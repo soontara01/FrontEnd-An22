@@ -86,6 +86,9 @@ import {
   VoidPayload,
   saleDay,
   soldWithVat,
+  moneyInputError,
+  moneyProblem,
+  moneyProblemText,
   normalizeSale,
   normalizeStoreInfo,
   creditNoteError,
@@ -1135,7 +1138,8 @@ function handleProducts(
       if (blocked) return blocked;
       // Moving weighted average: every receipt re-averages the cost.
       const cost = unitCost ?? current.cost;
-      if (!(cost >= 0)) return error(400, 'ต้นทุนต้องไม่ติดลบ');
+      const costProblem = receiptCostError(cost);
+      if (costProblem) return error(400, costProblem);
       products[index] = {
         ...current,
         stock: current.stock + delta,
@@ -1233,6 +1237,15 @@ function migrateCosting(db: MockDb): boolean {
   return changed;
 }
 
+/**
+ * Receipt cost per base unit: required and not negative. It may have more than 2 decimals (a pack
+ * cost ÷ its factor), so only those two `moneyProblem()` cases apply here.
+ */
+function receiptCostError(cost: unknown): string | null {
+  const problem = moneyProblem(cost);
+  return problem && problem !== 'decimals' ? moneyProblemText(problem, 'ต้นทุน') : null;
+}
+
 /** Generates deterministic sample serials so serial SKUs always have stock = in-stock serials. */
 function syncSerials(db: MockDb): boolean {
   let changed = false;
@@ -1305,7 +1318,8 @@ function handleSerials(
     if (!serials.length) return error(400, 'ไม่มี Serial ที่จะรับเข้า');
     // Specific identification: every received unit carries its own purchase cost.
     const unitCost = body.unitCost ?? product.cost;
-    if (!(unitCost >= 0)) return error(400, 'ต้นทุนต้องไม่ติดลบ');
+    const costProblem = receiptCostError(unitCost);
+    if (costProblem) return error(400, costProblem);
     const problems: string[] = [];
     serials.forEach((serial, i) => {
       const formatError = serialFormatError(serial, product);
@@ -1447,7 +1461,8 @@ function handlePrices(
 
   const validate = (payload: SkuPricePayload, exceptId?: number): string | null => {
     if (!db.products.some((p) => p.id === payload.productId)) return 'ไม่พบ SKU';
-    if (!(payload.price >= 0)) return 'ราคาต้องไม่ติดลบ';
+    const priceProblem = moneyInputError(payload.price, 'ราคา');
+    if (priceProblem) return priceProblem;
     if (!payload.startDate) return 'กรุณาระบุวันที่เริ่ม';
     if (payload.endDate && payload.endDate < payload.startDate) {
       return 'วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม';

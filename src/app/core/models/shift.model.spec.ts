@@ -332,9 +332,12 @@ describe('shift model', () => {
     const free = { terminalHasOpenShift: false, userHasOpenShift: false };
     expect(openShiftError(p, free)).toBeNull();
     expect(openShiftError({ ...p, terminalId: 0 }, free)).toBe('ไม่ได้ระบุเครื่อง POS');
-    expect(openShiftError({ ...p, openingFloat: -1 }, free)).toBe(
-      'เงินทอนตั้งต้นต้องเป็นจำนวนเงินที่ไม่ติดลบ',
+    // Each problem has its own message (B1), not "ต้องไม่ติดลบ" for everything.
+    expect(openShiftError({ ...p, openingFloat: -1 }, free)).toBe('เงินทอนตั้งต้นต้องไม่ติดลบ');
+    expect(openShiftError({ ...p, openingFloat: 1000.005 }, free)).toBe(
+      'เงินทอนตั้งต้นทศนิยมไม่เกิน 2 ตำแหน่ง',
     );
+    expect(openShiftError({ ...p, openingFloat: NaN }, free)).toBe('กรุณากรอกเงินทอนตั้งต้น');
     expect(openShiftError({ ...p, openingDenominations: [{ value: 1000, qty: 1 }] }, free)).toBe(
       'ยอดรวมแบงก์/เหรียญไม่ตรงกับเงินทอนตั้งต้น',
     );

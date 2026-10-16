@@ -17,6 +17,9 @@
         [attr.inputmode]="passport() ? 'text' : 'numeric'"
         maxlength="20"
       />
+      @if (idError(); as message) {
+        <mat-hint class="field-error">{{ message }}</mat-hint>
+      }
     </mat-form-field>
     @if (found()) {
       <div class="found">เติมข้อมูลจากใบกำกับภาษีครั้งก่อนแล้ว</div>
@@ -49,7 +52,9 @@
       }
     </mat-form-field>
     @if (problem(); as message) {
-      <div class="problem">{{ message }}</div>
+      @if (message !== idError()) {
+        <div class="problem">{{ message }}</div>
+      }
     }
   </form>
 </mat-dialog-content>

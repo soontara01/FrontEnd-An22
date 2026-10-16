@@ -21,11 +21,12 @@
           min="0"
           step="0.01"
           [value]="unitCost()"
-          (input)="unitCost.set(+$any($event.target).value)"
+          (input)="setCost($any($event.target).value)"
         />
         <span matTextSuffix>฿</span>
-        @if (!costValid()) {
-          <mat-error>ต้องไม่ติดลบ</mat-error>
+        @if (costError(); as message) {
+          <!-- Not a form control, so <mat-error> would never show: an error-coloured hint instead. -->
+          <mat-hint class="field-error">{{ message }}</mat-hint>
         }
       </mat-form-field>
       <mat-form-field appearance="outline">

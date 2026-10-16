@@ -92,7 +92,9 @@
                         }
                       </datalist>
                     </mat-form-field>
-                    @if (!serialOptions(row).length) {
+                    @if (serialWarning(row); as warning) {
+                      <div class="problem small">{{ warning }}</div>
+                    } @else if (!serialOptions(row).length) {
                       <div class="text-muted small">ไม่มีเครื่องในคลัง</div>
                     }
                   } @else if (l.itemType !== 'service' && row.held) {

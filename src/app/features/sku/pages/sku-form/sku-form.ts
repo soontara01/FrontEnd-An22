@@ -44,6 +44,7 @@ import { PageHeader } from '@shared/components/page-header/page-header';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
 import { resizeImage } from '@shared/utils/image-resize';
+import { moneyErrorText, moneyValidator } from '@shared/utils/money-validator';
 import { SkuStore } from '../../data/sku.store';
 
 const SKU_PATTERN = /^[A-Z0-9-]+$/;
@@ -82,6 +83,7 @@ type SupplierGroup = FormGroup<{
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export default class SkuForm implements OnInit {
+  protected readonly moneyErrorText = moneyErrorText;
   protected readonly store = inject(SkuStore);
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
@@ -133,7 +135,7 @@ export default class SkuForm implements OnInit {
     itemType: ['stock' as ItemType],
     saleStatus: ['active' as SkuStatus],
     vatType: ['vat7' as VatType],
-    cost: [0, [Validators.required, Validators.min(0)]],
+    cost: [0, moneyValidator],
     minStock: [0, [Validators.required, Validators.min(0)]],
     maxStock: [0, [Validators.required, Validators.min(0)]],
     suppliers: this.fb.array<SupplierGroup>([]),
@@ -382,7 +384,7 @@ export default class SkuForm implements OnInit {
     return this.fb.group({
       supplierId: this.fb.control<number | null>(l.supplierId, Validators.required),
       supplierSku: [l.supplierSku],
-      cost: [l.cost, [Validators.required, Validators.min(0)]],
+      cost: [l.cost, moneyValidator],
       leadTimeDays: [l.leadTimeDays, [Validators.required, Validators.min(0), Validators.max(365)]],
       moq: [l.moq, [Validators.required, Validators.min(0)]],
       isMain: [l.isMain],

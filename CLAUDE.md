@@ -80,7 +80,7 @@ Run build + test + lint before calling a change done.
 
 - Standalone components, `ChangeDetectionStrategy.OnPush`, `inject()` (no constructor injection), `input()`/`output()`/`viewChild()` signal APIs, `@if`/`@for` control flow.
 - State: `signal` / `computed` in services; expose read-only via `.asReadonly()`. No NgRx.
-- Forms: Reactive forms via `NonNullableFormBuilder`.
+- Forms: Reactive forms via `NonNullableFormBuilder`. A typed baht amount is checked by `moneyProblem()` / `moneyInputError(value, label)` (`core/models/money.model.ts`: empty → "กรุณากรอก…", negative → "…ต้องไม่ติดลบ", > 2 decimals → "…ทศนิยมไม่เกิน 2 ตำแหน่ง"; B1 / B14) — reactive controls use `moneyValidator` + `moneyErrorText()` (`shared/utils/money-validator.ts`); an empty number field must never turn into a silent 0. `<mat-error>` only shows for a form control: a signal-bound input shows its error as `<mat-hint class="field-error">`.
 - Route params bind to component inputs (`withComponentInputBinding()`), e.g. `readonly id = input<string>()`.
 - Imports use aliases `@core/*`, `@shared/*`, `@layout/*`, `@features/*`, `@env/*`; relative imports only within the same feature/folder.
 - Styling: use Material system tokens (`var(--mat-sys-*)`), not hard-coded colors, so dark mode (`html.dark-theme`, toggled by `ThemeService`) works.

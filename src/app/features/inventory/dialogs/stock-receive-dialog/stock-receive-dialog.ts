@@ -6,6 +6,7 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { Product, effectiveCost, mainSupplier, movingAverage } from '@core/models';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
+import { moneyErrorText, moneyValidator } from '@shared/utils/money-validator';
 import { InventoryStore } from '../../data/inventory.store';
 
 /**
@@ -28,6 +29,7 @@ import { InventoryStore } from '../../data/inventory.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StockReceiveDialog {
+  protected readonly moneyErrorText = moneyErrorText;
   protected readonly product = inject<Product>(MAT_DIALOG_DATA);
   private readonly store = inject(InventoryStore);
   private readonly dialogRef = inject<MatDialogRef<StockReceiveDialog, Product>>(MatDialogRef);
@@ -49,7 +51,7 @@ export class StockReceiveDialog {
   protected readonly form = inject(NonNullableFormBuilder).group({
     qty: [1, [Validators.required, Validators.min(1), Validators.pattern(/^\d+$/)]],
     unit: [''],
-    unitCost: [this.baseDefaultCost, [Validators.required, Validators.min(0)]],
+    unitCost: [this.baseDefaultCost, moneyValidator],
     note: [''],
   });
 

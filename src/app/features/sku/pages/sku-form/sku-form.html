@@ -130,8 +130,8 @@
               ? 'ใช้เป็นต้นทุนขายทุกครั้งที่ขาย (0 = ไม่มีต้นทุน)'
               : 'ใช้ตั้งต้นตอนรับเข้า และประมาณกำไรเมื่อยังไม่มีสต็อก'
           }}</mat-hint>
-          @if (form.controls.cost.invalid) {
-            <mat-error>ต้องไม่ติดลบ</mat-error>
+          @if (moneyErrorText(form.controls.cost, 'ต้นทุน'); as message) {
+            <mat-error>{{ message }}</mat-error>
           }
         </mat-form-field>
 
@@ -141,7 +141,9 @@
             <input matInput type="number" min="0" formControlName="minStock" />
             <span matTextSuffix>{{ baseUnit() }}</span>
             <mat-hint>ถึงค่านี้ = "ใกล้หมด" และควรสั่งซื้อ</mat-hint>
-            @if (form.controls.minStock.invalid) {
+            @if (form.controls.minStock.hasError('required')) {
+              <mat-error>กรุณากรอกจุดสั่งซื้อ</mat-error>
+            } @else if (form.controls.minStock.invalid) {
               <mat-error>ต้องไม่ติดลบ</mat-error>
             }
           </mat-form-field>
@@ -151,7 +153,9 @@
             <input matInput type="number" min="0" formControlName="maxStock" />
             <span matTextSuffix>{{ baseUnit() }}</span>
             <mat-hint>สั่งเติมให้ถึงค่านี้ (0 = 2 เท่าของจุดสั่งซื้อ)</mat-hint>
-            @if (form.controls.maxStock.invalid) {
+            @if (form.controls.maxStock.hasError('required')) {
+              <mat-error>กรุณากรอกสต็อกสูงสุด</mat-error>
+            } @else if (form.controls.maxStock.invalid) {
               <mat-error>ต้องไม่ติดลบ</mat-error>
             }
           </mat-form-field>
@@ -311,6 +315,9 @@
                 <mat-label>ราคาซื้อ (ไม่รวม VAT)</mat-label>
                 <input matInput type="number" min="0" formControlName="cost" />
                 <span matTextSuffix>฿</span>
+                @if (moneyErrorText(row.controls.cost, 'ราคาซื้อ'); as message) {
+                  <mat-error>{{ message }}</mat-error>
+                }
               </mat-form-field>
               <mat-form-field appearance="outline" class="narrow">
                 <mat-label>Lead time</mat-label>
