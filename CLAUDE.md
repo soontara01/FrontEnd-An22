@@ -21,6 +21,7 @@ Node.js 24 (`.nvmrc`, `engines` in package.json) — `nvm use` before running an
 - `npm test` — Vitest (`npx ng test --watch=false` for a single run)
 - `npx ng lint` — ESLint (angular-eslint)
 - `npx prettier --write <paths>` — formatting (printWidth 100, single quotes)
+- `npm run fixtures` — regenerate the golden fixtures `docs/backend/fixtures/*.json` from `core/models/golden/golden-fixtures.ts` (the real rules); `golden-fixtures.spec.ts` fails until you do after changing `priceCart()` / payment rules — review the JSON diff, the API's tests read it
 
 Run build + test + lint before calling a change done.
 
@@ -108,4 +109,4 @@ Set `useMock: false` in `src/environments/environment*.ts`; dev proxy `proxy.con
 
 The real backend lives in separate repos (db = PostgreSQL scripts, api = Java Spring Boot, web = Node.js static server); this repo is their spec. **Hand-off docs: `docs/backend/`** — `README.md` (repos, how they read this one), `api-contract.md` (every endpoint, headers, errors, 401/403 rules — the former endpoint list), `domain-rules.md` (rule functions the server must port, incl. mock-only rules), `data-model.md` (tables, keys, derived fields, document numbers); decision index `docs/decisions.md`.
 
-**Keep them current:** adding / changing an endpoint, a stored field, a permission or a rule in `core/models` or the mock → update the matching `docs/backend/*.md` (and `docs/decisions.md` for a new decision) in the same commit.
+**Keep them current:** adding / changing an endpoint, a stored field, a permission or a rule in `core/models` or the mock → update the matching `docs/backend/*.md` (and `docs/decisions.md` for a new decision) in the same commit; a changed calculation rule also gets `npm run fixtures` (+ a new case in `golden-fixtures.ts` for the change).

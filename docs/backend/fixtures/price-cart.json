@@ -1,0 +1,6488 @@
+[
+  {
+    "name": "list price × pack factor, VAT per line",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 1,
+          "factor": 10,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [
+              {
+                "unit": "กล่อง",
+                "factor": 10,
+                "barcode": "B10"
+              }
+            ],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 10.7,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 10.7,
+            "listPrice": 10.7,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 21.4,
+            "vat": 1.4,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "กล่อง",
+            "factor": 10,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 107,
+            "vat": 7,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 1
+          }
+        ],
+        "subtotal": 128.4,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 128.4,
+        "vat": 8.4,
+        "billPromotionIds": [],
+        "itemCount": 12,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "store not VAT-registered: same prices, VAT 0 (B20)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 10.7,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": false
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 10.7,
+            "listPrice": 10.7,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 21.4,
+            "vat": 0,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 21.4,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 21.4,
+        "vat": 0,
+        "billPromotionIds": [],
+        "itemCount": 2,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "VAT rounding on odd prices, vat7 + exempt",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 3,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 2,
+          "factor": 1,
+          "qty": 7,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 3,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 99.99,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 2",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "exempt",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 12.35,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2"
+          },
+          {
+            "shortName": "สินค้า 3",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 0.01,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 3,
+            "unitPrice": 99.99,
+            "listPrice": 99.99,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 299.97,
+            "vat": 19.62,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2",
+            "shortName": "สินค้า 2",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "exempt",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 7,
+            "unitPrice": 12.35,
+            "listPrice": 12.35,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 86.45,
+            "vat": 0,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 1
+          },
+          {
+            "productId": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3",
+            "shortName": "สินค้า 3",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 0.01,
+            "listPrice": 0.01,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0.01,
+            "vat": 0,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 2
+          }
+        ],
+        "subtotal": 386.43,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 386.43,
+        "vat": 19.62,
+        "billPromotionIds": [],
+        "itemCount": 11,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "item % discount capped per unit (maxDiscount), minQty reached",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 3,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": 50
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 3,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 150,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 2850,
+            "vat": 186.45,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 3000,
+        "itemDiscount": 150,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 2850,
+        "vat": 186.45,
+        "billPromotionIds": [],
+        "itemCount": 3,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "item discount not reached (minQty)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": 50
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 1000,
+            "vat": 65.42,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 1000,
+        "vat": 65.42,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "priority walk: stackable ones compound, non-stackable lower one skipped",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 1,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 3,
+            "code": "P3",
+            "name": "โปร 3",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 5,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 50,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 9,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 190,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 810,
+            "vat": 52.99,
+            "promotionIds": [1, 3],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 190,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 810,
+        "vat": 52.99,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "priority walk: a non-stackable top promotion stops the rest",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 10,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 50,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 9,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 1,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 3,
+            "code": "P3",
+            "name": "โปร 3",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 500,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 500,
+            "vat": 32.71,
+            "promotionIds": [2],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 500,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 500,
+        "vat": 32.71,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "disabled / expired / not started / out of scope ignored; category scope covers children",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": false,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": "2026-10-03",
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 3,
+            "code": "P3",
+            "name": "โปร 3",
+            "startDate": "2026-10-05"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": false,
+              "productIds": [2],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 4,
+            "code": "P4",
+            "name": "โปร 4",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": false,
+              "productIds": [],
+              "categoryIds": [1]
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 5,
+            "code": "P5",
+            "name": "โปร 5",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 100,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 900,
+            "vat": 58.88,
+            "promotionIds": [5],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 100,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 900,
+        "vat": 58.88,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free goods per set of pieces, repeat",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 5,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 50,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": null
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 5,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 535,
+            "vat": 35,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 2,
+            "serial": null,
+            "cartIndex": null
+          }
+        ],
+        "subtotal": 535,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 535,
+        "vat": 35,
+        "billPromotionIds": [],
+        "itemCount": 7,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free goods without repeat: one set",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 5,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 50,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": false,
+              "maxSets": null
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 5,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 535,
+            "vat": 35,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 1,
+            "serial": null,
+            "cartIndex": null
+          }
+        ],
+        "subtotal": 535,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 535,
+        "vat": 35,
+        "billPromotionIds": [],
+        "itemCount": 6,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free goods capped by maxSets",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 9,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 50,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": 3
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 9,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 963,
+            "vat": 63,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 3,
+            "serial": null,
+            "cartIndex": null
+          }
+        ],
+        "subtotal": 963,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 963,
+        "vat": 63,
+        "billPromotionIds": [],
+        "itemCount": 12,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free goods by amount counted after item discounts (not reached)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 2000,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": null
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 5,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 200,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 1800,
+            "vat": 117.76,
+            "promotionIds": [2, 1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 2000,
+        "itemDiscount": 200,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 1800,
+        "vat": 117.76,
+        "billPromotionIds": [],
+        "itemCount": 2,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free goods by amount counted after item discounts (reached)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 3,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 2000,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": null
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 5,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 3,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 300,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 2700,
+            "vat": 176.64,
+            "promotionIds": [2, 1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 1,
+            "serial": null,
+            "cartIndex": null
+          }
+        ],
+        "subtotal": 3000,
+        "itemDiscount": 300,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 2700,
+        "vat": 176.64,
+        "billPromotionIds": [],
+        "itemCount": 4,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free items capped at stock left after paid lines (warning only)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 6,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 9,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 3,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": false,
+              "productIds": [1],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": null
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 6,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 642,
+            "vat": 42,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 214,
+            "vat": 14,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 1
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 1,
+            "serial": null,
+            "cartIndex": null
+          }
+        ],
+        "subtotal": 856,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 856,
+        "vat": 56,
+        "billPromotionIds": [],
+        "itemCount": 9,
+        "issues": [
+          {
+            "cartIndex": null,
+            "productId": 9,
+            "message": "ของแถม SKU-9 สต็อกไม่พอ แถมได้ 1 จาก 3 ชิ้น",
+            "blocking": false
+          }
+        ]
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free serial item without scanned serial (blocking)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 4,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 5,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": true,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": null
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 4,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 428,
+            "vat": 28,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 1,
+            "serial": null,
+            "cartIndex": null
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 1,
+            "serial": null,
+            "cartIndex": null
+          }
+        ],
+        "subtotal": 428,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 428,
+        "vat": 28,
+        "billPromotionIds": [],
+        "itemCount": 6,
+        "issues": [
+          {
+            "cartIndex": null,
+            "productId": 9,
+            "message": "ต้องสแกนซีเรียลของแถม SKU-9",
+            "blocking": true
+          },
+          {
+            "cartIndex": null,
+            "productId": 9,
+            "message": "ต้องสแกนซีเรียลของแถม SKU-9",
+            "blocking": true
+          }
+        ]
+      },
+      "cartError": "ต้องสแกนซีเรียลของแถม SKU-9",
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "free serial item with scanned serials",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 4,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 5,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": true,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 2,
+            "minAmount": 0,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": null
+            },
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [
+        {
+          "promotionId": 1,
+          "productId": 9,
+          "serial": "SN1"
+        },
+        {
+          "promotionId": 1,
+          "productId": 9,
+          "serial": "SN2"
+        }
+      ],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 4,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 428,
+            "vat": 28,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 1,
+            "serial": "SN1",
+            "cartIndex": null
+          },
+          {
+            "productId": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9",
+            "shortName": "สินค้า 9",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "unitPrice": 0,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [1],
+            "freeOfPromotionId": 1,
+            "qty": 1,
+            "serial": "SN2",
+            "cartIndex": null
+          }
+        ],
+        "subtotal": 428,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 428,
+        "vat": 28,
+        "billPromotionIds": [],
+        "itemCount": 6,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "bill discount on the total after item discounts (reached)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 600,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 600,
+            "listPrice": 600,
+            "itemDiscount": 200,
+            "billDiscount": 100,
+            "manualDiscount": 0,
+            "amount": 900,
+            "vat": 58.88,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1200,
+        "itemDiscount": 200,
+        "billDiscount": 100,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 900,
+        "vat": 58.88,
+        "billPromotionIds": [2],
+        "itemCount": 2,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "bill discount on the total after item discounts (not reached)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 600,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "amount",
+              "value": 150,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 600,
+            "listPrice": 600,
+            "itemDiscount": 300,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 900,
+            "vat": 58.88,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1200,
+        "itemDiscount": 300,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 900,
+        "vat": 58.88,
+        "billPromotionIds": [],
+        "itemCount": 2,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "stackable bill discounts compound, non-stackable skipped",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 2000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 1,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 3,
+            "code": "P3",
+            "name": "โปร 3",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 3,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 5,
+            "stackable": true,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 2000,
+            "listPrice": 2000,
+            "itemDiscount": 0,
+            "billDiscount": 300,
+            "manualDiscount": 0,
+            "amount": 1700,
+            "vat": 111.21,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 2000,
+        "itemDiscount": 0,
+        "billDiscount": 300,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 1700,
+        "vat": 111.21,
+        "billPromotionIds": [1, 2],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "bill discount pro rata, remainder on the largest line, vat7 + exempt",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 2,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 3,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 700,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 2",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "exempt",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 300,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2"
+          },
+          {
+            "shortName": "สินค้า 3",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 300,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 9,
+            "code": "P9",
+            "name": "โปร 9",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 700,
+            "listPrice": 700,
+            "itemDiscount": 0,
+            "billDiscount": 53.84,
+            "manualDiscount": 0,
+            "amount": 646.16,
+            "vat": 42.27,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2",
+            "shortName": "สินค้า 2",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "exempt",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 300,
+            "listPrice": 300,
+            "itemDiscount": 0,
+            "billDiscount": 23.08,
+            "manualDiscount": 0,
+            "amount": 276.92,
+            "vat": 0,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 1
+          },
+          {
+            "productId": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3",
+            "shortName": "สินค้า 3",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 300,
+            "listPrice": 300,
+            "itemDiscount": 0,
+            "billDiscount": 23.08,
+            "manualDiscount": 0,
+            "amount": 276.92,
+            "vat": 18.12,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 2
+          }
+        ],
+        "subtotal": 1300,
+        "itemDiscount": 0,
+        "billDiscount": 100,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 1200,
+        "vat": 60.39,
+        "billPromotionIds": [9],
+        "itemCount": 3,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "items that cannot be sold (blocking issues, in order)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 2,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 3,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 4,
+          "factor": 1,
+          "qty": 1,
+          "serial": "A",
+          "manualDiscount": null
+        },
+        {
+          "productId": 4,
+          "factor": 1,
+          "qty": 1,
+          "serial": "A",
+          "manualDiscount": null
+        },
+        {
+          "productId": 4,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 5,
+          "factor": 1,
+          "qty": 3,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 99,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 3,
+          "factor": 6,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": null,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 2",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "no_sale",
+            "id": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2"
+          },
+          {
+            "shortName": "สินค้า 3",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 1,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3"
+          },
+          {
+            "shortName": "สินค้า 4",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 2,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": true,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 4,
+            "sku": "SKU-4",
+            "name": "สินค้า 4"
+          },
+          {
+            "shortName": "สินค้า 5",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "service",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 50,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 0,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 5,
+            "sku": "SKU-5",
+            "name": "สินค้า 5"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3",
+            "shortName": "สินค้า 3",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 214,
+            "vat": 14,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 2
+          },
+          {
+            "productId": 4,
+            "sku": "SKU-4",
+            "name": "สินค้า 4",
+            "shortName": "สินค้า 4",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 107,
+            "vat": 7,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": "A",
+            "cartIndex": 3
+          },
+          {
+            "productId": 4,
+            "sku": "SKU-4",
+            "name": "สินค้า 4",
+            "shortName": "สินค้า 4",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 107,
+            "vat": 7,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": "A",
+            "cartIndex": 4
+          },
+          {
+            "productId": 4,
+            "sku": "SKU-4",
+            "name": "สินค้า 4",
+            "shortName": "สินค้า 4",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 107,
+            "vat": 7,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 5
+          },
+          {
+            "productId": 5,
+            "sku": "SKU-5",
+            "name": "สินค้า 5",
+            "shortName": "สินค้า 5",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "service",
+            "warrantyMonths": 0,
+            "qty": 3,
+            "unitPrice": 107,
+            "listPrice": 107,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 321,
+            "vat": 21,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 6
+          }
+        ],
+        "subtotal": 856,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 856,
+        "vat": 56,
+        "billPromotionIds": [],
+        "itemCount": 8,
+        "issues": [
+          {
+            "cartIndex": 0,
+            "productId": 1,
+            "message": "SKU-1 ยังไม่กำหนดราคาขาย",
+            "blocking": true
+          },
+          {
+            "cartIndex": 1,
+            "productId": 2,
+            "message": "SKU-2 ห้ามขาย",
+            "blocking": true
+          },
+          {
+            "cartIndex": 4,
+            "productId": 4,
+            "message": "ซีเรียล A ซ้ำในบิล",
+            "blocking": true
+          },
+          {
+            "cartIndex": 5,
+            "productId": 4,
+            "message": "SKU-4 ต้องระบุซีเรียล",
+            "blocking": true
+          },
+          {
+            "cartIndex": 7,
+            "productId": 99,
+            "message": "ไม่พบสินค้า #99",
+            "blocking": true
+          },
+          {
+            "cartIndex": 8,
+            "productId": 3,
+            "message": "SKU-3 ไม่มีหน่วยขายนี้",
+            "blocking": true
+          },
+          {
+            "cartIndex": null,
+            "productId": 3,
+            "message": "SKU-3 สต็อกไม่พอ (คงเหลือ 1 ชิ้น)",
+            "blocking": true
+          },
+          {
+            "cartIndex": null,
+            "productId": 4,
+            "message": "SKU-4 สต็อกไม่พอ (คงเหลือ 2 ชิ้น)",
+            "blocking": true
+          }
+        ]
+      },
+      "cartError": "SKU-1 ยังไม่กำหนดราคาขาย",
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "empty cart",
+    "input": {
+      "items": [],
+      "context": {
+        "products": [],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [],
+        "subtotal": 0,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 0,
+        "vat": 0,
+        "billPromotionIds": [],
+        "itemCount": 0,
+        "issues": []
+      },
+      "cartError": "ยังไม่มีสินค้าในบิล",
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "manual line discounts (% and baht) after promotions",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 10
+          }
+        },
+        {
+          "productId": 2,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "amount",
+            "value": 50
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 2",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 500,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": false,
+              "productIds": [1],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": true,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 100,
+            "billDiscount": 0,
+            "manualDiscount": 90,
+            "amount": 810,
+            "vat": 52.99,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2",
+            "shortName": "สินค้า 2",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 500,
+            "listPrice": 500,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 50,
+            "amount": 450,
+            "vat": 29.44,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 1
+          }
+        ],
+        "subtotal": 1500,
+        "itemDiscount": 100,
+        "billDiscount": 0,
+        "manualDiscount": 140,
+        "manualBillDiscount": 0,
+        "total": 1260,
+        "vat": 82.43,
+        "billPromotionIds": [],
+        "itemCount": 2,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "manual bill discount pro rata over what is left (satang)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 10
+          }
+        },
+        {
+          "productId": 2,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 2",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 500,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": false,
+              "productIds": [1],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": {
+        "kind": "amount",
+        "value": 100
+      },
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": true,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 100,
+            "billDiscount": 0,
+            "manualDiscount": 151.83,
+            "amount": 748.17,
+            "vat": 48.95,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2",
+            "shortName": "สินค้า 2",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 500,
+            "listPrice": 500,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 38.17,
+            "amount": 461.83,
+            "vat": 30.21,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 1
+          }
+        ],
+        "subtotal": 1500,
+        "itemDiscount": 100,
+        "billDiscount": 0,
+        "manualDiscount": 190,
+        "manualBillDiscount": 100,
+        "total": 1210,
+        "vat": 79.16,
+        "billPromotionIds": [],
+        "itemCount": 2,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "manual discount larger than the line is capped at 0",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "amount",
+            "value": 2000
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 900,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": true,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 900,
+            "listPrice": 900,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 900,
+            "amount": 0,
+            "vat": 0,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 900,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 900,
+        "manualBillDiscount": 0,
+        "total": 0,
+        "vat": 0,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "invalid manual % (blocking)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 150
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 900,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 900,
+            "listPrice": 900,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 900,
+            "vat": 58.88,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 900,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 900,
+        "vat": 58.88,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": [
+          {
+            "cartIndex": 0,
+            "productId": 1,
+            "message": "SKU-1: ส่วนลดพิเศษต้องมากกว่า 0 และไม่เกิน 100%",
+            "blocking": true
+          }
+        ]
+      },
+      "cartError": "SKU-1: ส่วนลดพิเศษต้องมากกว่า 0 และไม่เกิน 100%",
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "invalid manual bill amount, more than 2 decimals (blocking)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 900,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": {
+        "kind": "amount",
+        "value": 1.234
+      },
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 900,
+            "listPrice": 900,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 900,
+            "vat": 58.88,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 900,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 900,
+        "vat": 58.88,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": [
+          {
+            "cartIndex": null,
+            "productId": 0,
+            "message": "ส่วนลดท้ายบิล: จำนวนเงินส่วนลดพิเศษไม่ถูกต้อง",
+            "blocking": true
+          }
+        ]
+      },
+      "cartError": "ส่วนลดท้ายบิล: จำนวนเงินส่วนลดพิเศษไม่ถูกต้อง",
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "below cost after manual discount (warning only)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 20
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 900,
+            "currentPrice": 1070,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": true,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1070,
+            "listPrice": 1070,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 214,
+            "amount": 856,
+            "vat": 56,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1070,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 214,
+        "manualBillDiscount": 0,
+        "total": 856,
+        "vat": 56,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": [
+          {
+            "cartIndex": 0,
+            "productId": 1,
+            "message": "SKU-1 ขายต่ำกว่าทุนหลังส่วนลดพิเศษ",
+            "blocking": false
+          }
+        ]
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "manual discount keeps promotion eligibility",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 50
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "id": 5,
+            "code": "P5",
+            "name": "โปร 5",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": true,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 0,
+            "billDiscount": 100,
+            "manualDiscount": 450,
+            "amount": 450,
+            "vat": 29.44,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 0,
+        "billDiscount": 100,
+        "manualDiscount": 450,
+        "manualBillDiscount": 0,
+        "total": 450,
+        "vat": 29.44,
+        "billPromotionIds": [5],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "staff manual discount within the ceiling",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 5
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 50,
+            "amount": 950,
+            "vat": 62.15,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 50,
+        "manualBillDiscount": 0,
+        "total": 950,
+        "vat": 62.15,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "staff manual discount over the ceiling",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 6
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 60,
+            "amount": 940,
+            "vat": 61.5,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 60,
+        "manualBillDiscount": 0,
+        "total": 940,
+        "vat": 61.5,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": "ส่วนลดพิเศษ SKU-1 เกิน 5% — ให้ผู้ดูแลระบบทำรายการ"
+    }
+  },
+  {
+    "name": "manual discount without a reason",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "percent",
+            "value": 5
+          }
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": " ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 50,
+            "amount": 950,
+            "vat": 62.15,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 50,
+        "manualBillDiscount": 0,
+        "total": 950,
+        "vat": 62.15,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": "กรุณาระบุเหตุผลส่วนลดพิเศษ"
+    }
+  },
+  {
+    "name": "everything together: item %, free goods, bill %, manual line + bill",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 3,
+          "serial": null,
+          "manualDiscount": {
+            "kind": "amount",
+            "value": 33.33
+          }
+        },
+        {
+          "productId": 2,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        },
+        {
+          "productId": 3,
+          "factor": 12,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1290,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          },
+          {
+            "shortName": "สินค้า 2",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "exempt",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 459,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2"
+          },
+          {
+            "shortName": "สินค้า 3",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [
+              {
+                "unit": "โหล",
+                "factor": 12,
+                "barcode": "B12"
+              }
+            ],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 17.5,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3"
+          },
+          {
+            "shortName": "สินค้า 9",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 107,
+            "stock": 10,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 9,
+            "sku": "SKU-9",
+            "name": "สินค้า 9"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": true,
+            "scope": {
+              "all": false,
+              "productIds": [1],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 7.5,
+              "maxDiscount": 80
+            },
+            "freeGoods": null,
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "free_goods",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": false,
+              "productIds": [1],
+              "categoryIds": []
+            },
+            "minQty": 3,
+            "minAmount": 0,
+            "discount": null,
+            "freeGoods": {
+              "items": [
+                {
+                  "productId": 9,
+                  "qty": 1
+                }
+              ],
+              "repeat": true,
+              "maxSets": null
+            },
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 3000,
+            "discount": {
+              "kind": "percent",
+              "value": 3,
+              "maxDiscount": 150
+            },
+            "freeGoods": null,
+            "id": 3,
+            "code": "P3",
+            "name": "โปร 3",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true
+      },
+      "freeSerials": [],
+      "billManualDiscount": {
+        "kind": "percent",
+        "value": 2
+      },
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": true,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 3,
+            "unitPrice": 1290,
+            "listPrice": 1290,
+            "itemDiscount": 240,
+            "billDiscount": 108.9,
+            "manualDiscount": 103.09,
+            "amount": 3418.01,
+            "vat": 223.61,
+            "promotionIds": [1],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          },
+          {
+            "productId": 2,
+            "sku": "SKU-2",
+            "name": "สินค้า 2",
+            "shortName": "สินค้า 2",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "exempt",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 459,
+            "listPrice": 459,
+            "itemDiscount": 0,
+            "billDiscount": 27.54,
+            "manualDiscount": 17.81,
+            "amount": 872.65,
+            "vat": 0,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 1
+          },
+          {
+            "productId": 3,
+            "sku": "SKU-3",
+            "name": "สินค้า 3",
+            "shortName": "สินค้า 3",
+            "unit": "โหล",
+            "factor": 12,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 210,
+            "listPrice": 210,
+            "itemDiscount": 0,
+            "billDiscount": 6.3,
+            "manualDiscount": 4.07,
+            "amount": 199.63,
+            "vat": 13.06,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 2
+          }
+        ],
+        "subtotal": 4998,
+        "itemDiscount": 240,
+        "billDiscount": 142.74,
+        "manualDiscount": 124.97,
+        "manualBillDiscount": 91.64,
+        "total": 4490.29,
+        "vat": 236.67,
+        "billPromotionIds": [3],
+        "itemCount": 17,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  }
+]

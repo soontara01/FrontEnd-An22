@@ -4,7 +4,8 @@
 ให้ได้ **ผลเหมือนกันทุกตัวเลขและทุกข้อความ** แล้วตรวจซ้ำที่ server (หน้าบ้านตรวจเพื่อ UX เท่านั้น)
 
 - ฟังก์ชัน `xxxError()` คืน `string | null` — string = ข้อความภาษาไทยที่ตอบ 400 (`{ message }`)
-- spec ของแต่ละไฟล์ (`*.model.spec.ts`) คือตัวอย่าง input → output — `fixtures/` (ขั้นถัดไป) จะ export ให้ JUnit ใช้ตรง ๆ
+- spec ของแต่ละไฟล์ (`*.model.spec.ts`) คือตัวอย่าง input → output; กฎคำนวณเงินมีชุด JSON ให้ JUnit ใช้ตรง ๆ ที่ [`fixtures/`](fixtures/README.md)
+  (`priceCart`, `paymentSummary` / `paymentError` — ต้องผ่านทุกเคสก่อนเปิดใช้ `POST /sales`)
 - กฎที่อยู่ใน mock เท่านั้น (ไม่มีใน `core/models`) อยู่หัวข้อสุดท้าย
 
 ## ข้อควรระวังตอน port

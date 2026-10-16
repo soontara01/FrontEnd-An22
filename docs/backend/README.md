@@ -19,7 +19,8 @@
 - [`domain-rules.md`](domain-rules.md) — กฎธุรกิจที่ server ต้องทำให้ผลตรงกับหน้าบ้าน (ฟังก์ชันไหน ไฟล์ไหน ใช้ที่ endpoint ไหน)
 - [`data-model.md`](data-model.md) — entity → ตาราง, key, unique, ค่าที่ server คำนวณ, เลขรันเอกสาร, ระดับบริษัท / สาขา
 - [`../decisions.md`](../decisions.md) — ดัชนีข้อตัดสินใจทั้งหมด (D, S, T, B) ชี้ไปไฟล์ plan ที่มีรายละเอียด
-- `fixtures/` (ยังไม่มี — ขั้นถัดไป) — golden test cases ของกฎคำนวณ (input → output) ให้ JUnit ฝั่ง api อ่านไฟล์เดียวกับ Vitest
+- [`fixtures/`](fixtures/README.md) — golden test cases ของกฎคำนวณ (input → output ที่ถูก) สร้างจากโค้ด TypeScript ให้ JUnit ฝั่ง api อ่านไฟล์เดียวกัน:
+  `price-cart.json` (`priceCart()`), `payment.json` (`paymentSummary()` / `paymentError()`)
 
 ## หลักการ
 
