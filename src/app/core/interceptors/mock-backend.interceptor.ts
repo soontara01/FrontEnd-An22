@@ -13,7 +13,12 @@ import {
   Category,
   CategoryLevel,
   CategoryPayload,
+  Branch,
+  Company,
+  HEAD_OFFICE_BRANCH_NO,
   LoginRequest,
+  MeResponse,
+  normalizeCompanyCode,
   LoginResponse,
   PAYMENT_METHOD_DEFAULTS,
   PRODUCT_DEFAULTS,
@@ -202,7 +207,16 @@ interface MockDb {
    * Z reports printed, filled into their missing snapshots on read.
    */
   legacyPosId?: string;
+  /**
+   * SaaS tenants (step 1: one, `DEMO`). Name and tax ID come from `storeInfo` on read until step 2
+   * splits it into company / branch info; every user of this db belongs to the first company.
+   */
+  companies: StoredCompany[];
+  /** Branches of the company; created once from `storeInfo` for older stored data. */
+  branches: Branch[];
 }
+
+type StoredCompany = Pick<Company, 'id' | 'code' | 'active'>;
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
 const DB_KEY = 'mock.db';
@@ -807,6 +821,8 @@ const seedDb = (): MockDb => ({
   drawerOpens: [],
   shiftAdjustments: [],
   posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
+  companies: [{ id: 1, code: 'DEMO', active: true }],
+  branches: [],
 });
 
 const LATENCY_MS = 300;
@@ -847,6 +863,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.sales = db.sales.map(withSaleDefaults);
   db.shifts = db.shifts.map(normalizeShift);
   fillUsernames(db.users);
+  const branched = ensureBranch(db);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
@@ -876,11 +893,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   fillTerminalSnapshots(db);
   const path = req.url.slice(base.length + 1);
   // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
-  actor = requestUser(req, db.users);
+  actor = requestUser(req, db);
   const terminal = Number(req.headers.get('X-Terminal-Id'));
   terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
   const response$ = handle(req, path, db);
-  if (generated || costed || shiftsOn || registered || req.method !== 'GET') {
+  if (generated || costed || shiftsOn || registered || branched || req.method !== 'GET') {
     storage.set(DB_KEY, db);
   }
 
@@ -894,17 +911,20 @@ function handle(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   if (path === 'auth/login' && req.method === 'POST') {
-    return login(req.body as LoginRequest, db.users);
+    return login(req.body as LoginRequest, db);
   }
   if (path === 'auth/verify' && req.method === 'POST') {
-    // Checks a login without starting a session (shift approval, unlocking the POS). A wrong
-    // password is a 400, not a 401: the error interceptor logs out on 401.
+    // Checks a login of the token's company without starting a session (shift approval, unlocking
+    // the POS). Always a 400, never a 401: the error interceptor logs out on 401.
     const { username, password } = (req.body ?? {}) as Partial<LoginRequest>;
-    const user = checkCredentials(username, password, db.users);
+    const user = actor ? checkCredentials(username, password, db.users) : WRONG_LOGIN;
     return typeof user === 'string' ? error(400, user) : ok({ user });
   }
-  // No fallback user: SaaS reads the company from the token, so an unknown one must never pass.
+  // No fallback user: the company comes only from the token, an unknown one never passes.
   if (!actor) return error(401, 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  if (path === 'me' && req.method === 'GET') {
+    return ok({ user: actor, ...companySession(db) } satisfies MeResponse);
+  }
   const forbidden = adminOnlyError(req, path);
   if (forbidden) return error(403, forbidden);
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
@@ -3081,21 +3101,32 @@ function handleStoreInfo(
 }
 
 /**
- * Mock logins by username: `admin` / `admin` (the first user), any other user with
- * `MOCK_USER_PASSWORD`; inactive users are refused. The token names the user so later
- * requests know who is calling (`requestUser()`).
+ * Mock logins (D4): company code `DEMO` + username — `admin` / `admin` (the first user), any other
+ * user with `MOCK_USER_PASSWORD`. Every failure gives the same message (E3) so nobody learns which
+ * companies or users exist; only a suspended company is told after a correct password. The token
+ * names the company and the user so later requests know who is calling (`requestUser()`).
  */
 function login(
-  { username, password }: LoginRequest,
-  users: User[],
+  { companyCode, username, password }: Partial<LoginRequest>,
+  db: MockDb,
 ): Observable<HttpResponse<LoginResponse>> {
-  const user = checkCredentials(username, password, users);
-  if (typeof user === 'string') return error(401, user);
-  const token = user.id === users[0]?.id ? ADMIN_TOKEN : `${ADMIN_TOKEN}.u${user.id}`;
-  return ok({ token, user });
+  const company = db.companies.find((c) => c.code === normalizeCompanyCode(companyCode ?? ''));
+  const user = company ? checkCredentials(username, password, db.users) : WRONG_LOGIN;
+  if (!company || typeof user === 'string') {
+    return error(401, 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+  }
+  if (!company.active) {
+    return error(401, 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
+  }
+  return ok({ token: mockToken(company.id, user.id), user, ...companySession(db) });
 }
 
-/** The user a mock login names, or the Thai reason it is refused (login + `auth/verify`). */
+const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+
+/**
+ * The active user a login names, or `WRONG_LOGIN` (login + `auth/verify` + approvals) — a
+ * deactivated user gets the same message as a wrong password (E3).
+ */
 function checkCredentials(
   username: string | undefined,
   password: string | undefined,
@@ -3104,26 +3135,56 @@ function checkCredentials(
   const name = normalizeUsername(username ?? '');
   const user = users.find((u) => normalizeUsername(u.username) === name);
   const expected = user && user.id === users[0]?.id ? 'admin' : MOCK_USER_PASSWORD;
-  if (!user || password !== expected) return 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
-  if (!user.active) return 'บัญชีนี้ถูกปิดใช้งาน';
+  if (!user || !user.active || password !== expected) return WRONG_LOGIN;
   return user;
 }
 
-const ADMIN_TOKEN = 'mock-jwt-token';
 /** Password of every non-admin mock user. */
 const MOCK_USER_PASSWORD = '1234';
 
+/** A fake token naming tenant + user (a real one is a signed JWT with these claims). Specs use it. */
+export const mockToken = (companyId: number, userId: number): string =>
+  `mock-jwt-token.t${companyId}.u${userId}`;
+
 /**
- * Who sent the request: the active user the token names (`ADMIN_TOKEN` = the first user,
- * `ADMIN_TOKEN.u<id>` = that user). Missing / unknown token or an inactive user → undefined (401).
+ * Who sent the request: the active user of an active company the token names. Missing / unknown /
+ * pre-SaaS token (no tenant, E1), a suspended company or an inactive user → undefined (401).
  */
-function requestUser(req: HttpRequest<unknown>, users: User[]): User | undefined {
+function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
   const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
-  const user =
-    token === ADMIN_TOKEN
-      ? users[0]
-      : users.find((u) => token === `${ADMIN_TOKEN}.u${u.id}` && u.id !== users[0]?.id);
+  const match = /^mock-jwt-token\.t(\d+)\.u(\d+)$/.exec(token);
+  if (!match) return undefined;
+  const company = db.companies.find((c) => c.id === Number(match[1]));
+  // One company per mock db: its users are those of the first company.
+  if (!company?.active || company.id !== db.companies[0]?.id) return undefined;
+  const user = db.users.find((u) => u.id === Number(match[2]));
   return user?.active ? user : undefined;
+}
+
+/** Company + the active branches of the session (step 1: every user may work in all of them). */
+function companySession(db: MockDb): { company: Company; branches: Branch[] } {
+  const stored = db.companies[0];
+  return {
+    company: { ...stored, name: db.storeInfo.name, taxId: db.storeInfo.taxId },
+    branches: db.branches.filter((b) => b.active),
+  };
+}
+
+/** Older stored data (and the seed) get one branch made from the store's details. */
+function ensureBranch(db: MockDb): boolean {
+  if (db.branches.length > 0) return false;
+  const info = db.storeInfo;
+  db.branches = [
+    {
+      id: 1,
+      code: 'HQ',
+      name: info.placeName || 'สำนักงานใหญ่',
+      branchNo:
+        info.branchType === 'branch' && info.branchNo ? info.branchNo : HEAD_OFFICE_BRANCH_NO,
+      active: true,
+    },
+  ];
+  return true;
 }
 
 function ok<T>(body: T): Observable<HttpResponse<T>> {

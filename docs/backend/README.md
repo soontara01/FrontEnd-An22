@@ -1,6 +1,6 @@
 # เอกสารส่งต่อหลังบ้าน (สำหรับ repo web / api / db)
 
-สถานะ: เริ่ม 2026-10-16 (ก่อน SaaS ขั้น 1) — สะท้อนระบบ **ร้านเดียว** ปัจจุบัน; ทุกขั้นของ `docs/saas-plan.md` อัปเดตไฟล์ในโฟลเดอร์นี้ใน commit เดียวกับโค้ด
+สถานะ: เริ่ม 2026-10-16 — SaaS ขั้น 1 (login รหัสบริษัท, token มี tenant, `X-Branch-Id`; ข้อมูลยัง 1 บริษัท 1 สาขา); ทุกขั้นของ `docs/saas-plan.md` อัปเดตไฟล์ในโฟลเดอร์นี้ใน commit เดียวกับโค้ด
 
 ## ระบบมี 4 repo
 
@@ -52,7 +52,7 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
 - เครื่องมือ migration (แนะนำ Flyway: `V<n>__<desc>.sql`, ไม่แก้ไฟล์ที่ apply แล้ว) และคำสั่งรัน / รีเซ็ต DB local
 - ทุกตารางข้อมูลมี `tenant_id` (+ `branch_id` ตามระดับใน `data-model.md`), เปิด RLS, policy อ่านจาก `current_setting('app.tenant_id')` (D7)
 - ทุก unique key รวม `tenant_id`; เงินเป็น `numeric(14,2)`; เวลาเป็น `timestamptz`; วันที่ธุรกิจเป็น `date`
-- seed สำหรับ dev ตรงกับ seed ของ mock (login `admin` / `admin`)
+- seed สำหรับ dev ตรงกับ seed ของ mock (บริษัท `DEMO`, สาขา `HQ`, login `admin` / `admin`, พนักงาน `somchai` / `1234`)
 
 **api**
 

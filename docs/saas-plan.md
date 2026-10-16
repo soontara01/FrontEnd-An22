@@ -145,7 +145,7 @@ Platform (เจ้าของ SaaS)
    - หลังบ้าน: schema `tenant_id` / `branch_id` ทุกตาราง + RLS + JWT claims
    - หน้าบ้าน: `company.model.ts`, `AuthService` เก็บบริษัท/สาขา, `branchInterceptor`, toolbar แสดงบริษัท · สาขา
    - mock: 1 บริษัท 1 สาขา
-   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ 2026-10-16
+   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ · 1.3 login รหัสบริษัท + token มี tenant + `GET /me` + `AuthService` เก็บบริษัท / สาขา ✅ 2026-10-16
 2. **ข้อมูลสาขา**: แท็บสาขาใน master-data, แยก `StoreInfo` → `CompanyInfo` + `BranchInfo`, settings 2 หน้า,
    ผู้ใช้กำหนดสาขาได้, หน้าเลือกสาขา + ตัวสลับ, โปรโมชั่นจำกัดสาขา (`branchIds`)
 3. **สต็อกแยกสาขา**: `branch_stock`, serial/movement มีสาขา, ทุนเฉลี่ยต่อสาขา, reorder ต่อสาขา, ดูสต็อกทุกสาขา
@@ -314,7 +314,14 @@ Platform (เจ้าของ SaaS)
 - ฟอร์ม login (`AuthLayout`) เพิ่มช่องรหัสบริษัท: ถ้าเครื่องจำไว้แล้วแสดงเป็นข้อความ + ปุ่ม "เปลี่ยน"
 - `AuthService.login(companyCode, username, password)`; mock: บริษัทตัวอย่างรหัส `DEMO` (ผู้ใช้ `admin` / `admin`
   และพนักงาน `somchai` / `1234` ตามเดิม)
-- เมนูผู้ใช้งาน: ฟิลด์ `username`, อีเมลไม่บังคับ, ปุ่ม "ตั้งรหัสผ่านใหม่" สำหรับ admin
+- เมนูผู้ใช้งาน: ฟิลด์ `username`, อีเมลไม่บังคับ, ปุ่ม "ตั้งรหัสผ่านใหม่" สำหรับ admin (ขั้น 2)
+
+**ตัดสินเพิ่มตอนเริ่มขั้น 1 (2026-10-16):**
+
+- **E1** session ที่บันทึกก่อน SaaS (token ไม่มี tenant, ไม่มี `company` ใน storage) นับเป็นยังไม่ login; server ตอบ 401 กับ token ที่ไม่มี tenant → login ใหม่ครั้งเดียว
+- **E2** request ที่ไม่ส่ง `X-Branch-Id`: ขั้น 1 ยอมให้ผ่าน (ยังไม่มีข้อมูลระดับสาขา) — ขั้น 3–4 endpoint ระดับสาขา (ขาย, สต็อก, กะ) จะตอบ 400 · สาขาที่ไม่มีสิทธิ์ / ไม่มีอยู่ / ปิดใช้งาน → 403
+- **E3** login ผิดทุกกรณี รวมผู้ใช้ถูกปิด → "รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง"; `auth/verify` → "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" (400) — บริษัทถูกระงับบอกเฉพาะเมื่อรหัสผ่านถูก
+- **E4** `username`: `a-z 0-9 . _ -` ยาว 3–30 เก็บตัวเล็ก ไม่ซ้ำในบริษัท (ไม่สนตัวพิมพ์) — `userIdentityError()`; ผู้ใช้ที่มีอยู่ได้ส่วนหน้า @ ของอีเมล (ชน → `-<id>`)
 
 ## 15. รายละเอียด D6 — รายงานภาษีขายหลายสาขา (ยืนยันแล้ว 2026-10-10)
 

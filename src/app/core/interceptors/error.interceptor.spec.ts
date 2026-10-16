@@ -16,7 +16,8 @@ describe('errorInterceptor', () => {
     localStorage.clear();
     assign.mockClear();
     notify.error.mockClear();
-    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token'));
+    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u1'));
+    localStorage.setItem('an22.company', JSON.stringify({ id: 1, code: 'DEMO', name: 'ร้าน' }));
     localStorage.setItem('an22.user', JSON.stringify({ id: 1, name: 'Admin', role: 'admin' }));
     TestBed.configureTestingModule({
       providers: [
@@ -63,10 +64,10 @@ describe('errorInterceptor', () => {
   });
 
   it('does not log out on a refused login (401)', async () => {
-    expect(await fail('POST', '/api/auth/login', 401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง')).toBe(
-      401,
-    );
-    expect(notify.error).toHaveBeenCalledWith('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+    expect(
+      await fail('POST', '/api/auth/login', 401, 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง'),
+    ).toBe(401);
+    expect(notify.error).toHaveBeenCalledWith('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
     expect(loggedOut()).toBe(false);
   });
 

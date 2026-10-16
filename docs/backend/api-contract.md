@@ -1,4 +1,4 @@
-# API contract (ปัจจุบัน: ร้านเดียว)
+# API contract (SaaS ขั้น 1: 1 บริษัท 1 สาขา)
 
 แหล่งอ้างอิง: mock `src/app/core/interceptors/mock-backend.interceptor.ts` (+ spec) · รูปร่าง body = interface ใน
 `src/app/core/models/*.model.ts` (ชื่อในวงเล็บ `Type` ด้านล่าง) · กฎตรวจ = ฟังก์ชันใน `domain-rules.md`
@@ -21,8 +21,14 @@
 
 | header                          | ใส่โดย                                          | ความหมาย                                                                              |
 | ------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `Authorization: Bearer <token>` | `authInterceptor` ทุก request ที่ login แล้ว    | token จาก `POST /auth/login`                                                          |
+| `Authorization: Bearer <token>` | `authInterceptor` ทุก request ที่ login แล้ว    | token จาก `POST /auth/login` — JWT claims หัวข้อ "Token" ด้านล่าง                     |
 | `X-Terminal-Id: <n>`            | `terminalInterceptor` เมื่อเครื่องนี้ถูกตั้งไว้ | เลขเครื่อง POS ของอุปกรณ์ (ไม่มี = ไม่ใช่เครื่อง POS) — กะ, เลขบิล, POS ID ต่อเครื่อง |
+
+### Token (JWT)
+
+claims: `sub` (userId), `tenantId` (companyId), `role` — ขั้น 2 เพิ่ม `branchIds` หรือ `allBranches: true` ·
+**tenant มาจาก token เท่านั้น** ห้ามรับจาก URL / query / body · ทุก request ตรวจว่าบริษัทยังใช้งานอยู่และผู้ใช้ยัง active
+(ไม่ผ่าน → 401) · mock ใช้ token ปลอม `mock-jwt-token.t<companyId>.u<userId>` (`mockToken()`)
 
 ### Error
 
@@ -36,7 +42,7 @@
 | 403    | ไม่มีสิทธิ์ (หัวข้อ "สิทธิ์") — หน้าบ้านไม่ logout                                                                         |
 | 404    | ไม่พบ record                                                                                                               |
 
-`POST /auth/login` ผิด → 401 (หน้าบ้านยกเว้น path นี้ไม่ logout) · `POST /auth/verify` ผิด → **400 เสมอ** (ห้าม 401: จะ logout คนที่ยืนอยู่หน้าเครื่อง)
+`POST /auth/login` ผิด → 401 (หน้าบ้านยกเว้น path นี้ไม่ logout) · token ที่ไม่มี tenant (ก่อน SaaS) หรือบริษัทถูกระงับ → 401 · `POST /auth/verify` ผิด → **400 เสมอ** (ห้าม 401: จะ logout คนที่ยืนอยู่หน้าเครื่อง)
 
 ## สิทธิ์ (admin / user)
 
@@ -55,14 +61,15 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 
 ### Auth / settings
 
-| method + path               | body → response                                           | หมายเหตุ                                                          |
-| --------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------- |
-| `POST /auth/login`          | `LoginRequest { username, password }` → `{ token, user }` | ผิด → 401; ผู้ใช้ถูกปิด → 401                                     |
-| `POST /auth/verify`         | `{ username, password }` → `{ user }`                     | ตรวจรหัสโดยไม่สร้าง session (ปลดล็อก POS, ผู้อนุมัติ) — ผิด → 400 |
-| `GET /settings/store`       | → `StoreInfo`                                             |                                                                   |
-| `PUT /settings/store`       | `StoreInfo` → `StoreInfo`                                 | admin; `storeInfoError()`, `requireShiftChangeError()` → 400      |
-| `GET /settings/menu-access` | → `MenuAccess { userMenus }`                              | ผู้ใช้ทุกคน                                                       |
-| `PUT /settings/menu-access` | `MenuAccess` → `MenuAccess`                               | admin; `menuAccessError()`                                        |
+| method + path               | body → response                                                                                         | หมายเหตุ                                                                                                                                                                                                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /auth/login`          | `LoginRequest { companyCode, username, password }` → `LoginResponse { token, user, company, branches }` | D4; ผิดทุกกรณี (รหัสบริษัท / ชื่อ / รหัสผ่าน / ผู้ใช้ถูกปิด) → 401 ข้อความเดียว "รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง" (E3); บริษัทถูกระงับ → 401 "บริษัทนี้ถูกระงับการใช้งาน…" เฉพาะเมื่อรหัสผ่านถูก; `companyCode` ไม่สนตัวพิมพ์; `branches` = สาขาที่ใช้งานอยู่ที่ผู้ใช้เข้าได้ (ขั้น 1 = ทุกสาขา) |
+| `GET /me`                   | → `MeResponse { user, company, branches }`                                                              | session ปัจจุบันตาม token (ไม่ออก token ใหม่)                                                                                                                                                                                                                                                                 |
+| `POST /auth/verify`         | `{ username, password }` → `{ user }`                                                                   | ตรวจรหัสของผู้ใช้**ในบริษัทของ token** โดยไม่สร้าง session (ปลดล็อก POS, ผู้อนุมัติ) — ผิด / ไม่มี token / ผู้ใช้ถูกปิด → 400 ข้อความเดียว                                                                                                                                                                    |
+| `GET /settings/store`       | → `StoreInfo`                                                                                           |                                                                                                                                                                                                                                                                                                               |
+| `PUT /settings/store`       | `StoreInfo` → `StoreInfo`                                                                               | admin; `storeInfoError()`, `requireShiftChangeError()` → 400                                                                                                                                                                                                                                                  |
+| `GET /settings/menu-access` | → `MenuAccess { userMenus }`                                                                            | ผู้ใช้ทุกคน                                                                                                                                                                                                                                                                                                   |
+| `PUT /settings/menu-access` | `MenuAccess` → `MenuAccess`                                                                             | admin; `menuAccessError()`                                                                                                                                                                                                                                                                                    |
 
 ### Users (admin เท่านั้น)
 
@@ -150,10 +157,10 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 
 `POST /sales`, void, ใบลดหนี้ → 400 ตาม `shiftBlocker()` เมื่อ `StoreInfo.requireShift` เปิด
 
-## ที่จะเปลี่ยนตาม SaaS (ยังไม่ทำ — `docs/saas-plan.md`)
+## ที่จะเปลี่ยนตาม SaaS (ขั้นถัดไป — `docs/saas-plan.md`)
 
-- JWT claims: `sub` (userId), `tenantId`, `role`, `branchIds` หรือ `allBranches: true` — **tenant มาจาก token เท่านั้น** ห้ามรับจาก URL / query / body
+ทำแล้วในขั้น 1: login แบบรหัสบริษัท, token มี tenant, `GET /me` (หัวข้อด้านบน)
+
 - header ใหม่ `X-Branch-Id` ทุก request; server ตรวจสิทธิ์สาขา (ไม่อยู่ในสิทธิ์ → 403)
-- `POST /auth/login { companyCode, username, password }` → `{ token, user, company, branches }`; `GET /me`
 - รายงานรับ `?branchId=<id>|all`; endpoint ใหม่ `/branches`, `/settings/company`, `/settings/branch`, `/products/:id/branch-stock`, `/transfers`
 - role ใหม่ `owner`, `platform_admin`; เลขเอกสารมีรหัสสาขา (หัวข้อ 3 ของ saas-plan)

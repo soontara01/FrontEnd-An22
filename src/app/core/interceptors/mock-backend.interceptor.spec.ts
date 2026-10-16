@@ -10,6 +10,7 @@ import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
   LoginResponse,
+  MeResponse,
   MenuAccess,
   PosTerminal,
   CountCheckResult,
@@ -38,7 +39,7 @@ import {
   User,
 } from '../models';
 import { addDaysIso, serialMovements, storeInfoError, todayIso } from '../models';
-import { SEED_STORE_INFO, mockBackendInterceptor } from './mock-backend.interceptor';
+import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backend.interceptor';
 
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
 const atTerminal1: HttpInterceptorFn = (req, next) =>
@@ -49,7 +50,7 @@ const asAdminByDefault: HttpInterceptorFn = (req, next) =>
   next(
     req.headers.has('Authorization')
       ? req
-      : req.clone({ setHeaders: { Authorization: 'Bearer mock-jwt-token' } }),
+      : req.clone({ setHeaders: { Authorization: `Bearer ${mockToken(1, 1)}` } }),
   );
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
@@ -1082,12 +1083,15 @@ describe('mockBackendInterceptor – POS sales', () => {
 
   it('logs staff in by username and applies their name and role to the sale', async () => {
     const login = (username: string, password: string) =>
-      post<{ token: string; user: { name: string } }>('auth/login', { username, password });
-    expect(await errorOf(login('somchai', 'wrong'))).toBe('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-    expect(await errorOf(login('somchai@example.com', '1234'))).toBe(
-      'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
-    );
-    expect(await errorOf(login('somying', '1234'))).toBe('บัญชีนี้ถูกปิดใช้งาน');
+      post<{ token: string; user: { name: string } }>('auth/login', {
+        companyCode: 'DEMO',
+        username,
+        password,
+      });
+    const wrong = 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
+    expect(await errorOf(login('somchai', 'wrong'))).toBe(wrong);
+    expect(await errorOf(login('somchai@example.com', '1234'))).toBe(wrong);
+    expect(await errorOf(login('somying', '1234'))).toBe(wrong);
     const { token, user } = await login(' Somchai ', '1234');
     expect(user.name).toBe('สมชาย ใจดี');
 
@@ -1156,7 +1160,7 @@ describe('mockBackendInterceptor – shifts', () => {
   let http: HttpClient;
   const MOUSE = 2; // 531 after promo 1, stock 3
   const CASH = 1;
-  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
   interface As {
     token?: string;
     /** Terminal header, default 1; null = a device not set to any terminal */
@@ -1372,7 +1376,7 @@ describe('mockBackendInterceptor – shifts', () => {
     const openDrawer = (reason: string, as: As) =>
       call('POST', `shifts/${shift.id}/drawer-opens`, { reason }, as);
     expect(await errorOf(openDrawer(' ', staff))).toBe('กรุณาระบุเหตุผลที่เปิดลิ้นชัก');
-    expect(await errorOf(openDrawer('แลกเหรียญ', { token: 'mock-jwt-token.u4' }))).toBe(
+    expect(await errorOf(openDrawer('แลกเหรียญ', { token: mockToken(1, 4) }))).toBe(
       'กะนี้เป็นของ สมชาย ใจดี — ทำรายการนี้ได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ',
     );
     expect(await errorOf(openDrawer('แลกเหรียญ', { ...staff, terminal: 2 }))).toBe(
@@ -1488,7 +1492,7 @@ describe('mockBackendInterceptor – shifts', () => {
     await sellMouse({ token: STAFF, terminal: 2 });
     const counts = await countsFor(shift);
     const body = { counts, cashDenominations: [], depositAmount: 0, note: '' };
-    const OTHER = 'mock-jwt-token.u4';
+    const OTHER = mockToken(1, 4);
     expect(
       await errorOf(call('POST', `shifts/${shift.id}/close`, body, { token: OTHER, terminal: 2 })),
     ).toBe('ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
@@ -1509,7 +1513,7 @@ describe('mockBackendInterceptor – POS terminals', () => {
   let http: HttpClient;
   const MOUSE = 2; // 531 after promo 1
   const CASH = 1;
-  const STAFF = 'mock-jwt-token.u2';
+  const STAFF = mockToken(1, 2);
 
   const call = <T>(
     method: string,
@@ -1660,7 +1664,7 @@ describe('mockBackendInterceptor – permissions', () => {
   let http: HttpClient;
   const MOUSE = 2; // 531 after promo 1, stock 3
   const CASH = 1;
-  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
 
   const call = <T>(method: string, url: string, body?: unknown, token?: string, terminal = 1) => {
     let headers = new HttpHeaders().set('X-Terminal-Id', String(terminal));
@@ -1874,8 +1878,8 @@ describe('mockBackendInterceptor – permissions', () => {
 
 describe('mockBackendInterceptor – auth (B3)', () => {
   let http: HttpClient;
-  const ADMIN = 'mock-jwt-token';
-  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+  const ADMIN = mockToken(1, 1);
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
 
   // No `asAdminByDefault`: a request without a token must not be served as the admin.
   const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
@@ -1899,8 +1903,12 @@ describe('mockBackendInterceptor – auth (B3)', () => {
   it('answers 401 to a missing, unknown or malformed token', async () => {
     expect(await statusOf(call('GET', 'products'))).toBe(401);
     expect(await statusOf(call('GET', 'products', undefined, 'garbage'))).toBe(401);
-    expect(await statusOf(call('GET', 'products', undefined, 'mock-jwt-token.u999'))).toBe(401);
-    expect(await statusOf(call('GET', 'products', undefined, 'xmock-jwt-token.u2'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, mockToken(1, 999)))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'x' + mockToken(1, 2)))).toBe(401);
+    // another company / pre-SaaS tokens without a tenant (E1)
+    expect(await statusOf(call('GET', 'products', undefined, mockToken(2, 1)))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'mock-jwt-token'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'mock-jwt-token.u2'))).toBe(401);
     expect(await statusOf(call('GET', 'products', undefined, ADMIN))).toBe(200);
     expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(200);
   });
@@ -1911,21 +1919,61 @@ describe('mockBackendInterceptor – auth (B3)', () => {
     expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(401);
   });
 
-  it('keeps login open and auth/verify at 400 without a token', async () => {
+  it("keeps login open and auth/verify at 400, checked in the token's company", async () => {
     const login = await call<LoginResponse>('POST', 'auth/login', {
+      companyCode: 'demo',
       username: 'somchai',
       password: '1234',
     });
     expect(login.token).toBe(STAFF);
-    expect(await statusOf(call('POST', 'auth/login', { username: 'admin', password: 'x' }))).toBe(
-      401,
+    const verify = (password: string, token?: string) =>
+      statusOf(call('POST', 'auth/verify', { username: 'admin', password }, token));
+    expect(await verify('x', ADMIN)).toBe(400);
+    expect(await verify('admin', ADMIN)).toBe(200);
+    expect(await verify('admin')).toBe(400); // no token = no company
+  });
+
+  it('logs in with company code + username + password, one message for every failure (E3)', async () => {
+    const login = (companyCode: string, username: string, password: string) =>
+      call<LoginResponse>('POST', 'auth/login', { companyCode, username, password });
+    const failure = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+      );
+    const wrong = [401, 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง'];
+    expect(await failure(login('ACME', 'admin', 'admin'))).toEqual(wrong);
+    expect(await failure(login('DEMO', 'nobody', '1234'))).toEqual(wrong);
+    expect(await failure(login('DEMO', 'admin', '1234'))).toEqual(wrong);
+    expect(await failure(login('DEMO', 'somying', '1234'))).toEqual(wrong); // deactivated
+
+    const session = await login(' demo ', 'admin', 'admin');
+    expect(session.company).toMatchObject({ id: 1, code: 'DEMO', active: true });
+    expect(session.company.name).toBe(SEED_STORE_INFO.name);
+    expect(session.branches).toEqual([
+      { id: 1, code: 'HQ', name: expect.any(String), branchNo: '00000', active: true },
+    ]);
+    const me = await call<MeResponse>('GET', 'me', undefined, session.token);
+    expect(me).toEqual({
+      user: session.user,
+      company: session.company,
+      branches: session.branches,
+    });
+  });
+
+  it('refuses a suspended company only after a correct login', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({ companies: [{ id: 1, code: 'DEMO', active: false }] }),
     );
-    expect(await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'x' }))).toBe(
-      400,
-    );
-    expect(
-      await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'admin' })),
-    ).toBe(200);
+    const login = (password: string) =>
+      call('POST', 'auth/login', { companyCode: 'DEMO', username: 'admin', password }).then(
+        () => null,
+        (e: { error: { message: string } }) => e.error.message,
+      );
+    expect(await login('x')).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+    expect(await login('admin')).toBe('บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
+    expect(await statusOf(call('GET', 'products', undefined, ADMIN))).toBe(401);
   });
 });
 
@@ -1962,6 +2010,7 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
       'ชื่อผู้ใช้นี้มีอยู่แล้ว',
     );
     const login = await call<LoginResponse>('POST', 'auth/login', {
+      companyCode: 'DEMO',
       username: 'somsak',
       password: '1234',
     });
@@ -1995,9 +2044,9 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
 
 describe('mockBackendInterceptor – menu access', () => {
   let http: HttpClient;
-  const STAFF = 'mock-jwt-token.u2';
+  const STAFF = mockToken(1, 2);
 
-  const call = <T>(method: string, body?: unknown, token = 'mock-jwt-token') =>
+  const call = <T>(method: string, body?: unknown, token = mockToken(1, 1)) =>
     firstValueFrom(
       http.request<T>(method, '/api/settings/menu-access', {
         body,
