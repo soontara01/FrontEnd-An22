@@ -8,7 +8,7 @@ POS shifts (เปิด/ปิดกะ, cash count per payment method): done (
 
 POS terminal registry (many terminals per store, Revenue Dept POS ID per terminal): done (decisions T1–T5 + steps in `docs/terminal-plan.md`) — rules below under **POS terminals**.
 
-SaaS direction (multi-company, many branches per company) plan + decisions: `docs/saas-plan.md` (decisions D1–D7 confirmed 2026-10-10; step 1 in progress, E1–E4 2026-10-16) — tenant comes only from the token, the working branch from the `X-Branch-Id` header (server-checked).
+SaaS direction (multi-company, many branches per company) plan + decisions: `docs/saas-plan.md` (decisions D1–D7 confirmed 2026-10-10; step 1 done in the front end + mock 2026-10-16 with E1–E4, step 2 not started) — tenant comes only from the token, the working branch from the `X-Branch-Id` header (server-checked).
 
 Domain: front end of a **retail system for an IT / electrical-appliance store** (serial numbers, warranty, VAT-inclusive prices). SKU-master roadmap: round 1 done (VAT, categories, packs/barcodes, short name + image, sale status); round 2 done (suppliers + reorder); round 3 done (Excel import/export, label printing).
 

@@ -1,6 +1,6 @@
 # แผน SaaS หลายบริษัท / หลายสาขา
 
-สถานะ: **ขั้น 1 กำลังทำ (เริ่ม 2026-10-16)** — ความคืบหน้าในหัวข้อ 9 · ข้อตัดสินใจ D1–D7 ยืนยันครบแล้ว (2026-10-10) — ประเด็นภาษี / บัญชียังให้นักบัญชีตรวจทาน (หัวข้อ 11, 13, 15)
+สถานะ: **ขั้น 1 เสร็จฝั่งหน้าบ้าน + mock (2026-10-16)** — หลังบ้าน (schema / RLS / JWT) ทำตาม `docs/backend/`; ขั้น 2 ยังไม่เริ่ม · ข้อตัดสินใจ D1–D7 ยืนยันครบแล้ว (2026-10-10) — ประเด็นภาษี / บัญชียังให้นักบัญชีตรวจทาน (หัวข้อ 11, 13, 15)
 
 เป้าหมาย: ระบบเดียวให้หลายบริษัท (tenant) ใช้ร่วมกัน แต่ละบริษัทมีได้หลายสาขา
 ข้อมูลต้องแยกขาดระหว่างบริษัท และรายงาน / สต็อก / เอกสารต้องแยกตามสาขาได้
@@ -145,7 +145,7 @@ Platform (เจ้าของ SaaS)
    - หลังบ้าน: schema `tenant_id` / `branch_id` ทุกตาราง + RLS + JWT claims
    - หน้าบ้าน: `company.model.ts`, `AuthService` เก็บบริษัท/สาขา, `branchInterceptor`, toolbar แสดงบริษัท · สาขา
    - mock: 1 บริษัท 1 สาขา
-   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ · 1.3 login รหัสบริษัท + token มี tenant + `GET /me` + `AuthService` เก็บบริษัท / สาขา ✅ · 1.4 `branchInterceptor` (`X-Branch-Id`, mock 403) + toolbar "บริษัท · สาขา" ✅ 2026-10-16
+   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ · 1.3 login รหัสบริษัท + token มี tenant + `GET /me` + `AuthService` เก็บบริษัท / สาขา ✅ · 1.4 `branchInterceptor` (`X-Branch-Id`, mock 403) + toolbar "บริษัท · สาขา" ✅ · ทดสอบบนหน้าจอ 2026-10-16 (ไม่ล้าง mock db): session เก่าถูกพาไป login (E1), ข้อมูลเก่าได้ username + สาขา `HQ`, รหัสบริษัทผิดได้ข้อความเดียว, DEMO admin / somchai เข้าได้ + เมนูตามสิทธิ์, จำ DEMO หลัง logout, ทุกเมนูหลักเปิดได้, POS ขาย 1 บิล (POS1-20261016-0003), username ซ้ำถูกกัน, สาขาปลอม → 403, console สะอาด ✅
 2. **ข้อมูลสาขา**: แท็บสาขาใน master-data, แยก `StoreInfo` → `CompanyInfo` + `BranchInfo`, settings 2 หน้า,
    ผู้ใช้กำหนดสาขาได้, หน้าเลือกสาขา + ตัวสลับ, โปรโมชั่นจำกัดสาขา (`branchIds`)
 3. **สต็อกแยกสาขา**: `branch_stock`, serial/movement มีสาขา, ทุนเฉลี่ยต่อสาขา, reorder ต่อสาขา, ดูสต็อกทุกสาขา
