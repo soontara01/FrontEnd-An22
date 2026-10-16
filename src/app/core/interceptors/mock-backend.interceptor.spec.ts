@@ -35,6 +35,7 @@ import {
   SkuPrice,
   StockCardResult,
   Supplier,
+  User,
 } from '../models';
 import { addDaysIso, serialMovements, storeInfoError, todayIso } from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor } from './mock-backend.interceptor';
@@ -1079,12 +1080,15 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(sale.lines[0]).toMatchObject({ itemDiscount: 59, manualDiscount: 81, amount: 450 });
   });
 
-  it('logs staff in by e-mail and applies their name and role to the sale', async () => {
+  it('logs staff in by username and applies their name and role to the sale', async () => {
     const login = (username: string, password: string) =>
       post<{ token: string; user: { name: string } }>('auth/login', { username, password });
     expect(await errorOf(login('somchai', 'wrong'))).toBe('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-    expect(await errorOf(login('somying@example.com', '1234'))).toBe('บัญชีนี้ถูกปิดใช้งาน');
-    const { token, user } = await login('Somchai@example.com', '1234');
+    expect(await errorOf(login('somchai@example.com', '1234'))).toBe(
+      'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+    );
+    expect(await errorOf(login('somying', '1234'))).toBe('บัญชีนี้ถูกปิดใช้งาน');
+    const { token, user } = await login(' Somchai ', '1234');
     expect(user.name).toBe('สมชาย ใจดี');
 
     const round = (n: number) => Math.round(n * 100) / 100;
@@ -1684,7 +1688,7 @@ describe('mockBackendInterceptor – permissions', () => {
 
   it.each([
     ['GET', 'users'],
-    ['POST', 'users', { name: 'x', email: 'x@x.co', role: 'user', active: true }],
+    ['POST', 'users', { username: 'xx1', name: 'x', email: '', role: 'user', active: true }],
     ['PUT', 'users/2', { role: 'admin' }],
     ['DELETE', 'users/4'],
     ['POST', 'categories', {}],
@@ -1922,6 +1926,70 @@ describe('mockBackendInterceptor – auth (B3)', () => {
     expect(
       await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'admin' })),
     ).toBe(200);
+  });
+});
+
+describe('mockBackendInterceptor – usernames (B5)', () => {
+  let http: HttpClient;
+
+  const call = <T>(method: string, url: string, body?: unknown) =>
+    firstValueFrom(http.request<T>(method, `/api/${url}`, { body }));
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+  const newUser = (username: string, email = '') =>
+    call<User>('POST', 'users', { username, name: 'ทดสอบ', email, role: 'user', active: true });
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('keeps usernames and e-mails unique and stores them normalized', async () => {
+    expect(await errorOf(newUser('SomChai'))).toBe('ชื่อผู้ใช้นี้มีอยู่แล้ว');
+    expect(await errorOf(newUser('ab'))).toBe('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z, 0-9, . _ - ยาว 3–30 ตัว');
+    expect(await errorOf(newUser('somsak', 'JOHN@example.com'))).toBe(
+      'อีเมลนี้มีผู้ใช้อื่นใช้แล้ว',
+    );
+    const user = await newUser(' SomSak ');
+    expect(user).toMatchObject({ username: 'somsak', email: '' });
+    expect(await errorOf(call('PUT', `users/${user.id}`, { username: 'john' }))).toBe(
+      'ชื่อผู้ใช้นี้มีอยู่แล้ว',
+    );
+    const login = await call<LoginResponse>('POST', 'auth/login', {
+      username: 'somsak',
+      password: '1234',
+    });
+    expect(login.user.id).toBe(user.id);
+  });
+
+  it('gives users stored before usernames one from their e-mail (E4)', async () => {
+    const legacy = (id: number, email: string) => ({
+      id,
+      name: `u${id}`,
+      email,
+      role: id === 1 ? 'admin' : 'user',
+      active: true,
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        users: [
+          legacy(1, 'boss@example.com'),
+          legacy(2, 'nok@example.com'),
+          legacy(3, 'nok@other.com'),
+          legacy(4, 'x@y.com'),
+        ],
+      }),
+    );
+    const users = await call<User[]>('GET', 'users');
+    expect(users.map((u) => u.username)).toEqual(['admin', 'nok', 'nok-3', 'user4']);
   });
 });
 

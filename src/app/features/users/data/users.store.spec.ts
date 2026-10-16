@@ -8,6 +8,7 @@ import { UsersStore } from './users.store';
 describe('UsersStore', () => {
   const user = (id: number, name: string): User => ({
     id,
+    username: name,
     name,
     email: `${name}@example.com`,
     role: 'user',
@@ -46,7 +47,13 @@ describe('UsersStore', () => {
 
   it('create / update / remove keep the list in sync', () => {
     store.load();
-    const payload = { name: 'c', email: 'c@example.com', role: 'user' as const, active: true };
+    const payload = {
+      username: 'c',
+      name: 'c',
+      email: 'c@example.com',
+      role: 'user' as const,
+      active: true,
+    };
 
     store.create(payload).subscribe();
     expect(store.users().map((u) => u.name)).toEqual(['a', 'b', 'c']);

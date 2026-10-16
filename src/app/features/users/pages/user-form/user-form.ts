@@ -11,7 +11,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '@core/auth/auth.service';
-import { UserRole, userChangeError } from '@core/models';
+import { UserRole, userChangeError, userIdentityError } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -49,12 +49,19 @@ export default class UserForm implements OnInit {
   protected readonly roles: UserRole[] = ['admin', 'user'];
 
   protected readonly form = inject(NonNullableFormBuilder).group({
+    username: [''],
     name: ['', [Validators.required, Validators.maxLength(100)]],
-    email: ['', [Validators.required, Validators.email]],
+    email: [''],
     role: ['user' as UserRole, Validators.required],
     active: [true],
   });
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+
+  /** Username / e-mail, same rule as the server (`userIdentityError()`: format, unique — B5). */
+  protected readonly identityProblem = computed(() => {
+    const { username = '', email = '' } = this.value();
+    return userIdentityError(this.store.users(), { username, email }, Number(this.id()) || null);
+  });
 
   /** Same rule as the server: not yourself, never the last active admin (`userChangeError()`). */
   protected readonly problem = computed(() => {
@@ -68,7 +75,7 @@ export default class UserForm implements OnInit {
   });
 
   ngOnInit(): void {
-    this.store.load(); // the other admins, for the last-admin rule
+    this.store.load(); // the other users: unique username / e-mail, last-admin rule
     const id = Number(this.id());
     if (!id) return;
     this.loading.set(true);
@@ -82,7 +89,7 @@ export default class UserForm implements OnInit {
   }
 
   protected save(): void {
-    if (this.form.invalid || this.problem()) {
+    if (this.form.invalid || this.problem() || this.identityProblem()) {
       this.form.markAllAsTouched();
       return;
     }

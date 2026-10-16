@@ -185,7 +185,7 @@ export class PosStore {
   /** Name of the logged-in user (= `Shift.cashier` of the shifts they open) */
   readonly userName = computed(() => this.auth.user()?.name ?? '');
   /** Username to prefill on the lock screen (the part of the e-mail before @) */
-  readonly loginHint = computed(() => this.auth.user()?.email.split('@')[0] ?? '');
+  readonly loginHint = computed(() => this.auth.user()?.username ?? '');
   /** The screen is locked for the open shift (a lock of another / closed shift is ignored). */
   readonly locked = computed(() => {
     const id = this._lockedShiftId();

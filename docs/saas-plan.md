@@ -145,7 +145,7 @@ Platform (เจ้าของ SaaS)
    - หลังบ้าน: schema `tenant_id` / `branch_id` ทุกตาราง + RLS + JWT claims
    - หน้าบ้าน: `company.model.ts`, `AuthService` เก็บบริษัท/สาขา, `branchInterceptor`, toolbar แสดงบริษัท · สาขา
    - mock: 1 บริษัท 1 สาขา
-   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ 2026-10-16
+   - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ 2026-10-16
 2. **ข้อมูลสาขา**: แท็บสาขาใน master-data, แยก `StoreInfo` → `CompanyInfo` + `BranchInfo`, settings 2 หน้า,
    ผู้ใช้กำหนดสาขาได้, หน้าเลือกสาขา + ตัวสลับ, โปรโมชั่นจำกัดสาขา (`branchIds`)
 3. **สต็อกแยกสาขา**: `branch_stock`, serial/movement มีสาขา, ทุนเฉลี่ยต่อสาขา, reorder ต่อสาขา, ดูสต็อกทุกสาขา

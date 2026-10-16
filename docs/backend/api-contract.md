@@ -67,8 +67,8 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 ### Users (admin เท่านั้น)
 
 `GET /users` → `User[]` · `POST /users` (`UserPayload`) · `GET/PUT/DELETE /users/:id` — `userChangeError()`
-(ลด / ปิด / ลบตัวเองไม่ได้, ต้องเหลือ admin ที่ใช้งาน ≥ 1) — mock ยังไม่ตรวจ e-mail ซ้ำ (B5);
-api จริงให้ `username` / e-mail ไม่ซ้ำ (ภายในบริษัทเมื่อ SaaS, D4)
+(ลด / ปิด / ลบตัวเองไม่ได้, ต้องเหลือ admin ที่ใช้งาน ≥ 1) และ `userIdentityError()` → 400 (B5 ปิด 2026-10-16):
+`username` บังคับ `a-z 0-9 . _ -` 3–30 ตัว เก็บตัวเล็ก ไม่ซ้ำในบริษัท (ไม่สนตัวพิมพ์); `email` ไม่บังคับ (`""` = ไม่มี) ถ้ามีต้องถูกรูปแบบและไม่ซ้ำ
 
 ### SKU / สต็อก
 

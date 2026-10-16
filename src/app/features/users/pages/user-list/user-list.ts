@@ -49,7 +49,15 @@ export default class UserList {
   private readonly notify = inject(NotificationService);
   private readonly auth = inject(AuthService);
 
-  protected readonly columns = ['name', 'email', 'role', 'active', 'createdAt', 'actions'];
+  protected readonly columns = [
+    'username',
+    'name',
+    'email',
+    'role',
+    'active',
+    'createdAt',
+    'actions',
+  ];
   protected readonly dataSource = new MatTableDataSource<User>([]);
   protected readonly filterText = signal('');
 

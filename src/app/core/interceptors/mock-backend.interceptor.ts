@@ -53,7 +53,10 @@ import {
   SupplierPayload,
   User,
   UserPayload,
+  normalizeUsername,
   userChangeError,
+  userIdentityError,
+  usernameError,
   allBarcodes,
   canPurchase,
   categoryPath,
@@ -207,6 +210,7 @@ const DB_KEY = 'mock.db';
 const SEED_USERS: User[] = [
   {
     id: 1,
+    username: 'admin',
     name: 'Admin',
     email: 'admin@example.com',
     role: 'admin',
@@ -215,6 +219,7 @@ const SEED_USERS: User[] = [
   },
   {
     id: 2,
+    username: 'somchai',
     name: 'สมชาย ใจดี',
     email: 'somchai@example.com',
     role: 'user',
@@ -223,6 +228,7 @@ const SEED_USERS: User[] = [
   },
   {
     id: 3,
+    username: 'somying',
     name: 'สมหญิง รักงาน',
     email: 'somying@example.com',
     role: 'user',
@@ -231,6 +237,7 @@ const SEED_USERS: User[] = [
   },
   {
     id: 4,
+    username: 'john',
     name: 'John Doe',
     email: 'john@example.com',
     role: 'user',
@@ -839,6 +846,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
   db.shifts = db.shifts.map(normalizeShift);
+  fillUsernames(db.users);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
@@ -998,8 +1006,11 @@ function handleUsers(
     return ok([...users]);
   }
   if (path === 'users' && req.method === 'POST') {
+    const body = req.body as UserPayload;
+    const problem = userIdentityError(users, body, null);
+    if (problem) return error(400, problem);
     const user: User = {
-      ...(req.body as UserPayload),
+      ...withIdentity(body),
       id: db.nextId++,
       createdAt: new Date().toISOString(),
     };
@@ -1014,7 +1025,9 @@ function handleUsers(
       case 'GET':
         return ok(users[index]);
       case 'PUT': {
-        const payload = { ...users[index], ...(req.body as Partial<UserPayload>) };
+        const payload = withIdentity({ ...users[index], ...(req.body as Partial<UserPayload>) });
+        const identity = userIdentityError(users, payload, users[index].id);
+        if (identity) return error(400, identity);
         const problem = userChangeError(
           users,
           { kind: 'update', id: users[index].id, payload },
@@ -1037,6 +1050,28 @@ function handleUsers(
     }
   }
   return notFound(req, path);
+}
+
+/** A username / e-mail as stored: trimmed, username lower case, e-mail '' when not given. */
+function withIdentity<T extends Pick<User, 'username' | 'email'>>(u: T): T {
+  return { ...u, username: normalizeUsername(u.username), email: (u.email ?? '').trim() };
+}
+
+/**
+ * Users stored before usernames existed (E4, 2026-10-16): the first user (the admin login) gets
+ * `admin`, the others the part of their e-mail before @, with `-<id>` added on a clash.
+ */
+function fillUsernames(users: User[]): void {
+  const taken = new Set(users.filter((u) => u.username).map((u) => normalizeUsername(u.username)));
+  users.forEach((u, i) => {
+    if (u.username) return;
+    const base = i === 0 ? 'admin' : normalizeUsername((u.email ?? '').split('@')[0]);
+    let name = usernameError(base) ? `user${u.id}` : base;
+    if (taken.has(name)) name = `${name}-${u.id}`;
+    taken.add(name);
+    u.username = name;
+    u.email ??= '';
+  });
 }
 
 /**
@@ -3046,8 +3081,8 @@ function handleStoreInfo(
 }
 
 /**
- * Mock logins: `admin` / `admin` (the first user), or any other user by e-mail (or the part before
- * @) with `MOCK_USER_PASSWORD`; inactive users are refused. The token names the user so later
+ * Mock logins by username: `admin` / `admin` (the first user), any other user with
+ * `MOCK_USER_PASSWORD`; inactive users are refused. The token names the user so later
  * requests know who is calling (`requestUser()`).
  */
 function login(
@@ -3066,13 +3101,10 @@ function checkCredentials(
   password: string | undefined,
   users: User[],
 ): User | string {
-  if (username === 'admin' && password === 'admin' && users[0]) return users[0];
-  const name = (username ?? '').trim().toLowerCase();
-  const user = users.find(
-    (u) =>
-      u.id !== users[0]?.id && (u.email.toLowerCase() === name || u.email.split('@')[0] === name),
-  );
-  if (!user || password !== MOCK_USER_PASSWORD) return 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+  const name = normalizeUsername(username ?? '');
+  const user = users.find((u) => normalizeUsername(u.username) === name);
+  const expected = user && user.id === users[0]?.id ? 'admin' : MOCK_USER_PASSWORD;
+  if (!user || password !== expected) return 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
   if (!user.active) return 'บัญชีนี้ถูกปิดใช้งาน';
   return user;
 }

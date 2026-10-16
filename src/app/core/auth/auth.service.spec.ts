@@ -14,6 +14,7 @@ describe('AuthService', () => {
     token: 'abc',
     user: {
       id: 1,
+      username: 'admin',
       name: 'Admin',
       email: 'admin@example.com',
       role: 'admin',

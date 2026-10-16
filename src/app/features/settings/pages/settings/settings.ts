@@ -53,9 +53,15 @@ import { ThisTerminal } from '../../components/this-terminal/this-terminal';
               <span matListItemLine>ชื่อ</span>
             </mat-list-item>
             <mat-list-item>
-              <span matListItemTitle>{{ user.email }}</span>
-              <span matListItemLine>อีเมล</span>
+              <span matListItemTitle>{{ user.username }}</span>
+              <span matListItemLine>ชื่อผู้ใช้</span>
             </mat-list-item>
+            @if (user.email) {
+              <mat-list-item>
+                <span matListItemTitle>{{ user.email }}</span>
+                <span matListItemLine>อีเมล</span>
+              </mat-list-item>
+            }
             <mat-list-item>
               <span matListItemTitle>{{ user.role }}</span>
               <span matListItemLine>สิทธิ์</span>
