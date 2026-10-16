@@ -1,4 +1,4 @@
-import { saleDay, voidError } from './sale.model';
+import { SaleLine, isFreeLine, normalizeSale, saleDay, voidError } from './sale.model';
 
 describe('sale model', () => {
   // Local timestamps, so the test does not depend on the machine's time zone.
@@ -19,5 +19,44 @@ describe('sale model', () => {
     expect(voidError({ ...sale, status: 'cancelled' }, 'x', '2026-10-04')).toBe(
       'ยกเลิกได้เฉพาะบิลที่ชำระแล้ว',
     );
+  });
+
+  it('fills fields a stored sale or an API response may lack (B24)', () => {
+    const sale = normalizeSale({
+      id: 7,
+      orderNo: 'POS1-20261016-0002',
+      total: 531,
+      shiftId: null,
+      lines: [{ name: 'เมาส์ไร้สาย', unitPrice: 590, amount: 531, freeOfPromotionId: undefined }],
+    } as unknown as Parameters<typeof normalizeSale>[0]);
+    expect(sale).toMatchObject({
+      subtotal: 531,
+      payments: [],
+      creditNoteNos: [],
+      exchangeNos: [],
+      manualDiscount: 0,
+      returnStatus: 'none',
+    });
+    expect(sale.lines[0]).toMatchObject({
+      shortName: 'เมาส์ไร้สาย',
+      listPrice: 590,
+      promotionIds: [],
+      freeOfPromotionId: null,
+      manualDiscount: 0,
+      itemType: 'stock',
+      factor: 1,
+    });
+    // Values that are there are kept.
+    const free = normalizeSale({
+      total: 0,
+      lines: [{ name: 'A', unitPrice: 0, listPrice: 590, amount: 0, freeOfPromotionId: 3 }],
+    } as unknown as Parameters<typeof normalizeSale>[0]);
+    expect(free.lines[0]).toMatchObject({ listPrice: 590, freeOfPromotionId: 3 });
+  });
+
+  it('tells free lines apart even when the field is missing', () => {
+    expect(isFreeLine({ freeOfPromotionId: 3 })).toBe(true);
+    expect(isFreeLine({ freeOfPromotionId: null })).toBe(false);
+    expect(isFreeLine({} as Pick<SaleLine, 'freeOfPromotionId'>)).toBe(false);
   });
 });

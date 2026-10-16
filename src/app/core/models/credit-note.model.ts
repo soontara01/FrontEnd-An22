@@ -11,6 +11,7 @@ import {
   SaleLine,
   SalePayment,
   currentSerial,
+  isFreeLine,
   saleDay,
   soldWithVat,
 } from './sale.model';
@@ -224,7 +225,7 @@ export function draftCreditNote(
       ...lineShare(line, notes, input.saleLineIndex, input.qty, soldWithVat(sale)),
       vatType: line.vatType,
       serial: currentSerial(sale, input.saleLineIndex, exchanges),
-      free: line.freeOfPromotionId !== null,
+      free: isFreeLine(line),
       restock: line.itemType === 'service' ? false : input.restock,
     });
   }
@@ -241,7 +242,7 @@ export function draftCreditNote(
     let qty = 0;
     let amount = 0;
     sale.lines.forEach((l, i) => {
-      if (l.freeOfPromotionId !== null || !l.promotionIds.includes(promotionId)) return;
+      if (isFreeLine(l) || !l.promotionIds.includes(promotionId)) return;
       const kept = keptQty(i);
       qty += kept * l.factor;
       amount += ((l.unitPrice * l.qty - l.itemDiscount) * kept) / l.qty;

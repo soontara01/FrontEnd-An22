@@ -248,6 +248,23 @@ describe('credit note model', () => {
     expect(main).toMatchObject({ deduction: 1090, total: 23510, vat: 0 });
   });
 
+  it('does not treat paid lines without freeOfPromotionId as free goods (B24)', () => {
+    // An API that drops null fields: paid lines lose the key, free lines keep their promotion id.
+    const stripped: Sale = {
+      ...sale,
+      lines: sale.lines.map((l) => {
+        if (l.freeOfPromotionId !== null) return l;
+        const copy: Partial<SaleLine> = { ...l };
+        delete copy.freeOfPromotionId;
+        return copy as SaleLine;
+      }),
+    };
+    const mouse = draftCreditNote(stripped, [], [ret(1)], promotions);
+    expect(mouse.lines[0]).toMatchObject({ free: false, amount: 531 });
+    const notebook = draftCreditNote(stripped, [], [ret(0)], promotions);
+    expect(notebook).toEqual(draftCreditNote(sale, [], [ret(0)], promotions));
+  });
+
   it('charges nothing when the free goods come back too (services never restock)', () => {
     const draft = draftCreditNote(sale, [], [ret(0), ret(2), ret(3)], promotions);
     expect(draft.deductions).toEqual([]);

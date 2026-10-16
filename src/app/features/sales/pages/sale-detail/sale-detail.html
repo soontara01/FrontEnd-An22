@@ -115,7 +115,7 @@
                     <td>
                       <div>
                         {{ l.name }}
-                        @if (l.freeOfPromotionId !== null) {
+                        @if (isFreeLine(l)) {
                           <span class="badge badge-success">ของแถม</span>
                         }
                         @if (l.vatType === 'exempt') {

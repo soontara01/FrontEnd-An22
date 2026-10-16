@@ -1,6 +1,14 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { Sale, SaleLine, StoreInfo, branchLabel, receiptTitle, round2 } from '@core/models';
+import {
+  Sale,
+  SaleLine,
+  StoreInfo,
+  branchLabel,
+  isFreeLine,
+  receiptTitle,
+  round2,
+} from '@core/models';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 
 /**
@@ -16,6 +24,7 @@ import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Receipt {
+  protected readonly isFreeLine = isFreeLine;
   readonly sale = input.required<Sale>();
   readonly store = input.required<StoreInfo>();
   /** Reprint: marks the receipt as a copy */

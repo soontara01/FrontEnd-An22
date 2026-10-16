@@ -41,6 +41,7 @@ import {
   soldWithVat,
   voidError,
   VoidPayload,
+  isFreeLine,
 } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -82,6 +83,7 @@ import { VoidDialog, VoidDialogData } from '../../dialogs/void-dialog/void-dialo
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export default class SaleDetail {
+  protected readonly isFreeLine = isFreeLine;
   protected readonly store = inject(SalesStore);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);

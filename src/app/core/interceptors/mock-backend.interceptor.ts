@@ -31,7 +31,6 @@ import {
   ExchangePayload,
   TaxInvoice,
   TaxInvoiceBuyer,
-  SALE_DEFAULTS,
   Sale,
   SaleLine,
   SalePayload,
@@ -87,6 +86,7 @@ import {
   VoidPayload,
   saleDay,
   soldWithVat,
+  normalizeSale,
   normalizeStoreInfo,
   creditNoteError,
   draftCreditNote,
@@ -739,16 +739,9 @@ const SEED_SALES: Sale[] = (
   ] satisfies Partial<Sale>[]
 ).map(withSaleDefaults);
 
-/** Fills POS fields missing from sales stored before the POS existed. */
+/** Fills fields missing from sales stored before they existed (the same rule the app reads with). */
 function withSaleDefaults(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
-  // Lines stored before listPrice / itemType / manual discounts existed.
-  const lines = (s.lines ?? []).map((l) => ({
-    ...l,
-    listPrice: l.listPrice ?? l.unitPrice,
-    itemType: l.itemType ?? 'stock',
-    manualDiscount: l.manualDiscount ?? 0,
-  }));
-  return { ...SALE_DEFAULTS, subtotal: s.total, ...s, lines } as Sale;
+  return normalizeSale(s);
 }
 
 /** Exported for specs that start from a stored db. */

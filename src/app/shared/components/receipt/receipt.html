@@ -62,7 +62,7 @@
         </div>
         <div class="sub">
           {{ line.qty }} {{ line.unit }} × {{ line.unitPrice | number: '1.2-2' }}
-          @if (line.freeOfPromotionId !== null) {
+          @if (isFreeLine(line)) {
             · ของแถม
           }
         </div>

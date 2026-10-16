@@ -67,7 +67,7 @@
           @if (line.itemDiscount + line.billDiscount + line.manualDiscount) {
             · ลด {{ line.itemDiscount + line.billDiscount + line.manualDiscount | number: '1.2-2' }}
           }
-          @if (line.freeOfPromotionId !== null) {
+          @if (isFreeLine(line)) {
             · ของแถม
           }
         </div>

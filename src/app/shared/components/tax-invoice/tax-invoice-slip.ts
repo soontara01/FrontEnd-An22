@@ -8,6 +8,7 @@ import {
   buyerBranchLabel,
   buyerIdLabel,
   invoiceTotals,
+  isFreeLine,
 } from '@core/models';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { bahtText } from '@shared/utils/baht-text';
@@ -24,6 +25,7 @@ import { bahtText } from '@shared/utils/baht-text';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TaxInvoiceSlip {
+  protected readonly isFreeLine = isFreeLine;
   readonly sale = input.required<Sale>();
   readonly invoice = input.required<TaxInvoice>();
   readonly store = input.required<StoreInfo>();

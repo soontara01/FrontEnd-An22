@@ -182,6 +182,54 @@ export const SALE_DEFAULTS: Omit<
   manualDiscountBy: '',
 };
 
+/**
+ * Defaults for line fields added after the first POS release, or a `null` an API might leave out
+ * of its JSON (B24). `listPrice` falls back to `unitPrice` and `shortName` to `name` instead.
+ */
+export const SALE_LINE_DEFAULTS: Omit<
+  SaleLine,
+  'productId' | 'sku' | 'name' | 'shortName' | 'unit' | 'qty' | 'unitPrice' | 'listPrice' | 'amount'
+> = {
+  factor: 1,
+  itemDiscount: 0,
+  billDiscount: 0,
+  manualDiscount: 0,
+  vatType: 'vat7',
+  itemType: 'stock',
+  vat: 0,
+  promotionIds: [],
+  freeOfPromotionId: null,
+  serial: null,
+  warrantyMonths: 0,
+  cogs: 0,
+};
+
+type StoredSaleLine = Pick<SaleLine, 'name' | 'unitPrice'> & Partial<SaleLine>;
+
+/**
+ * A sale as read from the server or the mock db with every field that may be missing filled in
+ * (older data, or an API that drops `null` fields). Call it wherever a `Sale` comes in.
+ */
+export function normalizeSale(s: Pick<Sale, 'total'> & Partial<Sale>): Sale {
+  const lines = (s.lines ?? []).map((l: StoredSaleLine) => ({
+    ...withDefaults(SALE_LINE_DEFAULTS, l),
+    shortName: l.shortName ?? l.name,
+    listPrice: l.listPrice ?? l.unitPrice,
+  }));
+  return { ...withDefaults({ ...SALE_DEFAULTS, subtotal: s.total }, s), lines } as Sale;
+}
+
+/** `o` over `defaults`, where a missing or `null` value takes the default; other nulls stay. */
+function withDefaults<D extends object, T extends object>(defaults: D, o: T): D & T {
+  const merged = { ...defaults, ...o } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(defaults)) merged[key] ??= value;
+  return merged as D & T;
+}
+
+/** A free-goods line (price 0); `!= null` so a missing field never makes every line free (B24). */
+export const isFreeLine = (line: Pick<SaleLine, 'freeOfPromotionId'>): boolean =>
+  line.freeOfPromotionId != null;
+
 /** Local calendar day ('YYYY-MM-DD') a sale was made. */
 export const saleDay = (sale: Pick<Sale, 'date'>): string => toIsoDate(new Date(sale.date));
 

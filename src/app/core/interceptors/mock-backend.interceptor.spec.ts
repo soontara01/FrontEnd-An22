@@ -22,6 +22,7 @@ import {
   PaymentInput,
   Product,
   Sale,
+  SaleLine,
   Shift,
   ShiftSummary,
   VarianceReportRow,
@@ -652,6 +653,21 @@ describe('mockBackendInterceptor – POS sales', () => {
       'ยกเลิกได้เฉพาะบิลของวันนี้ บิลข้ามวันต้องออกใบลดหนี้',
     );
     expect((await get<Sale>(`sales/${sale.id}`)).status).toBe('paid');
+  });
+
+  it('fills line fields missing from a stored bill when reading it (B24)', async () => {
+    const sale = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    const db = JSON.parse(localStorage.getItem('an22.mock.db')!) as { sales: Sale[] };
+    const stored = db.sales.find((s) => s.id === sale.id)!;
+    stored.lines = stored.lines.map((l) => {
+      const copy: Partial<SaleLine> = { ...l };
+      delete copy.freeOfPromotionId;
+      delete copy.promotionIds;
+      return copy as SaleLine;
+    });
+    localStorage.setItem('an22.mock.db', JSON.stringify(db));
+    const [line] = (await get<Sale>(`sales/${sale.id}`)).lines;
+    expect(line).toMatchObject({ freeOfPromotionId: null, promotionIds: [], amount: 531 });
   });
 
   it('lists sales by local day of sale, newest first', async () => {

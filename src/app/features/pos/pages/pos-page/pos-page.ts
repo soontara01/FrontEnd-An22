@@ -32,6 +32,7 @@ import {
   buyerIdShort,
   round2,
   stockInPacks,
+  isFreeLine,
 } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
@@ -99,6 +100,7 @@ interface UnitOption extends SellUnit {
   host: { '(document:keydown)': 'onShortcut($event)' },
 })
 export default class PosPage {
+  protected readonly isFreeLine = isFreeLine;
   protected readonly store = inject(PosStore);
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);

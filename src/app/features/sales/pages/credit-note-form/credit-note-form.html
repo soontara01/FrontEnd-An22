@@ -35,7 +35,7 @@
             <tr [class.done]="!row.remaining">
               <td>
                 {{ l.name }}
-                @if (l.freeOfPromotionId !== null) {
+                @if (isFreeLine(l)) {
                   <span class="badge badge-success">ของแถม</span>
                 }
                 <div class="text-muted small">

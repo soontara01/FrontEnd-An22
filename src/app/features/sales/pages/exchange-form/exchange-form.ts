@@ -24,6 +24,7 @@ import {
   exchangeError,
   remainingQty,
   todayIso,
+  isFreeLine,
 } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -56,6 +57,7 @@ interface Row {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export default class ExchangeForm {
+  protected readonly isFreeLine = isFreeLine;
   protected readonly store = inject(SalesStore);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);

@@ -71,7 +71,7 @@
             @if (l.vatType === 'exempt') {
               (ยกเว้นภาษี)
             }
-            @if (l.freeOfPromotionId !== null) {
+            @if (isFreeLine(l)) {
               (ของแถม)
             }
             @if (l.serial) {

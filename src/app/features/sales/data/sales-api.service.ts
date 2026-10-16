@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
   CashMovement,
@@ -24,6 +24,7 @@ import {
   VarianceReportRow,
   TaxInvoice,
   TaxInvoiceBuyer,
+  normalizeSale,
 } from '@core/models';
 
 /** HTTP calls for the sales feature (provided in sales.routes.ts). */
@@ -33,20 +34,22 @@ export class SalesApi {
 
   /** Bills sold within a local-date range (null = open end), newest first. */
   list(from: string | null, to: string | null): Observable<Sale[]> {
-    return this.api.get<Sale[]>('sales', rangeParams(from, to));
+    return this.api
+      .get<Sale[]>('sales', rangeParams(from, to))
+      .pipe(map((l) => l.map(normalizeSale)));
   }
 
   get(id: number): Observable<Sale> {
-    return this.api.get<Sale>(`sales/${id}`);
+    return this.api.get<Sale>(`sales/${id}`).pipe(map(normalizeSale));
   }
 
   /** Non-admins send an admin's login in `approval` (P3). */
   void(id: number, payload: VoidPayload): Observable<Sale> {
-    return this.api.post<Sale>(`sales/${id}/void`, payload);
+    return this.api.post<Sale>(`sales/${id}/void`, payload).pipe(map(normalizeSale));
   }
 
   setStatus(id: number, status: SaleStatus): Observable<Sale> {
-    return this.api.put<Sale>(`sales/${id}/status`, { status });
+    return this.api.put<Sale>(`sales/${id}/status`, { status }).pipe(map(normalizeSale));
   }
 
   creditNotesOf(saleId: number): Observable<CreditNote[]> {
@@ -169,7 +172,9 @@ export class SalesApi {
 
   /** Bills sold or voided in a shift, newest first. */
   salesOfShift(shiftId: number): Observable<Sale[]> {
-    return this.api.get<Sale[]>('sales', { shiftId: String(shiftId) });
+    return this.api
+      .get<Sale[]>('sales', { shiftId: String(shiftId) })
+      .pipe(map((l) => l.map(normalizeSale)));
   }
 
   /** Credit notes whose refund was paid from the shift. */

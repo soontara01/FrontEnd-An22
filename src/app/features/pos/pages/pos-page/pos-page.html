@@ -191,12 +191,12 @@
     } @else {
       <div class="lines">
         @for (line of cart().lines; track $index; let n = $index) {
-          <div class="line" [class.free]="line.freeOfPromotionId !== null">
+          <div class="line" [class.free]="isFreeLine(line)">
             <div class="no">{{ n + 1 }}</div>
             <div class="info">
               <div class="name">
                 {{ line.shortName }}
-                @if (line.freeOfPromotionId !== null) {
+                @if (isFreeLine(line)) {
                   <span class="badge badge-success"><mat-icon inline>redeem</mat-icon> ของแถม</span>
                 }
               </div>
@@ -212,7 +212,7 @@
               @for (name of promotionNames(line); track name) {
                 <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
               }
-              @if (line.freeOfPromotionId !== null && needsSerial(line)) {
+              @if (isFreeLine(line) && needsSerial(line)) {
                 <button mat-button type="button" class="serial-btn" (click)="pickFreeSerials(line)">
                   <mat-icon>qr_code_scanner</mat-icon>
                   {{ line.serial ? 'เปลี่ยน Serial' : 'เลือก Serial ของแถม' }}

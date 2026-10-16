@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
   ApprovalCredentials,
@@ -23,6 +23,7 @@ import {
   ShiftSummary,
   StoreInfo,
   User,
+  normalizeSale,
   TaxInvoice,
   TaxInvoiceBuyer,
 } from '@core/models';
@@ -70,7 +71,7 @@ export class PosApi {
   }
 
   checkout(payload: SalePayload): Observable<Sale> {
-    return this.api.post<Sale>('sales', payload);
+    return this.api.post<Sale>('sales', payload).pipe(map(normalizeSale));
   }
 
   drawerOpens(shiftId: number): Observable<DrawerOpen[]> {
