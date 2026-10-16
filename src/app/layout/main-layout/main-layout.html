@@ -45,10 +45,12 @@
         {{ auth.user()?.name }}
       </button>
       <mat-menu #userMenu="matMenu" xPosition="before">
-        <a mat-menu-item href="/settings">
-          <mat-icon>settings</mat-icon>
-          <span>ตั้งค่า</span>
-        </a>
+        @if (menus.canSee('settings')) {
+          <a mat-menu-item href="/settings">
+            <mat-icon>settings</mat-icon>
+            <span>ตั้งค่า</span>
+          </a>
+        }
         <button mat-menu-item (click)="auth.logout()">
           <mat-icon>logout</mat-icon>
           <span>ออกจากระบบ</span>

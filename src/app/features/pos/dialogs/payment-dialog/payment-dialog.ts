@@ -16,6 +16,7 @@ import {
 } from '@core/models';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
+import { MenuAccessService } from '@core/navigation/menu-access.service';
 import { PosStore } from '../../data/pos.store';
 
 /** Closing result after a successful sale. */
@@ -38,6 +39,7 @@ export interface PaymentResult {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PaymentDialog {
+  protected readonly menus = inject(MenuAccessService);
   protected readonly store = inject(PosStore);
   private readonly dialogRef = inject<MatDialogRef<PaymentDialog, PaymentResult>>(MatDialogRef);
 

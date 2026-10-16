@@ -1,16 +1,31 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Route, UrlSegment, UrlTree, provideRouter } from '@angular/router';
-import { adminGuard, adminGuardTo, authGuard, guestGuard } from './auth.guard';
+import { Observable, firstValueFrom, of } from 'rxjs';
+import { MenuAccessService } from '../navigation/menu-access.service';
+import { NotificationService } from '../services/notification.service';
+import { adminGuard, adminGuardTo, authGuard, guestGuard, menuGuard } from './auth.guard';
 import { AuthService } from './auth.service';
 
 describe('auth guards', () => {
   const isLoggedIn = signal(false);
   const isAdmin = signal(false);
+  const notify = { error: vi.fn() };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: AuthService, useValue: { isLoggedIn, isAdmin } }],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: { isLoggedIn, isAdmin } },
+        { provide: NotificationService, useValue: notify },
+        {
+          provide: MenuAccessService,
+          useValue: {
+            load: () => of({ userMenus: ['pos', 'sales'] }),
+            firstVisible: () => ({ path: 'pos' }),
+          },
+        },
+      ],
     });
   });
 
@@ -46,5 +61,17 @@ describe('auth guards', () => {
   it('adminGuardTo redirects non-admins within the feature', () => {
     isAdmin.set(false);
     expect(String(run(adminGuardTo('/promotions')))).toBe('/promotions');
+  });
+
+  it('menuGuard lets admins in and the user role only into the menus set for it', async () => {
+    isAdmin.set(true);
+    expect(run(menuGuard('inventory'))).toBe(true);
+
+    isAdmin.set(false);
+    const allowed = run(menuGuard('sales')) as Observable<boolean | UrlTree>;
+    expect(await firstValueFrom(allowed)).toBe(true);
+    const hidden = run(menuGuard('inventory')) as Observable<boolean | UrlTree>;
+    expect(String(await firstValueFrom(hidden))).toBe('/pos');
+    expect(notify.error).toHaveBeenCalledWith('ไม่มีสิทธิ์เข้าเมนูคลังสินค้า');
   });
 });

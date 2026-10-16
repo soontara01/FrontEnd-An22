@@ -48,6 +48,7 @@ import {
   presetRange,
 } from '@shared/utils/date-range';
 import { httpErrorShown } from '@core/http/http-error-shown';
+import { MenuAccessService } from '@core/navigation/menu-access.service';
 import { summarizeSales } from '../../data/sale-summary';
 import { SalesStore } from '../../data/sales.store';
 
@@ -80,6 +81,7 @@ import { SalesStore } from '../../data/sales.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export default class SaleList {
+  protected readonly menus = inject(MenuAccessService);
   private readonly store = inject(SalesStore);
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);

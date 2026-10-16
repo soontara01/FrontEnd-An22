@@ -10,6 +10,7 @@ import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
   LoginResponse,
+  MenuAccess,
   PosTerminal,
   CountCheckResult,
   DrawerOpen,
@@ -1921,5 +1922,47 @@ describe('mockBackendInterceptor – auth (B3)', () => {
     expect(
       await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'admin' })),
     ).toBe(200);
+  });
+});
+
+describe('mockBackendInterceptor – menu access', () => {
+  let http: HttpClient;
+  const STAFF = 'mock-jwt-token.u2';
+
+  const call = <T>(method: string, body?: unknown, token = 'mock-jwt-token') =>
+    firstValueFrom(
+      http.request<T>(method, '/api/settings/menu-access', {
+        body,
+        headers: new HttpHeaders({ Authorization: `Bearer ${token}` }),
+      }),
+    );
+  const statusOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('defaults to cashier menus, also for a db stored before the setting existed', async () => {
+    localStorage.setItem('an22.mock.db', JSON.stringify({ users: undefined }));
+    expect(await call<MenuAccess>('GET', undefined, STAFF)).toEqual({
+      userMenus: ['dashboard', 'pos', 'sales', 'settings'],
+    });
+  });
+
+  it('lets only admins change it, in menu order, by the shared rule', async () => {
+    expect(await statusOf(call('PUT', { userMenus: ['pos'] }, STAFF))).toBe(403);
+    expect(await statusOf(call('PUT', { userMenus: [] }))).toBe(400);
+    expect(await statusOf(call('PUT', { userMenus: ['users'] }))).toBe(400);
+    const saved = await call<MenuAccess>('PUT', { userMenus: ['inventory', 'pos'] });
+    expect(saved.userMenus).toEqual(['pos', 'inventory']);
+    expect(await call<MenuAccess>('GET', undefined, STAFF)).toEqual(saved);
   });
 });

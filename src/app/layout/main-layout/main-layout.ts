@@ -12,6 +12,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
+import { MenuAccessService } from '@core/navigation/menu-access.service';
 import { MENU } from '@core/navigation/menu.config';
 import { LoadingService } from '@core/services/loading.service';
 import { ThemeService } from '@core/services/theme.service';
@@ -48,9 +49,10 @@ export class MainLayout {
   protected readonly auth = inject(AuthService);
   protected readonly loading = inject(LoadingService);
   protected readonly theme = inject(ThemeService);
-  /** Menus this user may open (admin-only ones hidden for others). */
+  protected readonly menus = inject(MenuAccessService);
+  /** Menus this user may open: admins all; the `user` role those set on `/users/menu-access`. */
   protected readonly menu = computed(() =>
-    MENU.filter((item) => !item.adminOnly || this.auth.isAdmin()),
+    MENU.filter((item) => (!item.adminOnly || this.auth.isAdmin()) && this.menus.canSee(item.path)),
   );
 
   private readonly router = inject(Router);
@@ -72,6 +74,11 @@ export class MainLayout {
 
   /** The menu always starts hidden on every page load; ☰ shows it. */
   protected readonly menuOpen = signal(false);
+
+  constructor() {
+    // Non-admins: which menus to show (also used by `menuGuard`, fetched once per page load).
+    if (!this.auth.isAdmin()) this.menus.load().subscribe();
+  }
 
   protected toggleMenu(): void {
     this.menuOpen.update((open) => !open);

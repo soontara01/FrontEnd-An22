@@ -20,7 +20,7 @@
     </div>
   </mat-dialog-content>
   <mat-dialog-actions align="end">
-    @if (store.storeInfo()?.vatRegistered && !sale.taxInvoiceNo) {
+    @if (store.storeInfo()?.vatRegistered && !sale.taxInvoiceNo && menus.canSee('sales')) {
       <!-- Another menu: full page load (the bill is saved, the cart already cleared). -->
       <a mat-button class="full-invoice" [href]="'/sales/' + sale.id + '/tax-invoice'">
         <mat-icon>receipt_long</mat-icon>

@@ -32,6 +32,7 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
 import { httpErrorShown } from '@core/http/http-error-shown';
+import { MenuAccessService } from '@core/navigation/menu-access.service';
 import { SkuStore } from '../../data/sku.store';
 
 const LEVEL = {
@@ -49,6 +50,7 @@ const LEVEL = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export default class SkuDetail implements OnInit {
+  protected readonly menus = inject(MenuAccessService);
   protected readonly store = inject(SkuStore);
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);

@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { adminGuard, authGuard, guestGuard } from '@core/auth/auth.guard';
+import { adminGuard, authGuard, guestGuard, menuGuard } from '@core/auth/auth.guard';
 import { MENU } from '@core/navigation/menu.config';
 
 export const routes: Routes = [
@@ -20,7 +20,8 @@ export const routes: Routes = [
         path,
         title: label,
         loadChildren,
-        ...(adminOnly ? { canMatch: [adminGuard] } : {}),
+        // Admin-only menus first; then the menus the admin lets the `user` role see.
+        canMatch: adminOnly ? [adminGuard, menuGuard(path)] : [menuGuard(path)],
       })),
     ],
   },

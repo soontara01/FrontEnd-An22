@@ -87,6 +87,9 @@ import {
   saleDay,
   soldWithVat,
   moneyInputError,
+  MenuAccess,
+  DEFAULT_USER_MENUS,
+  menuAccessError,
   moneyProblem,
   moneyProblemText,
   normalizeSale,
@@ -140,6 +143,7 @@ import {
   terminalError,
   terminalOrderPrefix,
 } from '../models';
+import { MENU } from '../navigation/menu.config';
 import { StorageService } from '../services/storage.service';
 
 interface MockDb {
@@ -171,6 +175,8 @@ interface MockDb {
   nextPaymentMethodId: number;
   /** The store's details printed on receipts (Settings menu). */
   storeInfo: StoreInfo;
+  /** Menus the `user` role sees (admins see all); set on `/users/menu-access`. */
+  menuAccess: MenuAccess;
   /** Credit notes (returns after the day of sale). */
   creditNotes: CreditNote[];
   /** Same-SKU exchanges (stock only, no money). */
@@ -784,6 +790,7 @@ const seedDb = (): MockDb => ({
   paymentMethods: SEED_PAYMENT_METHODS.map((x) => structuredClone(x)),
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
   storeInfo: { ...SEED_STORE_INFO },
+  menuAccess: { userMenus: [...DEFAULT_USER_MENUS] },
   creditNotes: [],
   exchanges: [],
   taxInvoices: [],
@@ -907,6 +914,7 @@ function handle(
     return handlePaymentMethods(req, path, db);
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
+  if (path === 'settings/menu-access') return handleMenuAccess(req, path, db);
   if (path === 'shifts' || path.startsWith('shifts/')) return handleShifts(req, path, db);
   if (path === 'pos-terminals' || path.startsWith('pos-terminals/')) {
     return handlePosTerminals(req, path, db);
@@ -968,6 +976,7 @@ function adminOnlyError(req: HttpRequest<unknown>, path: string): string | null 
   }
   if (path === 'tax-invoices' && req.method === 'GET') return 'ดูรายงานภาษีขายได้เฉพาะผู้ดูแลระบบ';
   if (path === 'settings/store' && write) return 'แก้ข้อมูลร้านได้เฉพาะผู้ดูแลระบบ';
+  if (path === 'settings/menu-access' && write) return 'กำหนดสิทธิ์เมนูได้เฉพาะผู้ดูแลระบบ';
   if (req.method === 'POST' && /^shifts\/\d+\/approve$/.test(path)) {
     return 'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ';
   }
@@ -2988,6 +2997,25 @@ function handleShifts(
     if (shift.approvalStatus !== 'pending') return error(400, 'กะนี้ไม่ได้รออนุมัติ');
     Object.assign(shift, { approvalStatus: 'approved', approvedBy: user, approvedAt: now });
     return ok(shift);
+  }
+  return notFound(req, path);
+}
+
+/** GET/PUT /settings/menu-access — menus the `user` role sees (PUT: admin only, `menuAccessError()`). */
+function handleMenuAccess(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  if (req.method === 'GET') return ok(db.menuAccess);
+  if (req.method === 'PUT') {
+    const known = MENU.map((m) => m.path);
+    const body = (req.body ?? {}) as Partial<MenuAccess>;
+    const problem = menuAccessError(body, known);
+    if (problem) return error(400, problem);
+    // Stored in menu order, whatever order the screen sent.
+    db.menuAccess = { userMenus: known.filter((m) => body.userMenus!.includes(m)) };
+    return ok(db.menuAccess);
   }
   return notFound(req, path);
 }

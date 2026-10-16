@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { User, UserPayload } from '@core/models';
+import { MenuAccess, User, UserPayload } from '@core/models';
 
 /** HTTP calls for the users feature (provided in users.routes.ts). */
 @Injectable()
@@ -26,5 +26,14 @@ export class UsersApi {
 
   remove(id: number): Observable<void> {
     return this.api.delete(`users/${id}`);
+  }
+
+  /** Menus the `user` role sees (`/users/menu-access`). */
+  menuAccess(): Observable<MenuAccess> {
+    return this.api.get<MenuAccess>('settings/menu-access');
+  }
+
+  saveMenuAccess(access: MenuAccess): Observable<MenuAccess> {
+    return this.api.put<MenuAccess>('settings/menu-access', access);
   }
 }

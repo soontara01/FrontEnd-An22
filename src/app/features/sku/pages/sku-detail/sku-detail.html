@@ -130,16 +130,18 @@
         </dl>
       </mat-card-content>
       <mat-card-actions>
-        @if (!service()) {
+        @if (!service() && menus.canSee('inventory')) {
           <a mat-button href="/inventory">
             <mat-icon>inventory</mat-icon>
             ดูในคลังสินค้า
           </a>
         }
-        <a mat-button [href]="'/pricing/' + s.id">
-          <mat-icon>sell</mat-icon>
-          จัดการราคา
-        </a>
+        @if (menus.canSee('pricing')) {
+          <a mat-button [href]="'/pricing/' + s.id">
+            <mat-icon>sell</mat-icon>
+            จัดการราคา
+          </a>
+        }
       </mat-card-actions>
     </mat-card>
 

@@ -15,10 +15,12 @@
       รายงานภาษีขาย
     </a>
   }
-  <a mat-flat-button href="/pos">
-    <mat-icon>point_of_sale</mat-icon>
-    ขายหน้าร้าน
-  </a>
+  @if (menus.canSee('pos')) {
+    <a mat-flat-button href="/pos">
+      <mat-icon>point_of_sale</mat-icon>
+      ขายหน้าร้าน
+    </a>
+  }
 </app-page-header>
 
 <div class="filter-row">

@@ -1,0 +1,74 @@
+<app-page-header
+  title="สิทธิ์เมนู"
+  subtitle="เมนูที่ผู้ใช้ทั่วไป (user) เห็น — ผู้ดูแลระบบ (admin) เห็นทุกเมนู"
+>
+  <a mat-button routerLink="/users">
+    <mat-icon>arrow_back</mat-icon>
+    กลับ
+  </a>
+</app-page-header>
+
+<mat-card appearance="outlined">
+  <mat-card-content>
+    <p class="note">
+      ใช้กับผู้ใช้ role user ทุกคน มีผลเมื่อเปิดหน้าใหม่ — ซ่อนเมนูและหน้าของเมนูนั้น
+      แต่ไม่ได้เปลี่ยนสิทธิ์แก้ข้อมูล (เช่น ราคา / ข้อมูลหลัก ยังแก้ได้เฉพาะ admin)
+    </p>
+    @if (loading()) {
+      <app-loading-spinner />
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>เมนู</th>
+            <th class="role">ผู้ดูแลระบบ (admin)</th>
+            <th class="role">ผู้ใช้ทั่วไป (user)</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of menus; track item.path) {
+            <tr>
+              <td>
+                <span class="menu">
+                  <mat-icon>{{ item.icon }}</mat-icon>
+                  {{ item.label }}
+                </span>
+              </td>
+              <td class="role">
+                <mat-checkbox
+                  [checked]="true"
+                  [disabled]="true"
+                  [attr.aria-label]="'admin เห็น ' + item.label"
+                />
+              </td>
+              <td class="role">
+                @if (item.path === adminOnly) {
+                  <span class="text-muted small">admin เท่านั้น</span>
+                } @else {
+                  <mat-checkbox
+                    [checked]="isTicked(item)"
+                    [disabled]="saving()"
+                    [attr.aria-label]="'user เห็น ' + item.label"
+                    (change)="toggle(item, $event.checked)"
+                  />
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      @if (problem(); as message) {
+        <div class="problem">{{ message }}</div>
+      }
+      <div class="actions">
+        <button mat-button type="button" [disabled]="saving()" (click)="resetDefaults()">
+          คืนค่าเริ่มต้น
+        </button>
+        <button mat-flat-button type="button" [disabled]="!!problem() || saving()" (click)="save()">
+          <mat-icon>save</mat-icon>
+          บันทึก
+        </button>
+      </div>
+    }
+  </mat-card-content>
+</mat-card>

@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import UserList from './pages/user-list/user-list';
 import UserForm from './pages/user-form/user-form';
+import MenuAccessPage from './pages/menu-access/menu-access';
 import { UsersApi } from './data/users-api.service';
 import { UsersStore } from './data/users.store';
 
@@ -13,6 +14,7 @@ export default [
     children: [
       { path: '', component: UserList },
       { path: 'new', title: 'เพิ่มผู้ใช้', component: UserForm },
+      { path: 'menu-access', title: 'สิทธิ์เมนู', component: MenuAccessPage },
       { path: ':id/edit', title: 'แก้ไขผู้ใช้', component: UserForm },
     ],
   },
