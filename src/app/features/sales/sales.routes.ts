@@ -1,4 +1,4 @@
-import { provideNativeDateAdapter } from '@angular/material/core';
+import { provideThaiDateAdapter } from '@shared/utils/thai-date-adapter';
 import { Routes } from '@angular/router';
 import { adminGuardTo } from '@core/auth/auth.guard';
 import { SalesApi } from './data/sales-api.service';
@@ -16,8 +16,8 @@ export default [
   {
     path: '',
     // Feature-scoped services: created once per page load of this menu.
-    // provideNativeDateAdapter: date-range picker on the bill list.
-    providers: [SalesApi, SalesStore, provideNativeDateAdapter()],
+    // provideThaiDateAdapter: date-range picker on the bill list.
+    providers: [SalesApi, SalesStore, provideThaiDateAdapter()],
     children: [
       { path: '', component: SaleList },
       // Before ':id' so the literal path wins.

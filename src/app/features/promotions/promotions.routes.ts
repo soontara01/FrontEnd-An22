@@ -1,4 +1,4 @@
-import { provideNativeDateAdapter } from '@angular/material/core';
+import { provideThaiDateAdapter } from '@shared/utils/thai-date-adapter';
 import { Routes } from '@angular/router';
 import { adminGuardTo } from '@core/auth/auth.guard';
 import { PromotionsApi } from './data/promotions-api.service';
@@ -12,7 +12,7 @@ export default [
     path: '',
     // Feature-scoped services: created once per page load of this menu.
     // The date adapter is only needed here (period datepickers in the form).
-    providers: [PromotionsApi, PromotionsStore, provideNativeDateAdapter()],
+    providers: [PromotionsApi, PromotionsStore, provideThaiDateAdapter()],
     children: [
       { path: '', component: PromotionList },
       // Only admins create / edit promotions (server → 403); others go back to the list.

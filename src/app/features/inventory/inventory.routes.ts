@@ -1,4 +1,4 @@
-import { provideNativeDateAdapter } from '@angular/material/core';
+import { provideThaiDateAdapter } from '@shared/utils/thai-date-adapter';
 import { Routes } from '@angular/router';
 import { InventoryApi } from './data/inventory-api.service';
 import { InventoryStore } from './data/inventory.store';
@@ -13,8 +13,8 @@ export default [
     path: '',
     // Feature-scoped services: created once per page load of this menu
     // (shared by the stock list and the reorder page — SPA inside this menu).
-    // provideNativeDateAdapter: date-range picker on the stock card.
-    providers: [InventoryApi, InventoryStore, provideNativeDateAdapter()],
+    // provideThaiDateAdapter: date-range picker on the stock card.
+    providers: [InventoryApi, InventoryStore, provideThaiDateAdapter()],
     children: [
       { path: '', component: ProductList },
       { path: 'receive-import', title: 'รับสินค้าเข้าจาก Excel', component: ReceiveImport },
