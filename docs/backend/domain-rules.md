@@ -1,0 +1,75 @@
+# กฎธุรกิจที่ server ต้องทำ (port จาก TypeScript)
+
+กฎทุกข้อเป็น **pure function** ใน `src/app/core/models/` ใช้ร่วมกันระหว่างหน้าจอและ mock — api (Java) ต้อง port
+ให้ได้ **ผลเหมือนกันทุกตัวเลขและทุกข้อความ** แล้วตรวจซ้ำที่ server (หน้าบ้านตรวจเพื่อ UX เท่านั้น)
+
+- ฟังก์ชัน `xxxError()` คืน `string | null` — string = ข้อความภาษาไทยที่ตอบ 400 (`{ message }`)
+- spec ของแต่ละไฟล์ (`*.model.spec.ts`) คือตัวอย่าง input → output — `fixtures/` (ขั้นถัดไป) จะ export ให้ JUnit ใช้ตรง ๆ
+- กฎที่อยู่ใน mock เท่านั้น (ไม่มีใน `core/models`) อยู่หัวข้อสุดท้าย
+
+## ข้อควรระวังตอน port
+
+- **การปัดเศษ**: `round2(n) = Math.round(n * 100) / 100` บน double ของ JS — `Math.round` ปัด .5 ขึ้นทาง +∞ (−2.5 → −2)
+  ไม่ใช่ `HALF_UP` ของ `BigDecimal` สำหรับค่าลบ และ `1.005 * 100` ใน double ได้ 100.4999… ถ้า api ใช้ `BigDecimal`
+  ต้องพิสูจน์ด้วย fixtures ว่าผลตรงกัน (โดยเฉพาะ VAT, ส่วนลดเฉลี่ย, ทุนเฉลี่ย) — ไม่ตรง = หน้าบ้านกับ server เถียงกันเรื่อง `expectedTotal`
+- **VAT**: ราคารวม VAT; `vatBreakdown(price, vatType)` → `net = round2(price / 1.07)`, `vat = round2(price − net)`; `exempt` → vat 0;
+  ร้านไม่จด VAT (`vatRegistered: false`) → ทุกบรรทัด `vat = 0`
+- **วันที่**: `todayIso()` / `toIsoDate()` = วันท้องถิ่น (Asia/Bangkok) ไม่ใช่ UTC; ช่วงวันที่นับรวมทั้งสองปลาย, `endDate: null` = ไม่มีวันสิ้นสุด
+- **ลำดับการตรวจ** มีผลกับข้อความที่ผู้ใช้เห็น — ใช้ลำดับเดียวกับ mock (เช่น `POST /sales` ใน `api-contract.md`)
+- `null` vs ไม่มี field: ข้อมูลเก่าอาจไม่มี field — หน้าบ้านเติม default (`normalizeSale()`, `SALE_DEFAULTS`, `PRODUCT_DEFAULTS`)
+  ฝั่ง api ให้ DB มี default และตอบ field ครบเสมอ
+
+## ตารางกฎ
+
+| ฟังก์ชัน                                                                                                                                                                                           | ไฟล์ (`core/models/`)     | ใช้ที่ endpoint                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------- |
+| `priceCart()`, `cartError()`, `freeSets()`                                                                                                                                                         | `pos-pricing.model.ts`    | `POST /sales` (คิดราคาใหม่), `draftCreditNote()` ใช้ `freeSets()`                      |
+| `manualDiscountError()`, `manualDiscountBaht()`                                                                                                                                                    | `pos-pricing.model.ts`    | `POST /sales`                                                                          |
+| `paymentSummary()`, `paymentError()`, `cashDueFor()`                                                                                                                                               | `pos-payment.model.ts`    | `POST /sales`                                                                          |
+| `roundCash()`, `allowsChange()`, `opensDrawer()`, `netReceived()`                                                                                                                                  | `payment-method.model.ts` | ชำระเงิน, รายงาน                                                                       |
+| `paymentMethodError()`, `withPaymentTypeRules()`, `isLastActiveCash()`, `isValidPromptPayId()`, `closeCheckOf()`                                                                                   | `payment-method.model.ts` | `/payment-methods`                                                                     |
+| `promotionError()`, `promotionStatus()`, `hasStarted()`, `inScope()`, `promotionsForProduct()`, `discountAmount()`                                                                                 | `promotion.model.ts`      | `/promotions`, `priceCart()`                                                           |
+| `findOverlap()`, `effectivePrice()`, `priceStatus()`                                                                                                                                               | `price.model.ts`          | `/prices`, `Product.currentPrice`                                                      |
+| `movingAverage()`, `effectiveCost()`, `costValue()`, `buildStockCard()`                                                                                                                            | `costing.model.ts`        | รับเข้า, `GET /products/:id/movements`                                                 |
+| `serialFormatError()`, `serialMovements()`                                                                                                                                                         | `serial.model.ts`         | `POST /products/:id/serials`                                                           |
+| `withServiceRules()`, `canSell()`, `canPurchase()`, `isService()`, `allBarcodes()`, `suggestReorderQty()`, `vatBreakdown()`                                                                        | `product.model.ts`        | `/products`, รับเข้า, POS                                                              |
+| `isLeaf()`, `categoryPath()`                                                                                                                                                                       | `category.model.ts`       | `/categories`, `Product.categoryPath`                                                  |
+| `isValidThaiTaxId()`                                                                                                                                                                               | `supplier.model.ts`       | `/suppliers`, `StoreInfo`, ผู้ซื้อในใบกำกับ                                            |
+| `voidError()`, `currentSerial()`, `saleDay()`, `soldWithVat()`, `isFreeLine()`                                                                                                                     | `sale.model.ts`           | `POST /sales/:id/void`, ใบลดหนี้, ใบเปลี่ยน                                            |
+| `draftCreditNote()`, `creditNoteError()`, `refundOptions()`, `returnSummary()`                                                                                                                     | `credit-note.model.ts`    | `/sales/:id/credit-notes`, field derived ของ `Sale`                                    |
+| `exchangeError()`, `exchangeBlocker()`, `warrantyEnd()`                                                                                                                                            | `exchange.model.ts`       | `/sales/:id/exchanges`                                                                 |
+| `taxInvoiceError()`, `checkoutBuyerError()`, `reissueError()`, `buyerError()`, `normalizeBuyer()`, `currentInvoice()`, `invoiceTotals()`                                                           | `tax-invoice.model.ts`    | `/sales/:id/tax-invoice*`, `POST /sales` (buyer)                                       |
+| `shiftBlocker()`, `openShiftError()`, `cashMovementError()`, `drawerOpenError()`, `countInputsError()`, `countCheck()`, `closeShiftError()`, `shiftAdjustmentError()`, `requireShiftChangeError()` | `shift.model.ts`          | `/shifts/*`, `POST /sales`, void, ใบลดหนี้, `PUT /settings/store`                      |
+| `expectedByMethod()`, `shiftSummary()`, `buildShiftCounts()`, `approvalStatusFor()`, `adjustedVariance()`, `varianceReport()`, `shiftDay()`                                                        | `shift.model.ts`          | X / Z report, ปิดกะ, รายงานส่วนต่าง                                                    |
+| `terminalError()`, `posTerminalError()`, `terminalOrderPrefix()`                                                                                                                                   | `pos-terminal.model.ts`   | `POST /sales`, `POST /shifts/open`, `/pos-terminals`                                   |
+| `storeInfoError()`, `normalizeStoreInfo()`                                                                                                                                                         | `store-info.model.ts`     | `PUT /settings/store`                                                                  |
+| `menuAccessError()`, `canSeeMenu()`                                                                                                                                                                | `menu-access.model.ts`    | `PUT /settings/menu-access`                                                            |
+| `userChangeError()`                                                                                                                                                                                | `user.model.ts`           | `/users`                                                                               |
+| `moneyProblem()`, `moneyInputError()`                                                                                                                                                              | `money.model.ts`          | ทุกช่องเงินที่พิมพ์ (ว่าง / ติดลบ / ทศนิยม > 2)                                        |
+| `buildSalesTaxReport()` (ฝั่งหน้าบ้าน, `features/sales/data/sales-tax-report.ts`)                                                                                                                  | —                         | ไม่ต้อง port ตอนนี้ — server ส่งข้อมูลดิบ (`/sales`, `/credit-notes`, `/tax-invoices`) |
+
+รายละเอียดเชิงธุรกิจของแต่ละกฎ: `CLAUDE.md` (หัวข้อ Data flow) และ `docs/pos-plan.md`, `docs/shift-plan.md`, `docs/terminal-plan.md`
+
+## สิ่งที่ server ทำเอง (ไม่ใช่ pure function)
+
+- **ตัดสต็อกพร้อม COGS** (`issueStock()` ใน mock): serial → ทุนของเครื่องนั้น, status `sold`; non-serial → `avgCost` × qty ฐาน (avg ไม่เปลี่ยน);
+  บริการ → `cost` × qty ไม่มี movement
+- **รับเข้า**: non-serial → `movingAverage()`; serial → `avgCost` = ค่าเฉลี่ยทุนของ serial ที่อยู่ในคลัง
+- **ทุกการเปลี่ยนสต็อกเขียน `StockMovement`** พร้อมยอดคงเหลือ (qty / avg / value) — บัตรสต็อกอ่านจากตารางนี้
+- **ค่าที่คำนวณตอนอ่าน (ไม่เก็บ)**: `Product.currentPrice`, `categoryPath`, `Category.productCount`, `Supplier.productCount`,
+  `Sale.returnStatus` / `creditedTotal` / `creditNoteNos` / `exchangeNos`, `Shift.adjustmentTotal` (ดู `data-model.md`)
+- **snapshot ตอนสร้างเอกสาร**: `terminalId`, `posId`, `vatRegistered`, `shiftId`, ชื่อผู้ขาย / ผู้อนุมัติ, ชื่อสินค้าและราคาในบรรทัด
+- **เลขรันเอกสาร** ต้องไม่ซ้ำภายใต้การขายพร้อมกันหลายเครื่อง (mock ทำแบบ max+1 — api ใช้ sequence / ล็อกแถวตัวนับ)
+
+## กฎที่อยู่ใน mock เท่านั้น (ควรย้ายเข้า `core/models` ภายหลัง)
+
+- **SKU** (`validateSku()`, `validateSkuSuppliers()`): `itemType` ∈ stock / service; รหัส SKU ไม่ซ้ำ (ไม่สนตัวพิมพ์);
+  หมวดต้องเป็นหมวดย่อยสุดที่ใช้งาน; `shortName` ≤ 20; serial มีหน่วยเดียว; pack `factor` จำนวนเต็ม > 1, ชื่อหน่วยไม่ว่าง / ไม่ซ้ำ / ไม่ซ้ำหน่วยฐาน;
+  บาร์โค้ดทุกตัว (ฐาน + pack) ไม่ซ้ำทั้งระบบ; `maxStock` > 0 ต้อง ≥ `minStock`; ผู้จำหน่ายไม่ซ้ำ, หลักต้องมี 1 ราย, ราคาซื้อ / lead time / MOQ ≥ 0;
+  ทิ้ง field derived ที่ client ส่งมา (`withoutDerived()`)
+- **ต้นทุนรับเข้า** (`receiptCostError()`): ต้องมีและไม่ติดลบ (ทศนิยมเกิน 2 ยอมได้)
+- **ปรับสต็อก**: `delta` จำนวนเต็ม ≠ 0, ห้ามติดลบ, รับเข้าไม่ได้เมื่อ `!canPurchase()`
+- **หมวดหมู่**: แม่ต้องมีจริง, ไม่เกิน 3 ระดับ, หมวดที่มี SKU แตกลูกไม่ได้, ลบได้เมื่อไม่มีลูก / SKU / โปรที่ยังไม่หมดอายุอ้าง
+- **ผู้จำหน่าย**: code ไม่ซ้ำ, taxId + branchType + branchNo ไม่ซ้ำ, สำนักงานใหญ่ → `branchNo = ''`
+- **การลบที่ถูกอ้าง**: SKU (stock > 0 / มีการขาย / อยู่ในโปรที่ยังไม่หมดอายุ), ช่องทางชำระ (มีการขาย), เครื่อง POS (มีกะ / เอกสาร), โปร (เริ่มแล้ว)
+- **void ต้องให้ admin อนุมัติ** (`approval`) และใบกำกับเต็มรูปของบิลถูกยกเลิก (`cancelledAt`)
