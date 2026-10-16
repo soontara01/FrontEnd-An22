@@ -6,6 +6,7 @@ import { SalesTaxReport } from './sales-tax-report';
 describe('sales tax report Excel', () => {
   const report: SalesTaxReport = {
     month: '2026-10',
+    nonVatExcluded: 0,
     rows: [
       {
         kind: 'full',

@@ -18,7 +18,7 @@
     <div class="title">{{ title() }}</div>
     @if (s.taxInvoiceNo) {
       <div>ใบกำกับภาษีเต็มรูปเลขที่ {{ s.taxInvoiceNo }}</div>
-    } @else if (shop.vatRegistered) {
+    } @else if (withVat()) {
       <div>(VAT Included)</div>
     }
     @if (copy()) {
@@ -103,7 +103,7 @@
     <div class="row grand">
       <span>ยอดสุทธิ</span><span>{{ s.total | number: '1.2-2' }}</span>
     </div>
-    @if (shop.vatRegistered) {
+    @if (withVat()) {
       <div class="row sub">
         <span>มูลค่าสินค้ามีภาษี</span><span>{{ vatable() - s.vat | number: '1.2-2' }}</span>
       </div>

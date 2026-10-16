@@ -232,6 +232,22 @@ describe('credit note model', () => {
     expect(draft).toMatchObject({ subtotal: 24600, deduction: 1090, total: 23510, vat: 1538.04 });
   });
 
+  it('takes no VAT back for a bill sold while not VAT-registered (B20)', () => {
+    const plain: Sale = {
+      ...sale,
+      vatRegistered: false,
+      vat: 0,
+      lines: sale.lines.map((l) => ({ ...l, vat: 0 })),
+    };
+    const first = draftCreditNote(plain, [], [ret(1)], promotions);
+    expect(first.lines[0]).toMatchObject({ qty: 1, amount: 531, vat: 0 });
+    const rest = draftCreditNote(plain, [note({ lines: first.lines })], [ret(1, 2)], promotions);
+    expect(rest.lines[0]).toMatchObject({ amount: 1062, vat: 0 });
+    // Kept free goods are deducted at list price, still without VAT.
+    const main = draftCreditNote(plain, [], [ret(0)], promotions);
+    expect(main).toMatchObject({ deduction: 1090, total: 23510, vat: 0 });
+  });
+
   it('charges nothing when the free goods come back too (services never restock)', () => {
     const draft = draftCreditNote(sale, [], [ret(0), ret(2), ret(3)], promotions);
     expect(draft.deductions).toEqual([]);

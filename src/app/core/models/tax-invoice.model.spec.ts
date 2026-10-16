@@ -163,5 +163,9 @@ describe('tax invoice model', () => {
     expect(taxInvoiceError({ ...sale, taxInvoiceNo: 'INV-1' }, buyer)).toBe(
       'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-1)',
     );
+    // B20: a bill sold while the store was not registered never becomes a tax invoice.
+    expect(taxInvoiceError({ ...sale, vatRegistered: false }, buyer)).toBe(
+      'บิลนี้ขายตอนร้านยังไม่ได้จด VAT ออกใบกำกับภาษีไม่ได้',
+    );
   });
 });

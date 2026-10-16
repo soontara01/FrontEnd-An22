@@ -6,6 +6,7 @@ import {
   invoiceTotals,
   round2,
   saleDay,
+  soldWithVat,
   toIsoDate,
 } from '@core/models';
 
@@ -21,6 +22,8 @@ import {
  * - voided bills count 0 (their numbers stay in the day's range; a voided full invoice is listed
  *   as cancelled); credit notes reduce the month they are issued in, with the buyer of the full
  *   invoice they quote (retail when the bill only had an abbreviated one)
+ * - bills sold while the store was not VAT-registered (and their credit notes) are no tax
+ *   documents and are left out entirely — only counted in `nonVatExcluded` (B20)
  */
 export type TaxReportRowKind = 'abbreviated' | 'full' | 'replacement' | 'credit';
 
@@ -55,6 +58,8 @@ export interface SalesTaxReport {
   month: string;
   rows: TaxReportRow[];
   totals: TaxReportTotals;
+  /** Bills sold while not VAT-registered + their credit notes in the month, left out (B20) */
+  nonVatExcluded: number;
 }
 
 const KIND_ORDER: Record<TaxReportRowKind, number> = {
@@ -80,7 +85,12 @@ export function buildSalesTaxReport(
   const atSaleInvoice = new Map(
     invoices.filter((i) => i.atSale).map((i) => [i.saleId, i] as const),
   );
-  const posBills = sales.filter((s) => s.lines.length && inMonth(saleDay(s), month));
+  const monthBills = sales.filter((s) => s.lines.length && inMonth(saleDay(s), month));
+  const posBills = monthBills.filter(soldWithVat);
+  const monthNotes = notes.filter((n) => inMonth(toIsoDate(new Date(n.date)), month));
+  const vatNotes = monthNotes.filter(soldWithVat);
+  const nonVatExcluded =
+    monthBills.length - posBills.length + (monthNotes.length - vatNotes.length);
 
   // Abbreviated invoices, one line per day and terminal.
   const terminalOf = (s: Sale) => s.terminalId ?? 1;
@@ -159,9 +169,8 @@ export function buildSalesTaxReport(
   }
 
   // Credit notes issued in the month (negative).
-  for (const n of notes) {
+  for (const n of vatNotes) {
     const day = toIsoDate(new Date(n.date));
-    if (!inMonth(day, month)) continue;
     const exempt = round2(
       sum(n.lines.filter((l) => l.vatType === 'exempt').map((l) => l.amount)) -
         sum(n.deductions.filter((d) => d.vatType === 'exempt').map((d) => d.amount)),
@@ -202,5 +211,12 @@ export function buildSalesTaxReport(
       exempt: sum(counted.map((r) => r.exempt)),
       total: sum(counted.map((r) => r.total)),
     },
+    nonVatExcluded,
   };
 }
+
+/** Heading note for documents left out because the store was not VAT-registered ('' = none). */
+export const nonVatNote = (report: Pick<SalesTaxReport, 'nonVatExcluded'>): string =>
+  report.nonVatExcluded
+    ? `ไม่รวมบิล / ใบลดหนี้ที่ออกตอนร้านไม่ได้จดทะเบียน VAT ${report.nonVatExcluded} ใบ`
+    : '';

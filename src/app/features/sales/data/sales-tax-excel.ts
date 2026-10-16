@@ -1,6 +1,6 @@
 import { StoreInfo, branchLabel, fromIsoDate, placeName } from '@core/models';
 import { loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
-import { SalesTaxReport } from './sales-tax-report';
+import { SalesTaxReport, nonVatNote } from './sales-tax-report';
 
 const COLUMNS = [
   { header: 'ลำดับ', width: 7 },
@@ -44,6 +44,7 @@ export async function salesTaxReportXlsx(
     [`เดือนภาษี ${taxMonthText(report.month)}`],
     [`ชื่อผู้ประกอบการ ${name}`, ...gap, `เลขประจำตัวผู้เสียภาษีอากร ${store?.taxId ?? ''}`],
     [`ชื่อสถานประกอบการ ${store ? placeName(store) : ''}`, ...gap, store ? branchLabel(store) : ''],
+    ...(nonVatNote(report) ? [[nonVatNote(report)]] : []),
   ];
   for (const values of heading) sheet.addRow(values);
   sheet.getRow(1).font = { bold: true, size: 14 };

@@ -64,6 +64,7 @@ const ctx = (products: Product[], promotions: Promotion[] = []): PricingContext 
   promotions,
   categories,
   date: TODAY,
+  vatRegistered: true,
 });
 
 describe('priceCart', () => {
@@ -83,6 +84,16 @@ describe('priceCart', () => {
     expect(cart.itemCount).toBe(12);
     expect(cart.issues).toEqual([]);
     expect(cartError(cart)).toBeNull();
+  });
+
+  it('keeps prices but takes no VAT when the store is not VAT-registered (B20)', () => {
+    const p = product(1, { currentPrice: 10.7 });
+    const priced = priceCart([item(1, 2)], ctx([p]));
+    const cart = priceCart([item(1, 2)], { ...ctx([p]), vatRegistered: false });
+    expect(cart.total).toBe(priced.total);
+    expect(priced.vat).toBe(1.4);
+    expect(cart.vat).toBe(0);
+    expect(cart.lines.map((l) => l.vat)).toEqual([0]);
   });
 
   it('applies item discounts per base unit once the line reaches minQty', () => {

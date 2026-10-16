@@ -1,7 +1,7 @@
 import { STORE_INFO_DEFAULTS, StoreInfo } from './store-info.model';
 import { BranchType, branchLabel, isValidThaiTaxId } from './supplier.model';
 import { round2 } from './costing.model';
-import type { Sale } from './sale.model';
+import { Sale, soldWithVat } from './sale.model';
 
 /**
  * Full tax invoice (ใบกำกับภาษีเต็มรูป, decided 2026-10-04) of a POS bill of a VAT-registered
@@ -223,11 +223,12 @@ export function checkoutBuyerError(
 
 /** The single rule for issuing later from the bill (form + server). `buyer` must be normalized. */
 export function taxInvoiceError(
-  sale: Pick<Sale, 'status' | 'lines' | 'taxInvoiceNo'>,
+  sale: Pick<Sale, 'status' | 'lines' | 'taxInvoiceNo' | 'vatRegistered'>,
   buyer: TaxInvoiceBuyer,
   store: Pick<StoreInfo, 'vatRegistered'> = STORE_INFO_DEFAULTS,
 ): string | null {
   if (!store.vatRegistered) return 'ร้านไม่ได้จดทะเบียน VAT ออกใบกำกับภาษีไม่ได้';
+  if (!soldWithVat(sale)) return 'บิลนี้ขายตอนร้านยังไม่ได้จด VAT ออกใบกำกับภาษีไม่ได้';
   if (sale.status !== 'paid' || !sale.lines.length) {
     return 'ออกใบกำกับภาษีได้เฉพาะบิลขายหน้าร้านที่ชำระแล้ว';
   }

@@ -133,6 +133,8 @@ export class PosStore {
         promotions: this._promotions(),
         categories: this._categories(),
         date: todayIso(),
+        // The server re-prices with the store's real status; until it loads assume registered.
+        vatRegistered: this.storeInfo()?.vatRegistered ?? true,
       },
       this._freeSerials(),
       this._billManual(),

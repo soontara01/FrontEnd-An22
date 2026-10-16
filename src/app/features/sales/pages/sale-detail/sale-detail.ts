@@ -38,7 +38,7 @@ import {
   round2,
   saleDay,
   todayIso,
-  vatBreakdown,
+  soldWithVat,
   voidError,
   VoidPayload,
 } from '@core/models';
@@ -164,12 +164,13 @@ export default class SaleDetail {
       !!this.taxInvoice() &&
       !this.taxInvoice()?.cancelledAt,
   );
-  /** Full tax invoice can be issued: VAT store, paid POS bill, none yet. */
+  /** Full tax invoice can be issued: VAT store, paid POS bill sold while registered, none yet. */
   protected readonly canInvoice = computed(
     () =>
       !!this.store.storeInfo()?.vatRegistered &&
       this.isPos() &&
       this.sale.hasValue() &&
+      soldWithVat(this.sale.value()) &&
       this.sale.value().status === 'paid' &&
       !this.sale.value().taxInvoiceNo,
   );
@@ -263,9 +264,9 @@ export default class SaleDetail {
     return ids.map((id) => names.get(id) ?? `โปร #${id}`);
   }
 
-  /** Gross profit of a line: amount net of VAT − cost. */
+  /** Gross profit of a line: amount net of its VAT (0 when sold while not registered) − cost. */
   protected lineProfit(line: SaleLine): number {
-    return round2(vatBreakdown(line.amount, line.vatType).net - line.cogs);
+    return round2(line.amount - line.vat - line.cogs);
   }
 
   /**

@@ -667,6 +667,29 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
   });
 
+  it('takes no VAT while the store is not VAT-registered, also on its credit notes (B20)', async () => {
+    const info = await get<StoreInfo>('settings/store');
+    await put('settings/store', { ...info, vatRegistered: false });
+    const plain = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    expect(plain).toMatchObject({ total: 531, vat: 0, vatRegistered: false });
+    expect(plain.lines.map((l) => l.vat)).toEqual([0]);
+
+    vi.setSystemTime(new Date(2026, 9, 5, 11, 0));
+    const cn = await post<CreditNote>(`sales/${plain.id}/credit-notes`, {
+      lines: [{ saleLineIndex: 0, qty: 1, restock: true }],
+      refunds: [pay(CASH, 531)],
+      reason: 'ลูกค้าคืนสินค้า',
+      expectedTotal: 531,
+    });
+    expect(cn).toMatchObject({ total: 531, vat: 0, vatRegistered: false });
+
+    // Registered again: new bills carry VAT, the old one keeps its snapshot.
+    await put('settings/store', { ...info, vatRegistered: true });
+    const taxed = await sell([item(MOUSE)], 531, [pay(CASH, 531)]);
+    expect(taxed).toMatchObject({ vat: 34.74, vatRegistered: true });
+    expect((await get<Sale>(`sales/${plain.id}`)).vatRegistered).toBe(false);
+  });
+
   it('issues credit notes from the next day: stock back, free goods deducted', async () => {
     const [unit] = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`);
     const sale = await sell([item(NOTEBOOK, 1, unit.serial), item(MOUSE)], 25131, [

@@ -1,5 +1,5 @@
 import { CreditNote, SALE_DEFAULTS, Sale, SaleLine, TaxInvoice } from '@core/models';
-import { buildSalesTaxReport } from './sales-tax-report';
+import { buildSalesTaxReport, nonVatNote } from './sales-tax-report';
 
 describe('buildSalesTaxReport', () => {
   const at = (day: number, hour = 10, month = 10) =>
@@ -172,6 +172,33 @@ describe('buildSalesTaxReport', () => {
     });
     // 1270 + 535 + 214 − 535; VAT counted once per sale
     expect(report.totals).toEqual({ net: 1200, vat: 84, exempt: 200, total: 1484 });
+  });
+
+  it('leaves out bills sold while not VAT-registered and their credit notes (B20)', () => {
+    const plain = sale(7, 'POS1-20261007-0001', at(7), [line(535, 0)], { vatRegistered: false });
+    const plainNote: CreditNote = {
+      ...note,
+      id: 2,
+      cnNo: 'CN-20261008-0001',
+      saleId: 7,
+      orderNo: plain.orderNo,
+      taxInvoiceNo: null,
+      buyer: null,
+      date: at(8),
+      vat: 0,
+      vatRegistered: false,
+    };
+    const r = buildSalesTaxReport('2026-10', [b1, b2, b3, b4, b5, other, plain], invoices, [
+      note,
+      plainNote,
+    ]);
+    expect(r.rows).toEqual(report.rows);
+    expect(r.totals).toEqual(report.totals);
+    expect(r.nonVatExcluded).toBe(2);
+    expect(nonVatNote(r)).toBe('ไม่รวมบิล / ใบลดหนี้ที่ออกตอนร้านไม่ได้จดทะเบียน VAT 2 ใบ');
+    // Older data without the snapshot still counts as registered.
+    expect(report.nonVatExcluded).toBe(0);
+    expect(nonVatNote(report)).toBe('');
   });
 
   it('shows retail as the buyer of a credit note on an abbreviated invoice', () => {

@@ -23,6 +23,8 @@ import type { CartItem, FreeSerial, ManualDiscount, SaleLine } from './sale.mode
  * 6. manual discounts (ส่วนลดพิเศษ, % or baht) after every promotion: each line's own on its
  *    amount, then the bill's on what is left, allocated pro rata; `manualDiscountError()` holds
  *    the reason / staff-ceiling rule. Below cost after them is a warning only.
+ * 7. VAT per paid line from its `vatType` — 0 on every line when the store is not VAT-registered
+ *    (`ctx.vatRegistered`, B20); prices never change.
  */
 
 export interface PricingContext {
@@ -31,6 +33,8 @@ export interface PricingContext {
   categories: readonly Category[];
   /** Sale date, local 'YYYY-MM-DD' */
   date: string;
+  /** The store is VAT-registered now; false → every line's `vat` is 0, prices unchanged (B20) */
+  vatRegistered: boolean;
 }
 
 export interface PricedLine extends Omit<SaleLine, 'cogs'> {
@@ -317,7 +321,8 @@ export function priceCart(
     const amount = round2(afterPromos[i] - manual[i]);
     if (manual[i] > 0 && !isService(l.product)) {
       const cost = round2(effectiveCost(l.product) * l.baseQty);
-      if (vatBreakdown(amount, l.product.vatType).net < cost) {
+      const net = ctx.vatRegistered ? vatBreakdown(amount, l.product.vatType).net : amount;
+      if (net < cost) {
         issues.push({
           cartIndex: l.index,
           productId: l.product.id,
@@ -335,7 +340,7 @@ export function priceCart(
       billDiscount: shares[i],
       manualDiscount: manual[i],
       amount,
-      vat: vatBreakdown(amount, l.product.vatType).vat,
+      vat: ctx.vatRegistered ? vatBreakdown(amount, l.product.vatType).vat : 0,
       promotionIds: l.promos.map((p) => p.id),
       freeOfPromotionId: null,
       serial: l.product.serialControl ? l.item.serial : null,

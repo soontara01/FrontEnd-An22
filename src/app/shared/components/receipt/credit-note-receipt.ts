@@ -16,4 +16,8 @@ export class CreditNoteReceipt {
   readonly store = input.required<StoreInfo>();
 
   protected readonly branch = computed(() => branchLabel(this.store()));
+  /** VAT lines only when the bill was sold while VAT-registered (snapshot, B20). */
+  protected readonly withVat = computed(
+    () => this.note().vatRegistered ?? this.store().vatRegistered,
+  );
 }

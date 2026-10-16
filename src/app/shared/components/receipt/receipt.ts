@@ -21,9 +21,16 @@ export class Receipt {
   /** Reprint: marks the receipt as a copy */
   readonly copy = input(false);
 
+  /**
+   * An abbreviated tax invoice only when the bill was sold while VAT-registered (its snapshot, B20;
+   * older bills without one follow the store), so a reprint after the status changed matches.
+   */
+  protected readonly withVat = computed(
+    () => this.sale().vatRegistered ?? this.store().vatRegistered,
+  );
   /** Once a full tax invoice exists for the bill, this slip is only a receipt referring to it. */
   protected readonly title = computed(() =>
-    this.sale().taxInvoiceNo ? 'ใบเสร็จรับเงิน' : receiptTitle(this.store()),
+    this.sale().taxInvoiceNo ? 'ใบเสร็จรับเงิน' : receiptTitle({ vatRegistered: this.withVat() }),
   );
   protected readonly branch = computed(() => branchLabel(this.store()));
   protected readonly vatable = computed(() =>

@@ -5,7 +5,15 @@ import { VatType, vatBreakdown } from './product.model';
 import type { Promotion } from './promotion.model';
 import type { TaxInvoiceBuyer } from './tax-invoice.model';
 import type { Exchange } from './exchange.model';
-import { PaymentInput, Sale, SaleLine, SalePayment, currentSerial, saleDay } from './sale.model';
+import {
+  PaymentInput,
+  Sale,
+  SaleLine,
+  SalePayment,
+  currentSerial,
+  saleDay,
+  soldWithVat,
+} from './sale.model';
 
 /**
  * Credit notes (ใบลดหนี้, decided 2026-10-04): goods returned from a paid bill from the day
@@ -86,6 +94,8 @@ export interface CreditNote {
   /** Terminal it was issued at + its POS ID (server-set snapshot) */
   terminalId?: number | null;
   posId?: string;
+  /** Copied from the bill: false = sold while not VAT-registered, so no VAT (B20; `soldWithVat()`) */
+  vatRegistered?: boolean;
 }
 
 export interface CreditNoteLineInput {
@@ -150,8 +160,17 @@ export function returnSummary(
 export const remainingQty = (sale: Sale, notes: readonly CreditNote[], index: number): number =>
   (sale.lines[index]?.qty ?? 0) - creditedQty(notes, index);
 
-/** Refund / VAT / cost of returning `qty` units; the last units take the exact remainder. */
-function lineShare(line: SaleLine, notes: readonly CreditNote[], index: number, qty: number) {
+/**
+ * Refund / VAT / cost of returning `qty` units; the last units take the exact remainder. No VAT
+ * when the bill was sold while the store was not VAT-registered (`withVat` false, B20).
+ */
+function lineShare(
+  line: SaleLine,
+  notes: readonly CreditNote[],
+  index: number,
+  qty: number,
+  withVat: boolean,
+) {
   const before = creditedLines(notes, index);
   if (creditedQty(notes, index) + qty === line.qty) {
     return {
@@ -163,7 +182,7 @@ function lineShare(line: SaleLine, notes: readonly CreditNote[], index: number, 
   const amount = round2((line.amount * qty) / line.qty);
   return {
     amount,
-    vat: vatBreakdown(amount, line.vatType).vat,
+    vat: withVat ? vatBreakdown(amount, line.vatType).vat : 0,
     cogs: round2((line.cogs * qty) / line.qty),
   };
 }
@@ -202,7 +221,7 @@ export function draftCreditNote(
       unit: line.unit,
       factor: line.factor,
       qty: input.qty,
-      ...lineShare(line, notes, input.saleLineIndex, input.qty),
+      ...lineShare(line, notes, input.saleLineIndex, input.qty, soldWithVat(sale)),
       vatType: line.vatType,
       serial: currentSerial(sale, input.saleLineIndex, exchanges),
       free: line.freeOfPromotionId !== null,
@@ -261,10 +280,12 @@ export function draftCreditNote(
   const subtotal = sum(lines.map((l) => l.amount));
   const deduction = sum(deductions.map((d) => d.amount));
   const total = round2(subtotal - deduction);
-  const vat = round2(
-    sum(lines.map((l) => l.vat)) -
-      sum(deductions.map((d) => vatBreakdown(d.amount, d.vatType).vat)),
-  );
+  const vat = soldWithVat(sale)
+    ? round2(
+        sum(lines.map((l) => l.vat)) -
+          sum(deductions.map((d) => vatBreakdown(d.amount, d.vatType).vat)),
+      )
+    : 0;
   const error = total < 0 ? 'มูลค่าของแถมที่ต้องหักเกินยอดคืน กรุณารับของแถมคืนด้วย' : null;
   return { lines, deductions, subtotal, deduction, total, vat, error };
 }

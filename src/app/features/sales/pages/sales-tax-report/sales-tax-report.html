@@ -44,6 +44,9 @@
             <span>{{ sellerBranch() }}</span>
           </div>
         }
+        @if (nonVatNote(r); as note) {
+          <div class="text-muted small">{{ note }}</div>
+        }
       </header>
       <table>
         <thead>

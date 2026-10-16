@@ -371,9 +371,11 @@
               {{ store.billManual() ? 'แก้ส่วนลดพิเศษท้ายบิล' : 'ส่วนลดพิเศษท้ายบิล' }}
             </button>
           }
-          <div class="text-muted small">
-            <span>VAT ที่รวมอยู่</span><span>{{ cart().vat | number: '1.2-2' }}</span>
-          </div>
+          @if (store.storeInfo()?.vatRegistered) {
+            <div class="text-muted small">
+              <span>VAT ที่รวมอยู่</span><span>{{ cart().vat | number: '1.2-2' }}</span>
+            </div>
+          }
           <div class="grand">
             <span>ยอดสุทธิ</span>
             <span>{{ cart().total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</span>

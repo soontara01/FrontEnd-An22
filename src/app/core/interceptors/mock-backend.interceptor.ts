@@ -86,6 +86,7 @@ import {
   voidError,
   VoidPayload,
   saleDay,
+  soldWithVat,
   normalizeStoreInfo,
   creditNoteError,
   draftCreditNote,
@@ -2046,7 +2047,13 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   const today = todayIso();
   const cart = priceCart(
     body.items ?? [],
-    { products: db.products, promotions: db.promotions, categories: db.categories, date: today },
+    {
+      products: db.products,
+      promotions: db.promotions,
+      categories: db.categories,
+      date: today,
+      vatRegistered: db.storeInfo.vatRegistered,
+    },
     body.freeSerials ?? [],
     body.billManualDiscount ?? null,
   );
@@ -2119,6 +2126,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     shiftId: shift.shiftId,
     voidShiftId: null,
     ...here,
+    vatRegistered: db.storeInfo.vatRegistered,
   };
   db.sales.push(sale);
   // Full tax invoice requested at the POS: issued with the sale, same date.
@@ -2276,6 +2284,7 @@ function createCreditNote(
     refunds: toRefunds(payload.refunds, db.paymentMethods),
     shiftId: shift.shiftId,
     ...terminalSnapshot(db),
+    ...(soldWithVat(sale) ? {} : { vatRegistered: false }),
   };
   db.creditNotes.push(created);
   return ok(created);

@@ -148,6 +148,12 @@ export interface Sale {
   terminalId?: number | null;
   /** That terminal's Revenue Dept POS ID when the bill was made — printed on its receipts */
   posId?: string;
+  /**
+   * Whether the store was VAT-registered when the bill was made (server-set snapshot, B20). false →
+   * every `vat` is 0, it is not a tax invoice and is left out of the sales tax report. Missing =
+   * registered (older data) — read it via `soldWithVat()`.
+   */
+  vatRegistered?: boolean;
 }
 
 /** Defaults for fields missing from older stored sales (before the POS existed). */
@@ -263,3 +269,7 @@ export interface SalePayload {
   /** Required whenever any manual discount is given */
   manualDiscountReason?: string;
 }
+
+/** Sold while the store was VAT-registered (snapshot on the bill / its credit notes; missing = yes). */
+export const soldWithVat = (doc: { vatRegistered?: boolean }): boolean =>
+  doc.vatRegistered !== false;

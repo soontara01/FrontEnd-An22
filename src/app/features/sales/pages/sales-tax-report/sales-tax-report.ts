@@ -19,7 +19,7 @@ import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { saveBlob } from '@shared/utils/download';
 import { printElement } from '@shared/utils/print-element';
 import { salesTaxReportXlsx } from '../../data/sales-tax-excel';
-import { TaxReportRow, buildSalesTaxReport } from '../../data/sales-tax-report';
+import { TaxReportRow, buildSalesTaxReport, nonVatNote } from '../../data/sales-tax-report';
 import { SalesStore } from '../../data/sales.store';
 
 const KIND_LABEL: Record<TaxReportRow['kind'], string> = {
@@ -49,6 +49,7 @@ export default class SalesTaxReportPage {
 
   private readonly sheet = viewChild('sheet', { read: ElementRef<HTMLElement> });
   protected readonly exporting = signal(false);
+  protected readonly nonVatNote = nonVatNote;
 
   protected readonly currentMonth = computed(() =>
     /^\d{4}-\d{2}$/.test(this.month() ?? '') ? this.month()! : todayIso().slice(0, 7),
