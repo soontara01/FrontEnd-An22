@@ -22,6 +22,7 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { UsersStore } from '../../data/users.store';
 
 @Component({
@@ -91,6 +92,6 @@ export default class UserList {
         filter(Boolean),
         switchMap(() => this.store.remove(user.id)),
       )
-      .subscribe(() => this.notify.success('ลบผู้ใช้เรียบร้อย'));
+      .subscribe({ next: () => this.notify.success('ลบผู้ใช้เรียบร้อย'), error: httpErrorShown });
   }
 }

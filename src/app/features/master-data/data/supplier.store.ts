@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, tap } from 'rxjs';
 import { Supplier, SupplierPayload } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { MasterDataApi } from './master-data-api.service';
 
 /** Signals-based state for suppliers (provided in master-data.routes.ts). */
@@ -29,9 +30,12 @@ export class SupplierStore {
     this.api
       .suppliers()
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe((suppliers) => {
-        this._suppliers.set(suppliers);
-        this.loaded = true;
+      .subscribe({
+        next: (suppliers) => {
+          this._suppliers.set(suppliers);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

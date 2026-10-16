@@ -44,6 +44,7 @@ import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip'
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
 import { printElement } from '@shared/utils/print-element';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SellUnit, findByCode, searchProducts } from '../../data/product-lookup';
 import { PosStore } from '../../data/pos.store';
 import { BuyerDialog } from '../../dialogs/buyer-dialog/buyer-dialog';
@@ -183,9 +184,12 @@ export default class PosPage {
         filter((payload): payload is ShiftOpenPayload => !!payload),
         switchMap((payload) => this.store.openShift(payload)),
       )
-      .subscribe((shift) => {
-        this.notify.success(`เปิดกะ ${shift.shiftNo} แล้ว`);
-        this.focusScan();
+      .subscribe({
+        next: (shift) => {
+          this.notify.success(`เปิดกะ ${shift.shiftNo} แล้ว`);
+          this.focusScan();
+        },
+        error: httpErrorShown,
       });
   }
 
@@ -220,10 +224,13 @@ export default class PosPage {
         filter((payload): payload is DrawerOpenPayload => !!payload),
         switchMap((payload) => this.store.openDrawer(shift.id, payload)),
       )
-      .subscribe(() => {
-        // No drawer hardware yet (like `opensDrawer()` at a sale): just say so.
-        this.notify.success('ลิ้นชักเปิด — บันทึกการเปิดลิ้นชักแล้ว');
-        this.focusScan();
+      .subscribe({
+        next: () => {
+          // No drawer hardware yet (like `opensDrawer()` at a sale): just say so.
+          this.notify.success('ลิ้นชักเปิด — บันทึกการเปิดลิ้นชักแล้ว');
+          this.focusScan();
+        },
+        error: httpErrorShown,
       });
   }
 

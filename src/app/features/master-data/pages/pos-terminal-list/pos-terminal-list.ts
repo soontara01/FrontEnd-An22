@@ -11,6 +11,7 @@ import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PosTerminalStore } from '../../data/pos-terminal.store';
 import {
   PosTerminalFormData,
@@ -74,6 +75,9 @@ export default class PosTerminalList {
         filter(Boolean),
         switchMap(() => this.store.remove(t.id)),
       )
-      .subscribe(() => this.notify.success(`ลบเครื่อง ${t.id} แล้ว`));
+      .subscribe({
+        next: () => this.notify.success(`ลบเครื่อง ${t.id} แล้ว`),
+        error: httpErrorShown,
+      });
   }
 }

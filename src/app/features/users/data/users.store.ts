@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, tap } from 'rxjs';
 import { User, UserPayload } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { UsersApi } from './users-api.service';
 
 /** Signals-based state for the users feature (provided in users.routes.ts). */
@@ -23,9 +24,12 @@ export class UsersStore {
     this.api
       .list()
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe((users) => {
-        this._users.set(users);
-        this.loaded = true;
+      .subscribe({
+        next: (users) => {
+          this._users.set(users);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

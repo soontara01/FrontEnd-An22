@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { of, throwError } from 'rxjs';
 import { User } from '@core/models';
 import { UsersApi } from './users-api.service';
 import { UsersStore } from './users.store';
@@ -55,5 +56,13 @@ describe('UsersStore', () => {
 
     store.remove(2).subscribe();
     expect(store.users().map((u) => u.id)).toEqual([1, 3]);
+  });
+
+  it('handles a failed load without leaking the error (B13)', () => {
+    api.list.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 500 })));
+    // errorInterceptor already showed the snackbar; an unhandled error would fail the run.
+    store.load(true);
+    expect(store.loading()).toBe(false);
+    expect(store.users()).toEqual([]);
   });
 });

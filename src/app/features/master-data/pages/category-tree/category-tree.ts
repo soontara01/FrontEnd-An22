@@ -23,6 +23,7 @@ import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { CategoryStore } from '../../data/category.store';
 import {
   CategoryFormData,
@@ -136,6 +137,9 @@ export default class CategoryTree {
         filter(Boolean),
         switchMap(() => this.store.remove(node.id)),
       )
-      .subscribe(() => this.notify.success(`ลบ ${node.name} แล้ว`));
+      .subscribe({
+        next: () => this.notify.success(`ลบ ${node.name} แล้ว`),
+        error: httpErrorShown,
+      });
   }
 }

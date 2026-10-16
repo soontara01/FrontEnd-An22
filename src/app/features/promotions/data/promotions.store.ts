@@ -13,6 +13,7 @@ import {
   promotionStatus,
   todayIso,
 } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PromotionsApi } from './promotions-api.service';
 
 export interface PromotionRow {
@@ -95,11 +96,14 @@ export class PromotionsStore {
       categories: this.api.categories(),
     })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ promotions, products, categories }) => {
-        this._promotions.set(promotions);
-        this._products.set(products);
-        this._categories.set(categories);
-        this.loaded = true;
+      .subscribe({
+        next: ({ promotions, products, categories }) => {
+          this._promotions.set(promotions);
+          this._products.set(products);
+          this._categories.set(categories);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

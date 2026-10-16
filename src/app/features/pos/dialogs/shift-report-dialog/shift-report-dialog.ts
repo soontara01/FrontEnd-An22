@@ -5,6 +5,7 @@ import { forkJoin } from 'rxjs';
 import { CashMovement, DrawerOpen, Shift, ShiftSummary } from '@core/models';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PosStore } from '../../data/pos.store';
 
 /**
@@ -60,10 +61,13 @@ export class ShiftReportDialog {
       summary: this.store.shiftSummary(this.shift.id),
       movements: this.store.cashMovements(this.shift.id),
       drawerOpens: this.store.drawerOpens(this.shift.id),
-    }).subscribe(({ summary, movements, drawerOpens }) => {
-      this.summary.set(summary);
-      this.movements.set(movements);
-      this.drawerOpens.set(drawerOpens);
+    }).subscribe({
+      next: ({ summary, movements, drawerOpens }) => {
+        this.summary.set(summary);
+        this.movements.set(movements);
+        this.drawerOpens.set(drawerOpens);
+      },
+      error: httpErrorShown,
     });
   }
 

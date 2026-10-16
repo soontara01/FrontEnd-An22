@@ -112,10 +112,12 @@ export class SalesStore {
   loadLookups(): void {
     if (this.lookupsLoaded) return;
     this.lookupsLoaded = true;
-    this.api.storeInfo().subscribe((info) => this._storeInfo.set(info));
-    this.api.promotions().subscribe((list) => this._promotions.set(list));
-    this.api.paymentMethods().subscribe((list) => this._methods.set(list));
-    this.api.posTerminals().subscribe((list) => this._terminals.set(list));
+    // A failed lookup is tried again on the next call (the snackbar is already shown).
+    const retry = () => (this.lookupsLoaded = false);
+    this.api.storeInfo().subscribe({ next: (info) => this._storeInfo.set(info), error: retry });
+    this.api.promotions().subscribe({ next: (list) => this._promotions.set(list), error: retry });
+    this.api.paymentMethods().subscribe({ next: (list) => this._methods.set(list), error: retry });
+    this.api.posTerminals().subscribe({ next: (list) => this._terminals.set(list), error: retry });
   }
 
   /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน'; '-' when unknown (bills from before the registry). */

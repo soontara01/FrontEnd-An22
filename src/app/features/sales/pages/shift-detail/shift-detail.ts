@@ -32,6 +32,7 @@ import { ShiftSlip } from '@shared/components/shift-slip/shift-slip';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { printElement } from '@shared/utils/print-element';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SalesStore } from '../../data/sales.store';
 import {
   ShiftAdjustmentDialog,
@@ -130,9 +131,12 @@ export default class ShiftDetail {
         filter(Boolean),
         switchMap(() => this.store.approveShift(shift.id)),
       )
-      .subscribe(() => {
-        this.notify.success(`อนุมัติส่วนต่างกะ ${shift.shiftNo} แล้ว`);
-        this.data.reload();
+      .subscribe({
+        next: () => {
+          this.notify.success(`อนุมัติส่วนต่างกะ ${shift.shiftNo} แล้ว`);
+          this.data.reload();
+        },
+        error: httpErrorShown,
       });
   }
 
@@ -150,9 +154,12 @@ export default class ShiftDetail {
         filter((payload): payload is ShiftAdjustmentPayload => !!payload),
         switchMap((payload) => this.store.addAdjustment(shift.id, payload)),
       )
-      .subscribe((a) => {
-        this.notify.success(`บันทึกรายการปรับปรุง ${a.name} แล้ว`);
-        this.data.reload();
+      .subscribe({
+        next: (a) => {
+          this.notify.success(`บันทึกรายการปรับปรุง ${a.name} แล้ว`);
+          this.data.reload();
+        },
+        error: httpErrorShown,
       });
   }
 

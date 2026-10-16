@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { EMPTY, Observable, finalize, tap } from 'rxjs';
 import { PaymentMethod, PaymentMethodPayload, isLastActiveCash } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { MasterDataApi } from './master-data-api.service';
 
 /** Signals-based state for payment methods (provided in master-data.routes.ts). */
@@ -30,9 +31,12 @@ export class PaymentMethodStore {
     this.api
       .paymentMethods()
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe((methods) => {
-        this._methods.set(methods);
-        this.loaded = true;
+      .subscribe({
+        next: (methods) => {
+          this._methods.set(methods);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

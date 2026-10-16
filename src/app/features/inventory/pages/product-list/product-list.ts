@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -137,6 +138,9 @@ export default class ProductList {
         : [];
       const blob = await inventoryXlsx(rows, serials);
       saveBlob(blob, `${timestampedName('inventory')}.xlsx`);
+    } catch (err) {
+      // A failed serial lookup was already shown by errorInterceptor; anything else is a bug.
+      if (!(err instanceof HttpErrorResponse)) throw err;
     } finally {
       this.exporting.set(false);
     }

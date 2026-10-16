@@ -30,6 +30,7 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { exportSkusToExcel } from '../../data/sku-excel';
 import { SkuStore } from '../../data/sku.store';
 import { saveBlob, timestampedName } from '@shared/utils/download';
@@ -173,6 +174,9 @@ export default class SkuList {
         filter(Boolean),
         switchMap(() => this.store.remove(sku.id)),
       )
-      .subscribe(() => this.notify.success(`ลบ ${sku.sku} เรียบร้อย`));
+      .subscribe({
+        next: () => this.notify.success(`ลบ ${sku.sku} เรียบร้อย`),
+        error: httpErrorShown,
+      });
   }
 }

@@ -11,7 +11,7 @@ import { rxResource, takeUntilDestroyed, toSignal } from '@angular/core/rxjs-int
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { Router, RouterLink } from '@angular/router';
-import { debounceTime, distinctUntilChanged, filter, map, switchMap } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap } from 'rxjs';
 import {
   BuyerIdType,
   EMPTY_BUYER,
@@ -33,6 +33,7 @@ import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-d
 import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SalesStore } from '../../data/sales.store';
 
 /**
@@ -165,14 +166,18 @@ export default class TaxInvoiceForm {
         debounceTime(300),
         distinctUntilChanged(),
         filter((id) => !buyerIdError(this.idType(), id)),
-        switchMap((id) => this.store.buyerByTaxId(id)),
+        // A failed lookup must not end the stream: autofill keeps working for the next ID.
+        switchMap((id) => this.store.buyerByTaxId(id).pipe(catchError(() => of(null)))),
         filter((found): found is TaxInvoiceBuyer => !!found),
       )
-      .subscribe((found) => {
-        if (isPassportBuyer(found) === this.passport() && !this.form.controls.name.value.trim()) {
-          this.form.patchValue({ ...found, taxId: this.form.controls.taxId.value });
-          this.notify.info('เติมข้อมูลผู้ซื้อจากใบกำกับภาษีครั้งก่อน');
-        }
+      .subscribe({
+        next: (found) => {
+          if (isPassportBuyer(found) === this.passport() && !this.form.controls.name.value.trim()) {
+            this.form.patchValue({ ...found, taxId: this.form.controls.taxId.value });
+            this.notify.info('เติมข้อมูลผู้ซื้อจากใบกำกับภาษีครั้งก่อน');
+          }
+        },
+        error: httpErrorShown,
       });
   }
 

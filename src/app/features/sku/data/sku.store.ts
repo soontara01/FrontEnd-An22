@@ -10,6 +10,7 @@ import {
   isLeaf,
   isService,
 } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SkuApi } from './sku-api.service';
 
 const uniqueSorted = (values: string[]): string[] =>
@@ -89,11 +90,14 @@ export class SkuStore {
       suppliers: this.api.suppliers(),
     })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ skus, categories, suppliers }) => {
-        this._skus.set(skus);
-        this._categories.set(categories);
-        this._suppliers.set(suppliers);
-        this.loaded = true;
+      .subscribe({
+        next: ({ skus, categories, suppliers }) => {
+          this._skus.set(skus);
+          this._categories.set(categories);
+          this._suppliers.set(suppliers);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

@@ -17,6 +17,7 @@ import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PaymentMethodStore } from '../../data/payment-method.store';
 import {
   PaymentMethodFormData,
@@ -128,6 +129,6 @@ export default class PaymentMethodList {
         filter(Boolean),
         switchMap(() => this.store.remove(m.id)),
       )
-      .subscribe(() => this.notify.success(`ลบ ${m.name} แล้ว`));
+      .subscribe({ next: () => this.notify.success(`ลบ ${m.name} แล้ว`), error: httpErrorShown });
   }
 }

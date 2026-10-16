@@ -15,6 +15,7 @@ import {
   stockLevel,
   suggestReorderQty,
 } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { InventoryApi } from './inventory-api.service';
 
 /** One SKU that should be reordered now. */
@@ -120,10 +121,13 @@ export class InventoryStore {
     this._loading.set(true);
     forkJoin({ products: this.api.list(), suppliers: this.api.suppliers() })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ products, suppliers }) => {
-        this._products.set(products);
-        this._suppliers.set(suppliers);
-        this.loaded = true;
+      .subscribe({
+        next: ({ products, suppliers }) => {
+          this._products.set(products);
+          this._suppliers.set(suppliers);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

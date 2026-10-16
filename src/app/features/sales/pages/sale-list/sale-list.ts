@@ -47,6 +47,7 @@ import {
   matchingPreset,
   presetRange,
 } from '@shared/utils/date-range';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { summarizeSales } from '../../data/sale-summary';
 import { SalesStore } from '../../data/sales.store';
 
@@ -267,9 +268,12 @@ export default class SaleList {
 
   /** Pre-POS orders only. */
   protected markPaid(sale: Sale): void {
-    this.store.setStatus(sale.id, 'paid').subscribe(() => {
-      this.notify.success(`${sale.orderNo}: บันทึกการชำระเงินแล้ว`);
-      this.sales.reload();
+    this.store.setStatus(sale.id, 'paid').subscribe({
+      next: () => {
+        this.notify.success(`${sale.orderNo}: บันทึกการชำระเงินแล้ว`);
+        this.sales.reload();
+      },
+      error: httpErrorShown,
     });
   }
 
@@ -285,9 +289,12 @@ export default class SaleList {
         filter(Boolean),
         switchMap(() => this.store.setStatus(sale.id, 'cancelled')),
       )
-      .subscribe(() => {
-        this.notify.success(`${sale.orderNo}: ยกเลิกแล้ว`);
-        this.sales.reload();
+      .subscribe({
+        next: () => {
+          this.notify.success(`${sale.orderNo}: ยกเลิกแล้ว`);
+          this.sales.reload();
+        },
+        error: httpErrorShown,
       });
   }
 

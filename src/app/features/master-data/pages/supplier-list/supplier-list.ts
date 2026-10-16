@@ -22,6 +22,7 @@ import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SupplierStore } from '../../data/supplier.store';
 
 /** Supplier list (tab "ผู้จำหน่าย" in ข้อมูลหลัก). */
@@ -110,6 +111,9 @@ export default class SupplierList {
         filter(Boolean),
         switchMap(() => this.store.remove(supplier.id)),
       )
-      .subscribe(() => this.notify.success(`ลบ ${supplier.name} แล้ว`));
+      .subscribe({
+        next: () => this.notify.success(`ลบ ${supplier.name} แล้ว`),
+        error: httpErrorShown,
+      });
   }
 }

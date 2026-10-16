@@ -12,6 +12,7 @@ import {
   priceStatus,
   todayIso,
 } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PricingApi } from './pricing-api.service';
 
 /** A current price ending within this many days counts as "expiring soon". */
@@ -84,10 +85,13 @@ export class PricingStore {
     this._loading.set(true);
     forkJoin({ products: this.api.products(), prices: this.api.prices() })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ products, prices }) => {
-        this._products.set(products);
-        this._prices.set(prices);
-        this.loaded = true;
+      .subscribe({
+        next: ({ products, prices }) => {
+          this._products.set(products);
+          this._prices.set(prices);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

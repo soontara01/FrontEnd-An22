@@ -4,6 +4,7 @@ import { PosTerminal, Shift, terminalError, terminalLabel } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { TerminalService } from '@core/services/terminal.service';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SettingsApi } from '../../data/settings-api.service';
 
 /**
@@ -121,10 +122,13 @@ export class ThisTerminal {
 
   /** The open shift depends on the terminal header, so it is fetched again after a change. */
   private reload(): void {
-    forkJoin([this.api.posTerminals(), this.api.currentShift()]).subscribe(([terminals, shift]) => {
-      this.terminals.set(terminals);
-      this.openShift.set(shift);
-      this.loaded.set(true);
+    forkJoin([this.api.posTerminals(), this.api.currentShift()]).subscribe({
+      next: ([terminals, shift]) => {
+        this.terminals.set(terminals);
+        this.openShift.set(shift);
+        this.loaded.set(true);
+      },
+      error: httpErrorShown,
     });
   }
 }

@@ -33,6 +33,7 @@ import { PageHeader } from '@shared/components/page-header/page-header';
 import { ShiftSlip } from '@shared/components/shift-slip/shift-slip';
 import { MATERIAL } from '@shared/material';
 import { printElement } from '@shared/utils/print-element';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { DenominationCounter } from '../../components/denomination-counter/denomination-counter';
 import { PosStore } from '../../data/pos.store';
 
@@ -192,7 +193,9 @@ export default class ShiftClose {
     effect(() => {
       const shift = this.target();
       if (!shift || this.blocked() || this.summary() || this.step() === 'done') return;
-      this.store.shiftSummary(shift.id).subscribe((s) => this.summary.set(s));
+      this.store
+        .shiftSummary(shift.id)
+        .subscribe({ next: (s) => this.summary.set(s), error: httpErrorShown });
     });
   }
 
@@ -250,7 +253,9 @@ export default class ShiftClose {
         this.notify.success(`ปิดกะ ${closed.shiftNo} แล้ว`);
         this.step.set('done');
         this.busy.set(false);
-        this.store.shiftSummary(closed.id).subscribe((s) => this.zSummary.set(s));
+        this.store
+          .shiftSummary(closed.id)
+          .subscribe({ next: (s) => this.zSummary.set(s), error: httpErrorShown });
       },
       error: () => this.busy.set(false),
     });

@@ -31,6 +31,7 @@ import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SkuStore } from '../../data/sku.store';
 
 const LEVEL = {
@@ -138,9 +139,12 @@ export default class SkuDetail implements OnInit {
         filter(Boolean),
         switchMap(() => this.store.remove(sku.id)),
       )
-      .subscribe(() => {
-        this.notify.success(`ลบ ${sku.sku} เรียบร้อย`);
-        void this.router.navigate(['/sku']);
+      .subscribe({
+        next: () => {
+          this.notify.success(`ลบ ${sku.sku} เรียบร้อย`);
+          void this.router.navigate(['/sku']);
+        },
+        error: httpErrorShown,
       });
   }
 }

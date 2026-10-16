@@ -54,6 +54,7 @@ import { Receipt } from '@shared/components/receipt/receipt';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { printElement } from '@shared/utils/print-element';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SalesStore } from '../../data/sales.store';
 import { VoidDialog, VoidDialogData } from '../../dialogs/void-dialog/void-dialog';
 
@@ -317,10 +318,13 @@ export default class SaleDetail {
         filter((payload): payload is VoidPayload => !!payload),
         switchMap((payload) => this.store.void(sale.id, payload)),
       )
-      .subscribe((voided) => {
-        this.sale.set(voided);
-        this.invoices.reload();
-        this.notify.success(`${voided.orderNo}: ยกเลิกบิลแล้ว สินค้ากลับเข้าคลัง`);
+      .subscribe({
+        next: (voided) => {
+          this.sale.set(voided);
+          this.invoices.reload();
+          this.notify.success(`${voided.orderNo}: ยกเลิกบิลแล้ว สินค้ากลับเข้าคลัง`);
+        },
+        error: httpErrorShown,
       });
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, tap } from 'rxjs';
 import { Category, CategoryPayload, buildTree, isLeaf } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { MasterDataApi } from './master-data-api.service';
 
 /** Signals-based state for the category tree (provided in master-data.routes.ts). */
@@ -29,9 +30,12 @@ export class CategoryStore {
     this.api
       .categories()
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe((categories) => {
-        this._categories.set(categories);
-        this.loaded = true;
+      .subscribe({
+        next: (categories) => {
+          this._categories.set(categories);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

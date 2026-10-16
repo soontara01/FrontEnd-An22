@@ -30,6 +30,7 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PricingStore } from '../../data/pricing.store';
 import { PriceFormData, PriceFormDialog } from '../../dialogs/price-form-dialog/price-form-dialog';
 
@@ -143,6 +144,6 @@ export default class SkuPrices {
         filter(Boolean),
         switchMap(() => this.store.remove(price.id)),
       )
-      .subscribe(() => this.notify.success('ลบช่วงราคาแล้ว'));
+      .subscribe({ next: () => this.notify.success('ลบช่วงราคาแล้ว'), error: httpErrorShown });
   }
 }

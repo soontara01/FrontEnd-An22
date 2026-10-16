@@ -39,6 +39,7 @@ import {
 import { AuthService } from '@core/auth/auth.service';
 import { StorageService } from '@core/services/storage.service';
 import { TerminalService } from '@core/services/terminal.service';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PosApi } from './pos-api.service';
 
 /** A parked bill, kept in localStorage so it survives reloads and menu switches. */
@@ -231,15 +232,18 @@ export class PosStore {
       shift: this.api.currentShift(),
     })
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(({ products, promotions, categories, methods, storeInfo, terminals, shift }) => {
-        this._products.set(products);
-        this._promotions.set(promotions);
-        this._categories.set(categories);
-        this._methods.set(methods);
-        this._storeInfo.set(storeInfo);
-        this._terminals.set(terminals);
-        this._shift.set(shift);
-        this._shiftLoaded.set(true);
+      .subscribe({
+        next: ({ products, promotions, categories, methods, storeInfo, terminals, shift }) => {
+          this._products.set(products);
+          this._promotions.set(promotions);
+          this._categories.set(categories);
+          this._methods.set(methods);
+          this._storeInfo.set(storeInfo);
+          this._terminals.set(terminals);
+          this._shift.set(shift);
+          this._shiftLoaded.set(true);
+        },
+        error: httpErrorShown,
       });
   }
 
@@ -479,10 +483,15 @@ export class PosStore {
             this._lastSale.set(sale);
             this._lastInvoice.set(null);
             if (sale.taxInvoiceNo) {
-              this.api.taxInvoiceOf(sale.id).subscribe((inv) => this._lastInvoice.set(inv));
+              this.api
+                .taxInvoiceOf(sale.id)
+                .subscribe({ next: (inv) => this._lastInvoice.set(inv), error: httpErrorShown });
             }
             this.clear();
-            this.api.products().subscribe((products) => this._products.set(products));
+            this.api.products().subscribe({
+              next: (products) => this._products.set(products),
+              error: httpErrorShown,
+            });
           },
           // Prices, promotions or stock changed on the server: show the current state.
           error: () => this.load(),

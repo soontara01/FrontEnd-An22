@@ -8,6 +8,7 @@ import { Receipt } from '@shared/components/receipt/receipt';
 import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
 import { TaxInvoiceSlip } from '@shared/components/tax-invoice/tax-invoice-slip';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { SettingsApi } from '../../data/settings-api.service';
 import { SAMPLE_INVOICE, SAMPLE_SALE } from './sample-sale';
 
@@ -75,10 +76,13 @@ export class StoreInfoForm {
   );
 
   constructor() {
-    this.api.storeInfo().subscribe((info) => {
-      this.form.reset(info);
-      this.loaded.set(true);
-      if (!this.editable()) this.form.disable();
+    this.api.storeInfo().subscribe({
+      next: (info) => {
+        this.form.reset(info);
+        this.loaded.set(true);
+        if (!this.editable()) this.form.disable();
+      },
+      error: httpErrorShown,
     });
   }
 

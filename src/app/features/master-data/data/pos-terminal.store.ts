@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, forkJoin, tap } from 'rxjs';
 import { PosTerminal, missingPosId } from '@core/models';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { MasterDataApi } from './master-data-api.service';
 
 /** Signals-based state for the POS terminal registry (provided in master-data.routes.ts). */
@@ -37,10 +38,13 @@ export class PosTerminalStore {
     this._loading.set(true);
     forkJoin([this.api.posTerminals(), this.api.storeInfo()])
       .pipe(finalize(() => this._loading.set(false)))
-      .subscribe(([terminals, store]) => {
-        this._terminals.set(terminals);
-        this._vatRegistered.set(store.vatRegistered);
-        this.loaded = true;
+      .subscribe({
+        next: ([terminals, store]) => {
+          this._terminals.set(terminals);
+          this._vatRegistered.set(store.vatRegistered);
+          this.loaded = true;
+        },
+        error: httpErrorShown,
       });
   }
 

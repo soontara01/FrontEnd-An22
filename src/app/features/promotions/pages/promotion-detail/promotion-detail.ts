@@ -28,6 +28,7 @@ import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-not
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
+import { httpErrorShown } from '@core/http/http-error-shown';
 import { PromotionPreview } from '../../components/promotion-preview/promotion-preview';
 import { PromotionsStore } from '../../data/promotions.store';
 
@@ -107,9 +108,12 @@ export default class PromotionDetail implements OnInit {
         filter(Boolean),
         switchMap(() => this.store.remove(p.id)),
       )
-      .subscribe(() => {
-        this.notify.success(`ลบ ${p.code} เรียบร้อย`);
-        void this.router.navigate(['/promotions']);
+      .subscribe({
+        next: () => {
+          this.notify.success(`ลบ ${p.code} เรียบร้อย`);
+          void this.router.navigate(['/promotions']);
+        },
+        error: httpErrorShown,
       });
   }
 
