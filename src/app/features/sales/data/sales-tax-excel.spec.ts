@@ -1,7 +1,7 @@
 import { STORE_INFO_DEFAULTS } from '@core/models';
 import { loadExcel } from '@shared/utils/excel';
-import { salesTaxReportXlsx } from './sales-tax-excel';
-import { SalesTaxReport } from './sales-tax-report';
+import { salesTaxReportXlsx, taxSummaryXlsx } from './sales-tax-excel';
+import { SalesTaxReport, TAX_SUMMARY_LABEL } from './sales-tax-report';
 
 describe('sales tax report Excel', () => {
   const report: SalesTaxReport = {
@@ -50,5 +50,24 @@ describe('sales tax report Excel', () => {
     expect(text('C7')).toBe('INV-20261004-0001');
     expect(sheet.getCell('H8').value).toBe(70);
     expect(sheet.pageSetup.printTitlesRow).toBe('1:6');
+  });
+
+  it('labels the summary of every branch as not for filing (D6)', async () => {
+    const totals = { net: 100, vat: 7, exempt: 0, total: 107 };
+    const blob = await taxSummaryXlsx(
+      {
+        month: '2026-10',
+        rows: [{ branch: { id: 2, code: 'BN', name: 'บางนา', branchNo: '00001' }, totals }],
+        totals,
+      },
+      { ...STORE_INFO_DEFAULTS, name: 'ร้าน' },
+    );
+    const ExcelJS = await loadExcel();
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await blob.arrayBuffer());
+    const sheet = book.worksheets[0];
+    expect(sheet.getCell('A2').value).toBe(TAX_SUMMARY_LABEL);
+    expect(sheet.getCell('C7').value).toBe('00001');
+    expect(sheet.getCell('G8').value).toBe(107);
   });
 });

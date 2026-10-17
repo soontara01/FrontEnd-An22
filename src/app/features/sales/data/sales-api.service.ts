@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  Branch,
   BranchScope,
   CashMovement,
   CreditNote,
@@ -69,6 +70,10 @@ export class SalesApi {
     branch?: BranchScope,
   ): Observable<CreditNote[]> {
     return this.api.get<CreditNote[]>('credit-notes', rangeParams(from, to, branch));
+  }
+
+  branches(): Observable<Branch[]> {
+    return this.api.get<Branch[]>('branches');
   }
 
   /** Full tax invoices issued within a local-date range, oldest first. */

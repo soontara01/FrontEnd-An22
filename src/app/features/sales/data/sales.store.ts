@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, forkJoin, map, of } from 'rxjs';
 import {
+  Branch,
   BranchScope,
   CreditNote,
   CreditNotePayload,
@@ -197,16 +198,21 @@ export class SalesStore {
   }
 
   /** Everything the monthly sales tax report needs ('YYYY-MM'). */
-  taxReportData(month: string, branchId?: number) {
+  taxReportData(month: string, branch?: BranchScope) {
     const from = `${month}-01`;
     // Last day of the month (a real server would reject 2026-02-31).
     const [y, m] = month.split('-').map(Number);
     const to = toIsoDate(new Date(y, m, 0));
     return forkJoin({
-      sales: this.api.list(from, to, branchId),
-      invoices: this.api.taxInvoices(from, to, branchId),
-      notes: this.api.creditNotes(from, to, branchId),
+      sales: this.api.list(from, to, branch),
+      invoices: this.api.taxInvoices(from, to, branch),
+      notes: this.api.creditNotes(from, to, branch),
     });
+  }
+
+  /** Every branch of the company, closed ones too (summary of every branch). */
+  branches(): Observable<Branch[]> {
+    return this.api.branches();
   }
 
   taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {

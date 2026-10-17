@@ -1,6 +1,6 @@
 import { StoreInfo, branchLabel, fromIsoDate, placeName } from '@core/models';
 import { loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
-import { SalesTaxReport, nonVatNote } from './sales-tax-report';
+import { SalesTaxReport, TAX_SUMMARY_LABEL, TaxSummary, nonVatNote } from './sales-tax-report';
 
 const COLUMNS = [
   { header: 'ลำดับ', width: 7 },
@@ -96,6 +96,61 @@ export async function salesTaxReportXlsx(
     fitToWidth: 1,
     fitToHeight: 0,
     printTitlesRow: `1:${headerRow.number}`,
+  };
+  return xlsxBlob(await book.xlsx.writeBuffer());
+}
+
+/**
+ * Excel file of the summary of every branch (D6): one row per business place + the company total,
+ * labelled as a check, not a report to file.
+ */
+export async function taxSummaryXlsx(summary: TaxSummary, store: StoreInfo | null): Promise<Blob> {
+  const ExcelJS = await loadExcel();
+  const book = new ExcelJS.Workbook();
+  const sheet = book.addWorksheet(`สรุปภาษีขาย ${summary.month}`);
+  sheet.columns = [10, 38, 10, 18, 16, 16, 18].map((width) => ({ width }));
+  sheet.addRow(['สรุปภาษีขายทุกสาขา']).font = { bold: true, size: 14 };
+  sheet.addRow([TAX_SUMMARY_LABEL]).font = { bold: true, color: { argb: 'FFC62828' } };
+  sheet.addRow([`เดือนภาษี ${taxMonthText(summary.month)}`]);
+  sheet.addRow([
+    `ชื่อผู้ประกอบการ ${store?.name ?? ''} · เลขประจำตัวผู้เสียภาษีอากร ${store?.taxId ?? ''}`,
+  ]);
+  sheet.addRow([]);
+  const headerRow = sheet.addRow([
+    'รหัสสาขา',
+    'ชื่อสถานประกอบการ',
+    'เลขสาขา',
+    'มูลค่าสินค้า/บริการ',
+    'ภาษีมูลค่าเพิ่ม',
+    'มูลค่ายกเว้นภาษี',
+    'รวม',
+  ]);
+  styleHeaderRow(sheet, new Set(), headerRow.number);
+  for (const r of summary.rows) {
+    const row = sheet.addRow([
+      r.branch.code,
+      r.branch.name,
+      r.branch.branchNo,
+      r.totals.net,
+      r.totals.vat,
+      r.totals.exempt,
+      r.totals.total,
+    ]);
+    row.getCell(3).numFmt = '@';
+  }
+  const t = summary.totals;
+  sheet.addRow(['รวมทุกสาขา', null, null, t.net, t.vat, t.exempt, t.total]).font = { bold: true };
+  for (const col of [4, 5, 6, 7]) {
+    sheet.getColumn(col).eachCell((cell, rowNumber) => {
+      if (rowNumber > headerRow.number) cell.numFmt = '#,##0.00';
+    });
+  }
+  sheet.pageSetup = {
+    paperSize: 9,
+    orientation: 'portrait',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
   };
   return xlsxBlob(await book.xlsx.writeBuffer());
 }

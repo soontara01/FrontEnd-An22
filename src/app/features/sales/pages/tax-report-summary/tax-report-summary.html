@@ -1,0 +1,86 @@
+<app-page-header title="สรุปภาษีขายทุกสาขา" [subtitle]="label">
+  <a mat-button routerLink="/sales/tax-report" [queryParams]="{ month: currentMonth() }">
+    <mat-icon>arrow_back</mat-icon>
+    รายงานภาษีขาย
+  </a>
+  <button mat-stroked-button [disabled]="!summary() || exporting()" (click)="exportExcel()">
+    <mat-icon>download</mat-icon>
+    Excel
+  </button>
+  <button mat-stroked-button [disabled]="!summary()" (click)="print()">
+    <mat-icon>print</mat-icon>
+    พิมพ์
+  </button>
+</app-page-header>
+
+<div class="filter-row">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="month">
+    <mat-label>เดือนภาษี</mat-label>
+    <input
+      matInput
+      type="month"
+      [value]="currentMonth()"
+      (change)="setMonth($any($event.target).value)"
+    />
+  </mat-form-field>
+</div>
+
+@if (summary(); as s) {
+  <div class="wrap">
+    <div #sheet class="sheet">
+      <header>
+        <div class="title">สรุปภาษีขายทุกสาขา</div>
+        <div class="label">{{ label }}</div>
+        <div>เดือนภาษี {{ s.month + '-01' | thaiDate: 'month' }}</div>
+        @if (store.storeInfo(); as info) {
+          <div>
+            {{ info.name }} · เลขประจำตัวผู้เสียภาษีอากร <span class="mono">{{ info.taxId }}</span>
+          </div>
+        }
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>สาขา</th>
+            <th>ชื่อสถานประกอบการ</th>
+            <th>เลขสาขา</th>
+            <th class="num">มูลค่าสินค้า/บริการ</th>
+            <th class="num">ภาษีมูลค่าเพิ่ม</th>
+            <th class="num">ยกเว้นภาษี</th>
+            <th class="num">รวม</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of s.rows; track r.branch.id) {
+            <tr>
+              <td>
+                <a
+                  routerLink="/sales/tax-report"
+                  [queryParams]="{ month: s.month, branch: r.branch.id }"
+                  >{{ r.branch.code }}</a
+                >
+              </td>
+              <td>{{ r.branch.name }}</td>
+              <td class="mono">{{ r.branch.branchNo }}</td>
+              <td class="num">{{ r.totals.net | number: '1.2-2' }}</td>
+              <td class="num">{{ r.totals.vat | number: '1.2-2' }}</td>
+              <td class="num">{{ r.totals.exempt | number: '1.2-2' }}</td>
+              <td class="num">{{ r.totals.total | number: '1.2-2' }}</td>
+            </tr>
+          }
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3">รวมทุกสาขา</td>
+            <td class="num">{{ s.totals.net | number: '1.2-2' }}</td>
+            <td class="num">{{ s.totals.vat | number: '1.2-2' }}</td>
+            <td class="num">{{ s.totals.exempt | number: '1.2-2' }}</td>
+            <td class="num">{{ s.totals.total | number: '1.2-2' }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+}

@@ -1,5 +1,7 @@
 import { provideThaiDateAdapter } from '@shared/utils/thai-date-adapter';
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Router, Routes } from '@angular/router';
+import { AuthService } from '@core/auth/auth.service';
 import { adminGuardTo } from '@core/auth/auth.guard';
 import { SalesApi } from './data/sales-api.service';
 import { SalesStore } from './data/sales.store';
@@ -9,6 +11,7 @@ import SaleList from './pages/sale-list/sale-list';
 import SalesTaxReportPage from './pages/sales-tax-report/sales-tax-report';
 import ShiftDetail from './pages/shift-detail/shift-detail';
 import ShiftList from './pages/shift-list/shift-list';
+import TaxReportSummary from './pages/tax-report-summary/tax-report-summary';
 import ExchangeForm from './pages/exchange-form/exchange-form';
 import TaxInvoiceForm from './pages/tax-invoice-form/tax-invoice-form';
 
@@ -27,6 +30,16 @@ export default [
         title: 'รายงานภาษีขาย',
         component: SalesTaxReportPage,
         canMatch: [adminGuardTo('/sales')],
+      },
+      // Every branch: company admins only (D6); others go to the report of their branch.
+      {
+        path: 'tax-report/summary',
+        title: 'สรุปภาษีขายทุกสาขา',
+        component: TaxReportSummary,
+        canMatch: [
+          () =>
+            inject(AuthService).isCompanyAdmin() || inject(Router).parseUrl('/sales/tax-report'),
+        ],
       },
       { path: 'shifts', title: 'กะขาย', component: ShiftList },
       { path: 'shifts/:id', title: 'กะขาย', component: ShiftDetail },

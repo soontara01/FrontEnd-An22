@@ -1,4 +1,5 @@
 import {
+  Branch,
   CreditNote,
   Sale,
   TaxInvoice,
@@ -220,3 +221,58 @@ export const nonVatNote = (report: Pick<SalesTaxReport, 'nonVatExcluded'>): stri
   report.nonVatExcluded
     ? `ไม่รวมบิล / ใบลดหนี้ที่ออกตอนร้านไม่ได้จดทะเบียน VAT ${report.nonVatExcluded} ใบ`
     : '';
+
+/** One business place in the summary of every branch (D6). */
+export interface TaxSummaryRow {
+  branch: Pick<Branch, 'id' | 'code' | 'name' | 'branchNo'>;
+  totals: TaxReportTotals;
+}
+
+/** Monthly sales tax of every branch — a check, **not** a report to file (D6). */
+export interface TaxSummary {
+  month: string;
+  rows: TaxSummaryRow[];
+  totals: TaxReportTotals;
+}
+
+export const TAX_SUMMARY_LABEL = 'สรุปเพื่อตรวจสอบ — ไม่ใช่รายงานภาษีขายสำหรับยื่น';
+
+/**
+ * Sales tax of `month` per branch: `buildSalesTaxReport()` on each branch's own documents (no new
+ * formula), plus the company total. Documents without a branch count as `firstBranchId`'s; a
+ * closed branch is listed only when it has documents in the month.
+ */
+export function buildTaxSummary(
+  month: string,
+  branches: readonly Pick<Branch, 'id' | 'code' | 'name' | 'branchNo' | 'active'>[],
+  sales: readonly Sale[],
+  invoices: readonly TaxInvoice[],
+  notes: readonly CreditNote[],
+  firstBranchId: number,
+): TaxSummary {
+  const of = (doc: { branchId?: number | null }) => doc.branchId ?? firstBranchId;
+  const rows = branches
+    .map((b) => ({
+      branch: { id: b.id, code: b.code, name: b.name, branchNo: b.branchNo },
+      active: b.active,
+      report: buildSalesTaxReport(
+        month,
+        sales.filter((x) => of(x) === b.id),
+        invoices.filter((x) => of(x) === b.id),
+        notes.filter((x) => of(x) === b.id),
+      ),
+    }))
+    .filter((r) => r.active || r.report.rows.length)
+    .map((r) => ({ branch: r.branch, totals: r.report.totals }));
+  const total = (key: keyof TaxReportTotals) => sum(rows.map((r) => r.totals[key]));
+  return {
+    month,
+    rows,
+    totals: {
+      net: total('net'),
+      vat: total('vat'),
+      exempt: total('exempt'),
+      total: total('total'),
+    },
+  };
+}

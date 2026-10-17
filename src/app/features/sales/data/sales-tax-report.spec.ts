@@ -1,5 +1,5 @@
 import { CreditNote, SALE_DEFAULTS, Sale, SaleLine, TaxInvoice } from '@core/models';
-import { buildSalesTaxReport, nonVatNote } from './sales-tax-report';
+import { buildSalesTaxReport, buildTaxSummary, nonVatNote } from './sales-tax-report';
 
 describe('buildSalesTaxReport', () => {
   const at = (day: number, hour = 10, month = 10) =>
@@ -244,5 +244,25 @@ describe('buildSalesTaxReport', () => {
       expect.objectContaining({ kind: 'full', total: 0, vat: 0, note: 'ยกเลิก' }),
     ]);
     expect(cancelled.totals.total).toBe(0);
+  });
+
+  it('sums every branch separately for the summary, not as one report (D6)', () => {
+    const branches = [
+      { id: 1, code: 'HQ', name: 'สำนักงานใหญ่', branchNo: '00000', active: true },
+      { id: 2, code: 'BN', name: 'บางนา', branchNo: '00001', active: true },
+      { id: 3, code: 'OLD', name: 'ปิดแล้ว', branchNo: '00002', active: false },
+    ];
+    const hq = sale(11, 'POS-HQ-1-20261004-0001', at(4, 9), [line(1070, 70)], { branchId: 1 });
+    const bn = sale(12, 'POS-BN-3-20261004-0001', at(4, 9), [line(535, 35)], { branchId: 2 });
+    // Older data without a branch counts as the first one.
+    const legacy = sale(13, 'POS-20261004-0009', at(4, 12), [line(214, 14)]);
+    const summary = buildTaxSummary('2026-10', branches, [hq, bn, legacy], [], [], 1);
+    expect(summary.rows.map((r) => r.branch.code)).toEqual(['HQ', 'BN']);
+    expect(summary.rows[0].totals).toEqual(
+      buildSalesTaxReport('2026-10', [hq, legacy], [], []).totals,
+    );
+    expect(summary.rows[1].totals).toEqual(buildSalesTaxReport('2026-10', [bn], [], []).totals);
+    expect(summary.totals.total).toBe(1070 + 535 + 214);
+    expect(summary.totals.vat).toBe(70 + 35 + 14);
   });
 });

@@ -14,9 +14,24 @@
     <mat-icon>print</mat-icon>
     พิมพ์
   </button>
+  @if (isCompanyAdmin()) {
+    <a
+      mat-stroked-button
+      routerLink="/sales/tax-report/summary"
+      [queryParams]="{ month: currentMonth() }"
+    >
+      <mat-icon>table_view</mat-icon>
+      สรุปทุกสาขา
+    </a>
+  }
 </app-page-header>
 
 <div class="filter-row">
+  <app-branch-scope-select
+    [value]="branchId()"
+    [allowAll]="false"
+    (changed)="selectBranch($event)"
+  />
   <mat-form-field appearance="outline" subscriptSizing="dynamic" class="month">
     <mat-label>เดือนภาษี</mat-label>
     <input
@@ -34,7 +49,7 @@
       <header>
         <div class="title">รายงานภาษีขาย</div>
         <div>เดือนภาษี {{ r.month + '-01' | thaiDate: 'month' }}</div>
-        @if (store.storeInfo(); as info) {
+        @if (info(); as info) {
           <div class="seller">
             <span>ชื่อผู้ประกอบการ {{ info.name }}</span>
             <span
