@@ -112,6 +112,18 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 
 ต้องมี `X-Branch-Id` (ไม่มี → 400, E17 / E24): `POST /products`, `PUT /products/:id`, `PUT /products/:id/stock`, `POST /products/:id/serials(/remove)`, `POST /sales`, `POST /sales/:id/void | credit-notes | exchanges | tax-invoice | tax-invoice/reissue`, ทุก `POST/PUT /shifts/…` — ทุกการเดินสต็อก / เอกสาร / กะเกิดที่สาขานั้น (กะได้ `branchId` ของเครื่อง, ใบกำกับได้ `branchId` ของบิล)
 
+### ใบโอนสินค้า (SaaS ขั้น 5, E26–E29)
+
+| method + path                 | body → response                                        | หมายเหตุ                                                                                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /transfers`              | `?branchId=<id>\|all&direction=out\|in` → `Transfer[]` | ใบที่ต้นทาง (`out`) / ปลายทาง (`in`) / อย่างใดอย่างหนึ่ง อยู่ในขอบเขต `branchScopeError()` (E23); ใหม่สุดก่อน                                                                             |
+| `GET /transfers/:id`          | → `Transfer`                                           | ผู้ใช้ต้องเข้าสาขาต้นทางหรือปลายทางได้ → else 403                                                                                                                                         |
+| `POST /transfers`             | `TransferPayload` → `Transfer`                         | ที่สาขาต้นทาง (`X-Branch-Id`); `transferError()`; non-serial ตัดที่ `avgCost` ต้นทาง (`transfer_out`, avg ไม่เปลี่ยน), serial → `in_transit` ทุนของเครื่อง; เลข `TR-<สาขา>-YYYYMMDD-NNNN` |
+| `POST /transfers/:id/receive` | `TransferReceivePayload` → `Transfer`                  | ที่สาขาปลายทาง; `receiveTransferError()`; `transfer_in` เต็มจำนวนที่ `unitCost` (`movingAverage()`; serial `in_stock` ที่ปลายทาง) แล้ว `issue` ส่วนที่ขาด (serial → `damaged`) — E28      |
+| `POST /transfers/:id/cancel`  | `{ reason }` → `Transfer`                              | admin (else 403) ที่สาขาต้นทาง; `cancelTransferError()`; `transfer_in` คืนต้นทางที่ทุนโอน                                                                                                 |
+
+ลบ SKU / เปลี่ยนการคุม Serial / ประเภท: ใบโอนที่ยังไม่รับนับเป็นสต็อก → 400 "(ระหว่างโอน TR-…)" (E18)
+
 ### ข้อมูลหลัก
 
 | resource        | endpoints                                                                                            | หมายเหตุ                                                                                                                                                                                                                                                                                                      |

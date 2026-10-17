@@ -21,6 +21,13 @@ import {
   Company,
   HEAD_OFFICE_BRANCH_NO,
   withBranchStock,
+  Transfer,
+  TransferLine,
+  TransferPayload,
+  TransferReceivePayload,
+  cancelTransferError,
+  receiveTransferError,
+  transferError,
   branchScopeError,
   parseBranchScope,
   BRANCH_DEFAULTS,
@@ -195,6 +202,8 @@ interface MockDb {
   branchStockMigrated?: boolean;
   /** Set once older documents got their terminal's branch (`fixDocumentBranches()`, E20). */
   docBranchFixed?: boolean;
+  /** Stock transfers between branches (SaaS step 5). */
+  transfers: Transfer[];
   sales: Sale[];
   /** Serial numbers of serial-controlled SKUs (history kept; removal changes status). */
   serials: SerialNumber[];
@@ -873,6 +882,7 @@ const seedDb = (): MockDb => ({
   products: [...SEED_PRODUCTS],
   nextProductId: SEED_PRODUCTS.length + 1,
   branchStock: [],
+  transfers: [],
   sales: [...SEED_SALES],
   serials: [],
   nextSerialId: 1,
@@ -1054,6 +1064,9 @@ function handle(
     return handleCompanySettings(req, path, db);
   }
   if (path === 'branches' || path.startsWith('branches/')) return handleBranches(req, path, db);
+  if (path === 'transfers' || path.startsWith('transfers/')) {
+    return handleTransfers(req, path, db);
+  }
   if (path === 'settings/menu-access') return handleMenuAccess(req, path, db);
   if (path === 'shifts' || path.startsWith('shifts/')) return handleShifts(req, path, db);
   if (path === 'pos-terminals' || path.startsWith('pos-terminals/')) {
@@ -1092,7 +1105,8 @@ function needsBranch(req: HttpRequest<unknown>, path: string): boolean {
   return (
     /^products(\/\d+(\/stock|\/serials(\/remove)?)?)?$/.test(path) ||
     /^sales(\/\d+\/(void|credit-notes|exchanges|tax-invoice|tax-invoice\/reissue))?$/.test(path) ||
-    /^shifts(\/.*)?$/.test(path)
+    /^shifts(\/.*)?$/.test(path) ||
+    /^transfers(\/.*)?$/.test(path)
   );
 }
 
@@ -1339,7 +1353,7 @@ function handleProducts(
         const problem = validateSku(payload, db, id);
         if (problem) return error(400, problem);
         // Stock in any branch counts (E18).
-        const stocked = stockedBranches(db, id);
+        const stocked = stockedBranches(db, id) || inTransitNote(db, id);
         if (payload.serialControl !== products[index].serialControl && stocked) {
           return error(400, `ยังมีสต็อกคงเหลือ${stocked} เปลี่ยนการคุม Serial ไม่ได้`);
         }
@@ -1357,7 +1371,7 @@ function handleProducts(
         return ok(products[index]);
       }
       case 'DELETE': {
-        const stocked = stockedBranches(db, id);
+        const stocked = stockedBranches(db, id) || inTransitNote(db, id);
         if (stocked) return error(400, `ยังมีสต็อกคงเหลือ${stocked} ลบไม่ได้`);
         if (db.sales.some((s) => s.lines.some((l) => l.productId === id))) {
           return error(400, 'SKU นี้มีประวัติการขาย ลบไม่ได้ (เปลี่ยนสถานะเป็นเลิกจำหน่ายแทน)');
@@ -1546,6 +1560,14 @@ function branchStockRows(db: MockDb, product: Product): BranchStockRow[] {
       const here = withSerialStock(withBranchStock(product, row), db, b.id);
       return { branchId: b.id, stock: here.stock, avgCost: actorIsAdmin() ? here.avgCost : null };
     });
+}
+
+/** ' (ระหว่างโอน TR-…)' when a transfer not yet received carries the SKU, else ''. */
+function inTransitNote(db: MockDb, productId: number): string {
+  const open = db.transfers.filter(
+    (t) => t.status === 'in_transit' && t.lines.some((l) => l.productId === productId),
+  );
+  return open.length ? ` (ระหว่างโอน ${open.map((t) => t.transferNo).join(', ')})` : '';
 }
 
 /** ' (สาขา HQ, BN)' when any branch still holds the SKU, else '' (E18). */
@@ -3298,6 +3320,284 @@ function moneyShift(
     isAdmin: actorIsAdmin(),
   });
   return { problem, shiftId: shift?.id ?? null };
+}
+
+/**
+ * /transfers (SaaS step 5, E26–E29): list / read / create at the source / receive at the
+ * destination / cancel at the source. Every write moves stock of the request's branch only.
+ */
+function handleTransfers(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const visible = (t: Transfer) =>
+    !!actor &&
+    (branchScopeError(t.fromBranchId, actor, db.branches) === null ||
+      branchScopeError(t.toBranchId, actor, db.branches) === null);
+  if (path === 'transfers' && req.method === 'GET') {
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
+    const direction = req.params.get('direction');
+    const out = (t: Transfer) => inScope({ branchId: t.fromBranchId });
+    const into = (t: Transfer) => inScope({ branchId: t.toBranchId });
+    return ok(
+      db.transfers
+        .filter((t) =>
+          direction === 'out' ? out(t) : direction === 'in' ? into(t) : out(t) || into(t),
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    );
+  }
+  if (path === 'transfers' && req.method === 'POST') return createTransfer(req, db);
+
+  const match = /^transfers\/(\d+)(?:\/(receive|cancel))?$/.exec(path);
+  const transfer = match ? db.transfers.find((t) => t.id === Number(match[1])) : undefined;
+  if (!match || !transfer) return error(404, 'ไม่พบใบโอน');
+  if (!visible(transfer)) return error(403, 'ไม่มีสิทธิ์ดูใบโอนของสาขานี้');
+  const action = match[2];
+  if (!action && req.method === 'GET') return ok(transfer);
+  if (action === 'receive' && req.method === 'POST') {
+    return receiveTransfer(transfer, req.body as TransferReceivePayload, db);
+  }
+  if (action === 'cancel' && req.method === 'POST') {
+    if (!actorIsAdmin()) return error(403, 'ยกเลิกใบโอนได้เฉพาะผู้ดูแลระบบ');
+    const reason = String((req.body as { reason?: string } | null)?.reason ?? '').trim();
+    const problem = cancelTransferError(transfer, stockBranch, true, reason);
+    if (problem) return error(400, problem);
+    const note = `ยกเลิกใบโอน ${transfer.transferNo}`;
+    for (const line of transfer.lines) moveTransferLine(db, line, note);
+    Object.assign(transfer, {
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      cancelledBy: actorName(),
+      cancelReason: reason,
+    });
+    return ok(transfer);
+  }
+  return notFound(req, path);
+}
+
+/** POST /transfers at the source: goods leave at its cost, serials go `in_transit` (E26). */
+function createTransfer(req: HttpRequest<unknown>, db: MockDb): Observable<HttpResponse<unknown>> {
+  const body = (req.body ?? {}) as Partial<TransferPayload>;
+  const payload: TransferPayload = {
+    toBranchId: Number(body.toBranchId),
+    lines: (body.lines ?? []).map((l) => ({
+      productId: Number(l.productId),
+      qty: Number(l.qty),
+      serials: (l.serials ?? []).map((x) => x.trim().toUpperCase()),
+    })),
+    note: (body.note ?? '').trim(),
+  };
+  const problem = transferError(payload, {
+    fromBranchId: stockBranch,
+    branches: db.branches,
+    products: db.products,
+    serials: db.serials,
+  });
+  if (problem) return error(400, problem);
+  const now = new Date();
+  const transferNo = nextNumber(
+    db.transfers.map((t) => t.transferNo),
+    branchDocPrefix('TR', branchCode(db, stockBranch), todayIso()),
+    4,
+  );
+  const note = `โอนไปสาขา ${branchCode(db, payload.toBranchId)} ${transferNo}`;
+  const lines: TransferLine[] = payload.lines.map((input) => {
+    const index = db.products.findIndex((p) => p.id === input.productId);
+    const product = db.products[index];
+    let unitCost: number;
+    if (product.serialControl) {
+      const units = input.serials.map((x) => db.serials.find((s) => s.serial === x)!);
+      for (const unit of units) {
+        Object.assign(unit, { status: 'in_transit', removedAt: now.toISOString(), note });
+      }
+      const total = units.reduce((sum, u) => sum + u.cost, 0);
+      unitCost = total / units.length;
+      db.products[index] = withSerialStock(product, db);
+      recordMovement(
+        db,
+        db.products[index],
+        'transfer_out',
+        -units.length,
+        unitCost,
+        -total,
+        input.serials,
+        note,
+      );
+    } else {
+      // Out at the current average, which stays unchanged (like any issue).
+      unitCost = product.avgCost;
+      db.products[index] = { ...product, stock: product.stock - input.qty };
+      recordMovement(
+        db,
+        db.products[index],
+        'transfer_out',
+        -input.qty,
+        unitCost,
+        -input.qty * unitCost,
+        [],
+        note,
+      );
+    }
+    return {
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      unit: product.unit,
+      qty: input.qty,
+      serials: input.serials,
+      unitCost: Math.round(unitCost * 10000) / 10000,
+      receivedQty: null,
+      receivedSerials: [],
+    };
+  });
+  const transfer: Transfer = {
+    id: Math.max(0, ...db.transfers.map((t) => t.id)) + 1,
+    transferNo,
+    fromBranchId: stockBranch,
+    toBranchId: payload.toBranchId,
+    status: 'in_transit',
+    createdAt: now.toISOString(),
+    createdBy: actorName(),
+    note: payload.note,
+    lines,
+    receivedAt: null,
+    receivedBy: null,
+    shortReason: '',
+    cancelledAt: null,
+    cancelledBy: null,
+    cancelReason: '',
+  };
+  db.transfers.push(transfer);
+  return ok(transfer);
+}
+
+/**
+ * POST /transfers/:id/receive at the destination (E27 / E28): everything sent comes in at the
+ * transfer cost, then what did not arrive is written off there (serials → damaged).
+ */
+function receiveTransfer(
+  transfer: Transfer,
+  body: TransferReceivePayload,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const payload: TransferReceivePayload = {
+    lines: (body?.lines ?? []).map((l) => ({
+      productId: Number(l.productId),
+      receivedQty: Number(l.receivedQty),
+      receivedSerials: l.receivedSerials ?? [],
+    })),
+    shortReason: (body?.shortReason ?? '').trim(),
+  };
+  const problem = receiveTransferError(transfer, payload, stockBranch);
+  if (problem) return error(400, problem);
+  const now = new Date().toISOString();
+  const note = `รับโอนจากสาขา ${branchCode(db, transfer.fromBranchId)} ${transfer.transferNo}`;
+  const shortNote = `ขาด/เสียหายจากการโอน ${transfer.transferNo} · ${payload.shortReason}`;
+  for (const line of transfer.lines) {
+    const got = payload.lines.find((l) => l.productId === line.productId)!;
+    moveTransferLine(db, line, note);
+    const index = db.products.findIndex((p) => p.id === line.productId);
+    const missing = line.qty - got.receivedQty;
+    if (line.serials.length) {
+      const lost = line.serials.filter((x) => !got.receivedSerials.includes(x));
+      if (lost.length) {
+        const units = lost.map((x) => db.serials.find((s) => s.serial === x)!);
+        for (const unit of units) {
+          Object.assign(unit, { status: 'damaged', removedAt: now, note: shortNote });
+        }
+        const total = units.reduce((sum, u) => sum + u.cost, 0);
+        db.products[index] = withSerialStock(db.products[index], db);
+        recordMovement(
+          db,
+          db.products[index],
+          'issue',
+          -lost.length,
+          total / lost.length,
+          -total,
+          lost,
+          shortNote,
+        );
+      }
+    } else if (missing > 0) {
+      const product = db.products[index];
+      db.products[index] = { ...product, stock: product.stock - missing };
+      recordMovement(
+        db,
+        db.products[index],
+        'issue',
+        -missing,
+        product.avgCost,
+        -missing * product.avgCost,
+        [],
+        shortNote,
+      );
+    }
+    Object.assign(line, {
+      receivedQty: got.receivedQty,
+      receivedSerials: line.serials.length ? got.receivedSerials : [],
+    });
+  }
+  Object.assign(transfer, {
+    status: 'received',
+    receivedAt: now,
+    receivedBy: actorName(),
+    shortReason: payload.shortReason,
+  });
+  return ok(transfer);
+}
+
+/**
+ * Brings a transfer line into the request's branch at the transfer cost: `in` at the destination,
+ * `back` at the source when cancelled. Serials become in stock there; others re-average.
+ */
+function moveTransferLine(db: MockDb, line: TransferLine, note: string): void {
+  const serials = line.serials;
+  const index = db.products.findIndex((p) => p.id === line.productId);
+  if (index < 0) return;
+  const product = db.products[index];
+  if (serials.length) {
+    const units = serials.map((x) => db.serials.find((s) => s.serial === x)!);
+    for (const unit of units) {
+      Object.assign(unit, {
+        branchId: stockBranch,
+        status: 'in_stock',
+        removedAt: null,
+        receivedAt: new Date().toISOString(),
+        note,
+      });
+    }
+    const total = units.reduce((sum, u) => sum + u.cost, 0);
+    db.products[index] = withSerialStock(product, db);
+    recordMovement(
+      db,
+      db.products[index],
+      'transfer_in',
+      units.length,
+      total / units.length,
+      total,
+      [...serials],
+      note,
+    );
+    return;
+  }
+  db.products[index] = {
+    ...product,
+    stock: product.stock + line.qty,
+    avgCost: movingAverage(product.stock, product.avgCost, line.qty, line.unitCost),
+  };
+  recordMovement(
+    db,
+    db.products[index],
+    'transfer_in',
+    line.qty,
+    line.unitCost,
+    line.qty * line.unitCost,
+    [],
+    note,
+  );
 }
 
 /** 'SH-<branch>-YYYYMMDD-NN', numbered per branch and opening day (E21). */

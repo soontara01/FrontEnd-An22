@@ -39,6 +39,8 @@ const TYPE_BADGE: Record<MovementType, string> = {
   opening: '',
   receive: 'badge-success',
   issue: 'badge-warn',
+  transfer_out: 'badge-warn',
+  transfer_in: 'badge-success',
 };
 
 /**

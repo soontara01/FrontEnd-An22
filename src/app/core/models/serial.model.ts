@@ -1,9 +1,12 @@
 import type { StockMovement } from './costing.model';
 import { Product } from './product.model';
 
-/** `in_stock` = in the warehouse; the others are "removed" states kept as history. */
-export type SerialStatus = 'in_stock' | 'sold' | 'damaged' | 'other';
-export type SerialRemoveStatus = Exclude<SerialStatus, 'in_stock'>;
+/**
+ * `in_stock` = in the warehouse; `in_transit` = on a transfer between branches (sold by neither,
+ * SaaS step 5); the others are "removed" states kept as history.
+ */
+export type SerialStatus = 'in_stock' | 'in_transit' | 'sold' | 'damaged' | 'other';
+export type SerialRemoveStatus = Exclude<SerialStatus, 'in_stock' | 'in_transit'>;
 
 /** One physical unit of a serial-controlled SKU. Never deleted; removal changes `status`. */
 export interface SerialNumber {
@@ -30,6 +33,7 @@ export interface SerialReceiveResult {
 
 export const SERIAL_STATUS_LABEL: Record<SerialStatus, string> = {
   in_stock: 'คงคลัง',
+  in_transit: 'ระหว่างโอน',
   sold: 'ขายแล้ว',
   damaged: 'ชำรุด/เสียหาย',
   other: 'อื่นๆ',

@@ -210,7 +210,7 @@ export function branchError(
 }
 
 /** Documents numbered per branch and day (E21); POS bills run per terminal (`terminalOrderPrefix()`). */
-export type BranchDocKind = 'INV' | 'CN' | 'EX' | 'SH';
+export type BranchDocKind = 'INV' | 'CN' | 'EX' | 'SH' | 'TR';
 
 /**
  * Number prefix of a branch document, e.g. `CN-BN-20261018-` (E21). Older documents keep their

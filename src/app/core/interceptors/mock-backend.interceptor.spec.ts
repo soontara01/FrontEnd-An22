@@ -34,6 +34,7 @@ import {
   VarianceReportRow,
   StoreInfo,
   TaxInvoice,
+  Transfer,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
@@ -2812,5 +2813,128 @@ describe('mockBackendInterceptor – documents per branch', () => {
     ]);
     const shift = await call<Shift>('POST', 'shifts/open', '2', '3', open);
     expect(shift.branchId).toBe(2);
+  });
+});
+
+/** SaaS step 5: transfers between branches (E26–E29). */
+describe('mockBackendInterceptor – transfers', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // serial: HQ 12 units
+  const KEYBOARD = 3; // HQ 18 at 1,650 · BN 4 at 1,600
+  const HQ = '1';
+  const BN = '2';
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 18, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const call = <T>(method: string, url: string, branch = HQ, body?: unknown, token?: string) => {
+    let headers = new HttpHeaders({ 'X-Branch-Id': branch });
+    if (token) headers = headers.set('Authorization', `Bearer ${token}`);
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const product = (id: number, branch: string) => call<Product>('GET', `products/${id}`, branch);
+  const serialsAt = (branch: string) =>
+    call<SerialNumber[]>('GET', `products/${NOTEBOOK}/serials`, branch);
+  async function send(): Promise<Transfer> {
+    const [unit] = (await serialsAt(HQ)).filter((s) => s.status === 'in_stock');
+    return call<Transfer>('POST', 'transfers', HQ, {
+      toBranchId: 2,
+      note: 'เติมของสาขาบางนา',
+      lines: [
+        { productId: KEYBOARD, qty: 3, serials: [] },
+        { productId: NOTEBOOK, qty: 1, serials: [unit.serial] },
+      ],
+    });
+  }
+
+  it('sends from HQ at its cost; serials are in transit and sold by neither branch', async () => {
+    const t = await send();
+    expect(t).toMatchObject({ transferNo: 'TR-HQ-20261018-0001', status: 'in_transit' });
+    expect(t.lines[0]).toMatchObject({ sku: 'KB-020', qty: 3, unitCost: 1650, receivedQty: null });
+    expect((await product(KEYBOARD, HQ)).stock).toBe(15);
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(11);
+    const serial = t.lines[1].serials[0];
+    expect((await serialsAt(HQ)).find((s) => s.serial === serial)?.status).toBe('in_transit');
+    expect((await serialsAt(BN)).some((s) => s.serial === serial)).toBe(false);
+    const card = await call<StockCardResult>('GET', `products/${KEYBOARD}/movements`, HQ);
+    expect(card.movements.at(-1)).toMatchObject({ type: 'transfer_out', qty: -3, unitCost: 1650 });
+    // Seen from both branches.
+    expect((await call<Transfer[]>('GET', 'transfers?direction=in', BN)).map((x) => x.id)).toEqual([
+      t.id,
+    ]);
+    expect(await call<Transfer[]>('GET', 'transfers?direction=in', HQ)).toEqual([]);
+  });
+
+  it('receives at BN: all in at the transfer cost, the shortfall written off there (E27 / E28)', async () => {
+    const t = await send();
+    const serial = t.lines[1].serials[0];
+    const short = {
+      lines: [
+        { productId: KEYBOARD, receivedQty: 2, receivedSerials: [] },
+        { productId: NOTEBOOK, receivedQty: 1, receivedSerials: [serial] },
+      ],
+      shortReason: '',
+    };
+    expect(await errorOf(call('POST', `transfers/${t.id}/receive`, HQ, short))).toEqual([
+      400,
+      'รับของได้ที่สาขาปลายทางเท่านั้น',
+    ]);
+    expect(await errorOf(call('POST', `transfers/${t.id}/receive`, BN, short))).toEqual([
+      400,
+      'กรุณาระบุเหตุผลของสินค้าที่ขาด / เสียหาย',
+    ]);
+    const received = await call<Transfer>('POST', `transfers/${t.id}/receive`, BN, {
+      ...short,
+      shortReason: 'กล่องแตก 1 ชิ้น',
+    });
+    expect(received).toMatchObject({ status: 'received', shortReason: 'กล่องแตก 1 ชิ้น' });
+    // BN: 4 at 1,600 + 3 at 1,650 → average 1,621.4286; one written off.
+    expect(await product(KEYBOARD, BN)).toEqual(
+      expect.objectContaining({ stock: 6, avgCost: 1621.4286 }),
+    );
+    const card = await call<StockCardResult>('GET', `products/${KEYBOARD}/movements`, BN);
+    expect(card.movements.map((m) => [m.type, m.qty])).toEqual([
+      ['transfer_in', 3],
+      ['issue', -1],
+    ]);
+    expect((await serialsAt(BN)).find((s) => s.serial === serial)?.status).toBe('in_stock');
+    expect((await product(NOTEBOOK, BN)).stock).toBe(3);
+  });
+
+  it('cancels only at the source by an admin; goods go back at the same cost (E29)', async () => {
+    const t = await send();
+    expect(
+      await errorOf(call('POST', `transfers/${t.id}/cancel`, BN, { reason: 'ส่งผิด' })),
+    ).toEqual([400, 'ยกเลิกได้ที่สาขาต้นทางเท่านั้น']);
+    expect(
+      await errorOf(
+        call('POST', `transfers/${t.id}/cancel`, HQ, { reason: 'ส่งผิด' }, mockToken(1, 2)),
+      ),
+    ).toEqual([403, 'ยกเลิกใบโอนได้เฉพาะผู้ดูแลระบบ']);
+    const cancelled = await call<Transfer>('POST', `transfers/${t.id}/cancel`, HQ, {
+      reason: 'ส่งผิด',
+    });
+    expect(cancelled.status).toBe('cancelled');
+    expect(await product(KEYBOARD, HQ)).toEqual(
+      expect.objectContaining({ stock: 18, avgCost: 1650 }),
+    );
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(12);
+    expect(await errorOf(call('POST', 'transfers', 'none', {}))).toEqual([
+      400,
+      'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน',
+    ]);
   });
 });
