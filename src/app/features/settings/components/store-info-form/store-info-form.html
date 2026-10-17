@@ -1,129 +1,153 @@
 <div class="layout">
-  <form [formGroup]="form" (ngSubmit)="save()">
-    @if (!editable()) {
-      <p class="text-muted small">เฉพาะผู้ดูแลระบบ (admin) แก้ไขได้</p>
-    }
-    <mat-form-field appearance="outline" class="w-full">
-      <mat-label>ชื่อผู้ประกอบการ (ชื่อร้าน / ชื่อบริษัท)</mat-label>
-      <input matInput formControlName="name" />
-    </mat-form-field>
+  <div class="forms">
+    <form [formGroup]="company" (ngSubmit)="saveCompany()">
+      <h3 class="section first">ข้อมูลบริษัท (ทุกสาขา)</h3>
+      @if (!companyEditable()) {
+        <p class="text-muted small">เฉพาะผู้ดูแลระบบระดับบริษัท (ทุกสาขา) แก้ไขได้</p>
+      }
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>ชื่อผู้ประกอบการ (ชื่อร้าน / ชื่อบริษัท)</mat-label>
+        <input matInput formControlName="name" />
+      </mat-form-field>
 
-    <mat-form-field appearance="outline" class="w-full">
-      <mat-label>ชื่อสถานประกอบการ</mat-label>
-      <input matInput formControlName="placeName" maxlength="100" />
-      <mat-hint>แสดงในรายงานภาษีขาย · เว้นว่าง = ใช้ชื่อผู้ประกอบการ</mat-hint>
-    </mat-form-field>
+      <mat-slide-toggle formControlName="vatRegistered" class="toggle">
+        จดทะเบียนภาษีมูลค่าเพิ่ม (ออกใบกำกับภาษีอย่างย่อ)
+      </mat-slide-toggle>
 
-    <mat-slide-toggle formControlName="vatRegistered" class="toggle">
-      จดทะเบียนภาษีมูลค่าเพิ่ม (ออกใบกำกับภาษีอย่างย่อ)
-    </mat-slide-toggle>
-
-    <div class="row">
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" class="w-full">
         <mat-label>เลขประจำตัวผู้เสียภาษี</mat-label>
         <input matInput formControlName="taxId" inputmode="numeric" maxlength="17" />
       </mat-form-field>
-      <mat-button-toggle-group formControlName="branchType" aria-label="ประเภทสาขา">
-        <mat-button-toggle value="head">สำนักงานใหญ่</mat-button-toggle>
-        <mat-button-toggle value="branch">สาขา</mat-button-toggle>
-      </mat-button-toggle-group>
-      @if (info().branchType === 'branch') {
-        <mat-form-field appearance="outline" class="branch-no">
-          <mat-label>เลขที่สาขา</mat-label>
-          <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" />
+
+      @if (info().vatRegistered) {
+        <div class="paper">
+          <span>กระดาษใบกำกับภาษีเต็มรูป</span>
+          <mat-button-toggle-group
+            formControlName="taxInvoicePaper"
+            aria-label="กระดาษใบกำกับภาษี"
+            (change)="previewPick.set('invoice')"
+          >
+            <mat-button-toggle value="A4">A4</mat-button-toggle>
+            <mat-button-toggle value="80mm">80 มม. (เครื่องพิมพ์ใบเสร็จ)</mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+      }
+
+      <mat-form-field appearance="outline">
+        <mat-label>เปลี่ยนสินค้า (SKU เดิม) ได้ภายใน</mat-label>
+        <input matInput type="number" min="0" max="365" formControlName="exchangeDays" />
+        <span matTextSuffix>วัน</span>
+        <mat-hint>นับจากวันขาย · 0 = ไม่จำกัด · เกินกำหนดให้ admin ทำรายการ</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ส่วนลดพิเศษที่พนักงานให้ได้สูงสุด</mat-label>
+        <input
+          matInput
+          type="number"
+          min="0"
+          max="100"
+          step="0.5"
+          formControlName="manualDiscountMaxPercent"
+        />
+        <span matTextSuffix>%</span>
+        <mat-hint
+          >ของราคาหลังโปรโมชั่น · 0 = พนักงานลดเองไม่ได้ · เกินเพดานให้ admin ทำรายการ</mat-hint
+        >
+      </mat-form-field>
+
+      <h3 class="section">ระบบกะ (เปิด / ปิดกะ)</h3>
+      <mat-slide-toggle formControlName="requireShift">ใช้ระบบกะ</mat-slide-toggle>
+      <p class="text-muted small">
+        เปิด = ทุกการขาย ยกเลิกบิล คืนเงิน และนำเงินเข้า/ออก ต้องอยู่ในกะที่เปิดอยู่ของเครื่อง
+        แคชเชียร์นับเงินแยกตามช่องทางตอนปิดกะ · ปิด = ขายได้เลย
+        (เหมาะกับร้านที่เจ้าของขายเองคนเดียว) · ปิดได้เมื่อไม่มีกะที่เปิดค้างอยู่ · ใช้กับทุกสาขา
+      </p>
+      @if (info().requireShift) {
+        <mat-form-field appearance="outline">
+          <mat-label>ส่วนต่างที่ต้องให้ admin อนุมัติ</mat-label>
+          <input matInput type="number" min="0" step="1" formControlName="shiftVarianceLimit" />
+          <span matTextSuffix>บาท</span>
+          <mat-hint>ต่อช่องทาง เมื่อขาด/เกินมากกว่านี้ · ทุกส่วนต่างต้องระบุสาเหตุ</mat-hint>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>เตือนเมื่อกะเปิดนานเกิน</mat-label>
+          <input matInput type="number" min="1" max="48" step="1" formControlName="shiftMaxHours" />
+          <span matTextSuffix>ชั่วโมง</span>
+          <mat-hint>เตือนอย่างเดียว ไม่บล็อกการขาย</mat-hint>
         </mat-form-field>
       }
-    </div>
 
-    <mat-form-field appearance="outline" class="w-full">
-      <mat-label>ที่อยู่</mat-label>
-      <textarea matInput formControlName="address" rows="2"></textarea>
-    </mat-form-field>
+      @if (companyEditable()) {
+        <div class="actions">
+          @if (companyProblem(); as message) {
+            <span class="problem">{{ message }}</span>
+          }
+          <button
+            mat-flat-button
+            type="submit"
+            [disabled]="!companyLoaded() || !!companyProblem() || savingCompany()"
+          >
+            <mat-icon>save</mat-icon>
+            บันทึกข้อมูลบริษัท
+          </button>
+        </div>
+      }
+    </form>
 
-    <div class="row">
-      <mat-form-field appearance="outline">
-        <mat-label>โทรศัพท์</mat-label>
-        <input matInput formControlName="phone" />
-      </mat-form-field>
-      <p class="text-muted small">POS ID (สรรพากร) ตั้งแยกต่อเครื่องที่ ข้อมูลหลัก → เครื่อง POS</p>
-    </div>
-
-    @if (info().vatRegistered) {
-      <div class="paper">
-        <span>กระดาษใบกำกับภาษีเต็มรูป</span>
-        <mat-button-toggle-group
-          formControlName="taxInvoicePaper"
-          aria-label="กระดาษใบกำกับภาษี"
-          (change)="previewPick.set('invoice')"
-        >
-          <mat-button-toggle value="A4">A4</mat-button-toggle>
-          <mat-button-toggle value="80mm">80 มม. (เครื่องพิมพ์ใบเสร็จ)</mat-button-toggle>
-        </mat-button-toggle-group>
-      </div>
-    }
-
-    <mat-form-field appearance="outline" class="w-full">
-      <mat-label>ข้อความท้ายใบเสร็จ</mat-label>
-      <textarea matInput formControlName="receiptFooter" rows="2"></textarea>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline">
-      <mat-label>เปลี่ยนสินค้า (SKU เดิม) ได้ภายใน</mat-label>
-      <input matInput type="number" min="0" max="365" formControlName="exchangeDays" />
-      <span matTextSuffix>วัน</span>
-      <mat-hint>นับจากวันขาย · 0 = ไม่จำกัด · เกินกำหนดให้ admin ทำรายการ</mat-hint>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline">
-      <mat-label>ส่วนลดพิเศษที่พนักงานให้ได้สูงสุด</mat-label>
-      <input
-        matInput
-        type="number"
-        min="0"
-        max="100"
-        step="0.5"
-        formControlName="manualDiscountMaxPercent"
-      />
-      <span matTextSuffix>%</span>
-      <mat-hint
-        >ของราคาหลังโปรโมชั่น · 0 = พนักงานลดเองไม่ได้ · เกินเพดานให้ admin ทำรายการ</mat-hint
-      >
-    </mat-form-field>
-
-    <h3 class="section">ระบบกะ (เปิด / ปิดกะ)</h3>
-    <mat-slide-toggle formControlName="requireShift">ใช้ระบบกะ</mat-slide-toggle>
-    <p class="text-muted small">
-      เปิด = ทุกการขาย ยกเลิกบิล คืนเงิน และนำเงินเข้า/ออก ต้องอยู่ในกะที่เปิดอยู่ของเครื่อง
-      แคชเชียร์นับเงินแยกตามช่องทางตอนปิดกะ · ปิด = ขายได้เลย (เหมาะกับร้านที่เจ้าของขายเองคนเดียว)
-      · ปิดได้เมื่อไม่มีกะที่เปิดค้างอยู่
-    </p>
-    @if (info().requireShift) {
-      <mat-form-field appearance="outline">
-        <mat-label>ส่วนต่างที่ต้องให้ admin อนุมัติ</mat-label>
-        <input matInput type="number" min="0" step="1" formControlName="shiftVarianceLimit" />
-        <span matTextSuffix>บาท</span>
-        <mat-hint>ต่อช่องทาง เมื่อขาด/เกินมากกว่านี้ · ทุกส่วนต่างต้องระบุสาเหตุ</mat-hint>
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>เตือนเมื่อกะเปิดนานเกิน</mat-label>
-        <input matInput type="number" min="1" max="48" step="1" formControlName="shiftMaxHours" />
-        <span matTextSuffix>ชั่วโมง</span>
-        <mat-hint>เตือนอย่างเดียว ไม่บล็อกการขาย</mat-hint>
-      </mat-form-field>
-    }
-
-    @if (editable()) {
-      <div class="actions">
-        @if (problem(); as message) {
-          <span class="problem">{{ message }}</span>
+    <form [formGroup]="details" (ngSubmit)="saveBranch()">
+      <h3 class="section">
+        ข้อมูลสาขานี้
+        @if (branch(); as b) {
+          <span class="text-muted">· {{ b.code }} · เลขที่สาขา {{ b.branchNo }}</span>
         }
-        <button mat-flat-button type="submit" [disabled]="!loaded() || !!problem() || saving()">
-          <mat-icon>save</mat-icon>
-          บันทึก
-        </button>
+      </h3>
+      @if (!branchEditable()) {
+        <p class="text-muted small">เฉพาะผู้ดูแลระบบของสาขานี้แก้ไขได้</p>
+      }
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>ชื่อสถานประกอบการ (ชื่อสาขา)</mat-label>
+        <input matInput formControlName="name" maxlength="100" />
+        <mat-hint>แสดงในรายงานภาษีขาย · รหัส / เลขที่สาขาแก้ที่ ข้อมูลหลัก → สาขา</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>ที่อยู่</mat-label>
+        <textarea matInput formControlName="address" rows="2"></textarea>
+      </mat-form-field>
+
+      <div class="row">
+        <mat-form-field appearance="outline">
+          <mat-label>โทรศัพท์</mat-label>
+          <input matInput formControlName="phone" />
+        </mat-form-field>
+        <p class="text-muted small">
+          POS ID (สรรพากร) ตั้งแยกต่อเครื่องที่ ข้อมูลหลัก → เครื่อง POS
+        </p>
       </div>
-    }
-  </form>
+
+      <mat-form-field appearance="outline" class="w-full">
+        <mat-label>ข้อความท้ายใบเสร็จ</mat-label>
+        <textarea matInput formControlName="receiptFooter" rows="2"></textarea>
+      </mat-form-field>
+
+      @if (branchEditable()) {
+        <div class="actions">
+          @if (branchProblem(); as message) {
+            <span class="problem">{{ message }}</span>
+          }
+          <button
+            mat-flat-button
+            type="submit"
+            [disabled]="!branchLoaded() || !!branchProblem() || savingBranch()"
+          >
+            <mat-icon>save</mat-icon>
+            บันทึกข้อมูลสาขา
+          </button>
+        </div>
+      }
+    </form>
+  </div>
 
   <div class="preview">
     @if (info().vatRegistered) {

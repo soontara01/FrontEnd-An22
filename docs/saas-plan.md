@@ -148,7 +148,7 @@ Platform (เจ้าของ SaaS)
    - **ความคืบหน้า (หน้าบ้าน + mock):** 1.1 `normalizeShift()` (B24) ✅ · 1.2 `company.model.ts` (`Company`, `Branch`, `branchError()`) + `User.username` / email ไม่บังคับ (`userIdentityError()`, ปิด B5) ✅ · 1.3 login รหัสบริษัท + token มี tenant + `GET /me` + `AuthService` เก็บบริษัท / สาขา ✅ · 1.4 `branchInterceptor` (`X-Branch-Id`, mock 403) + toolbar "บริษัท · สาขา" ✅ · ทดสอบบนหน้าจอ 2026-10-16 (ไม่ล้าง mock db): session เก่าถูกพาไป login (E1), ข้อมูลเก่าได้ username + สาขา `HQ`, รหัสบริษัทผิดได้ข้อความเดียว, DEMO admin / somchai เข้าได้ + เมนูตามสิทธิ์, จำ DEMO หลัง logout, ทุกเมนูหลักเปิดได้, POS ขาย 1 บิล (POS1-20261016-0003), username ซ้ำถูกกัน, สาขาปลอม → 403, console สะอาด ✅
 2. **ข้อมูลสาขา**: แท็บสาขาใน master-data, แยก `StoreInfo` → `CompanyInfo` + `BranchInfo`, settings 2 หน้า,
    ผู้ใช้กำหนดสาขาได้, หน้าเลือกสาขา + ตัวสลับ, โปรโมชั่นจำกัดสาขา (`branchIds`) — ข้อตัดสินใจ E5–E11 (หัวข้อ 14)
-   - **ความคืบหน้า:** 2.1 สิทธิ์สาขาของผู้ใช้ (`branchIds` / `allBranches`, `userScopeError()`) + รหัสผ่าน (`PUT /users/:id/password`) ✅ 2026-10-17
+   - **ความคืบหน้า:** 2.1 สิทธิ์สาขาของผู้ใช้ (`branchIds` / `allBranches`, `userScopeError()`) + รหัสผ่าน (`PUT /users/:id/password`) ✅ · 2.2 แท็บสาขา (`/branches`), แยก `StoreInfo` → `CompanyInfo` + ข้อมูลสาขา (`storeInfoOf()`, `/settings/company`, `/settings/branch`), ตั้งค่า 2 ส่วน, seed สาขา `BN` ✅ 2026-10-17
 3. **สต็อกแยกสาขา**: `branch_stock`, serial/movement มีสาขา, ทุนเฉลี่ยต่อสาขา, reorder ต่อสาขา, ดูสต็อกทุกสาขา
 4. **เอกสารแยกสาขา**: เลขรันต่อสาขา, ใบกำกับพิมพ์สาขาผู้ขาย, ตัวกรองสาขาในรายการบิล, รายงานภาษีขายต่อสาขา + ตารางสรุปภาษีขายทุกสาขา (D6)
 5. **ใบโอนสินค้าระหว่างสาขา**

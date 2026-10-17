@@ -16,6 +16,17 @@ import {
   Branch,
   Company,
   HEAD_OFFICE_BRANCH_NO,
+  BRANCH_DEFAULTS,
+  BranchDetails,
+  BranchPayload,
+  CompanyInfo,
+  branchDetailsError,
+  branchError,
+  companyInfoError,
+  companyInfoOf,
+  normalizeBranch,
+  normalizeCompanyInfo,
+  storeInfoOf,
   LoginRequest,
   MeResponse,
   normalizeCompanyCode,
@@ -61,6 +72,7 @@ import {
   UserPayload,
   normalizeUsername,
   canWorkIn,
+  isCompanyAdmin,
   passwordError,
   userBranchError,
   userChangeError,
@@ -187,8 +199,14 @@ interface MockDb {
   /** Payment method master (POS tender buttons), ordered by sortOrder. */
   paymentMethods: PaymentMethod[];
   nextPaymentMethodId: number;
-  /** The store's details printed on receipts (Settings menu). */
+  /**
+   * The details documents print for the request's branch: `storeInfoOf(companyInfo, branch)`, set
+   * per request and never saved (E11). Older stored dbs kept the whole store here; it is split into
+   * `companyInfo` + branch details once (`splitStoreInfo()`).
+   */
   storeInfo: StoreInfo;
+  /** Company settings (Settings → ข้อมูลบริษัท). */
+  companyInfo: CompanyInfo;
   /** Menus the `user` role sees (admins see all); set on `/users/menu-access`. */
   menuAccess: MenuAccess;
   /** Credit notes (returns after the day of sale). */
@@ -213,12 +231,13 @@ interface MockDb {
    */
   legacyPosId?: string;
   /**
-   * SaaS tenants (step 1: one, `DEMO`). Name and tax ID come from `storeInfo` on read until step 2
-   * splits it into company / branch info; every user of this db belongs to the first company.
+   * SaaS tenants (one, `DEMO`); name and tax ID come from `companyInfo`. Every user of this db
+   * belongs to the first company.
    */
   companies: StoredCompany[];
-  /** Branches of the company; created once from `storeInfo` for older stored data. */
+  /** Branches of the company with their printed details (seed: HQ + BN). */
   branches: Branch[];
+  nextBranchId: number;
   /** Passwords by user id (a real API keeps a hash); none = `admin` for the first user, else `1234` (E10). */
   passwords: Record<number, string>;
 }
@@ -801,6 +820,29 @@ export const SEED_STORE_INFO: StoreInfo = {
   receiptFooter: 'ขอบคุณที่ใช้บริการ · เปลี่ยน/คืนสินค้าภายใน 7 วันพร้อมใบเสร็จ',
 };
 
+const SEED_BRANCHES: Branch[] = [
+  {
+    id: 1,
+    code: 'HQ',
+    name: SEED_STORE_INFO.placeName,
+    branchNo: HEAD_OFFICE_BRANCH_NO,
+    address: SEED_STORE_INFO.address,
+    phone: SEED_STORE_INFO.phone,
+    receiptFooter: SEED_STORE_INFO.receiptFooter,
+    active: true,
+  },
+  {
+    id: 2,
+    code: 'BN',
+    name: 'ร้านไอทีดี คอมพิวเตอร์ สาขาบางนา',
+    branchNo: '00001',
+    address: '1/23 ถนนบางนา-ตราด แขวงบางนาใต้ เขตบางนา กรุงเทพฯ 10260',
+    phone: '02-765-4321',
+    receiptFooter: SEED_STORE_INFO.receiptFooter,
+    active: true,
+  },
+];
+
 const SEED_POS_TERMINALS: PosTerminal[] = [
   { id: 1, name: 'แคชเชียร์หน้าร้าน', posId: 'E051234567890', active: true },
   { id: 2, name: 'แคชเชียร์โซนมือถือ', posId: 'E051234567891', active: true },
@@ -827,6 +869,7 @@ const seedDb = (): MockDb => ({
   paymentMethods: SEED_PAYMENT_METHODS.map((x) => structuredClone(x)),
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
   storeInfo: { ...SEED_STORE_INFO },
+  companyInfo: companyInfoOf(SEED_STORE_INFO),
   menuAccess: { userMenus: [...DEFAULT_USER_MENUS] },
   creditNotes: [],
   exchanges: [],
@@ -837,7 +880,8 @@ const seedDb = (): MockDb => ({
   shiftAdjustments: [],
   posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
   companies: [{ id: 1, code: 'DEMO', active: true }],
-  branches: [],
+  branches: SEED_BRANCHES.map((b) => ({ ...b })),
+  nextBranchId: SEED_BRANCHES.length + 1,
   passwords: {},
 });
 
@@ -883,9 +927,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
   db.shifts = db.shifts.map(normalizeShift);
-  const branched = ensureBranch(db);
+  const branched = splitStoreInfo(db, stored);
   fillUserDefaults(db);
-  db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
     ...t,
@@ -918,9 +961,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const terminal = Number(req.headers.get('X-Terminal-Id'));
   terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
   branchHeader = req.headers.get('X-Branch-Id');
+  db.storeInfo = storeInfoOf(db.companyInfo, requestBranch(db));
   const response$ = handle(req, path, db);
   if (generated || costed || shiftsOn || registered || branched || req.method !== 'GET') {
-    storage.set(DB_KEY, db);
+    // `storeInfo` is derived per request (E11): never stored.
+    storage.set(DB_KEY, { ...db, storeInfo: undefined });
   }
 
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
@@ -970,6 +1015,10 @@ function handle(
     return handlePaymentMethods(req, path, db);
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
+  if (path === 'settings/company' || path === 'settings/branch') {
+    return handleCompanySettings(req, path, db);
+  }
+  if (path === 'branches' || path.startsWith('branches/')) return handleBranches(req, path, db);
   if (path === 'settings/menu-access') return handleMenuAccess(req, path, db);
   if (path === 'shifts' || path.startsWith('shifts/')) return handleShifts(req, path, db);
   if (path === 'pos-terminals' || path.startsWith('pos-terminals/')) {
@@ -1032,6 +1081,12 @@ function adminOnlyError(req: HttpRequest<unknown>, path: string): string | null 
   }
   if (path === 'tax-invoices' && req.method === 'GET') return 'ดูรายงานภาษีขายได้เฉพาะผู้ดูแลระบบ';
   if (path === 'settings/store' && write) return 'แก้ข้อมูลร้านได้เฉพาะผู้ดูแลระบบ';
+  if ((path === 'settings/company' || path === 'settings/branch') && write) {
+    return 'แก้ข้อมูลร้านได้เฉพาะผู้ดูแลระบบ';
+  }
+  if ((path === 'branches' || path.startsWith('branches/')) && write) {
+    return 'จัดการสาขาได้เฉพาะผู้ดูแลระบบ';
+  }
   if (path === 'settings/menu-access' && write) return 'กำหนดสิทธิ์เมนูได้เฉพาะผู้ดูแลระบบ';
   if (req.method === 'POST' && /^shifts\/\d+\/approve$/.test(path)) {
     return 'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ';
@@ -2704,7 +2759,7 @@ function voidSale(
  */
 function enableShifts(db: MockDb): boolean {
   if (db.shiftsEnabled) return false;
-  db.storeInfo = { ...db.storeInfo, requireShift: true };
+  db.companyInfo = { ...db.companyInfo, requireShift: true };
   db.shiftsEnabled = true;
   return true;
 }
@@ -2730,7 +2785,6 @@ function migrateTerminals(db: MockDb, stored: Partial<MockDb> | null): boolean {
     active: true,
   }));
   db.legacyPosId = legacy;
-  delete (db.storeInfo as { posId?: string }).posId;
   return true;
 }
 
@@ -3147,19 +3201,113 @@ function handleStoreInfo(
   path: string,
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
+  // Kept during the move to /settings/company + /settings/branch: the request's branch with its
+  // company (E11). A write changes both parts, so it needs a company admin.
   if (req.method === 'GET') return ok(db.storeInfo);
   if (req.method === 'PUT') {
+    if (!isCompanyAdmin(actor)) return error(403, COMPANY_ADMIN_ONLY);
     const payload = normalizeStoreInfo(req.body as StoreInfo);
-    const problem =
-      storeInfoError(payload) ??
-      requireShiftChangeError(
-        db.storeInfo.requireShift,
-        payload.requireShift,
-        db.shifts.filter((s) => s.status === 'open').length,
-      );
+    const problem = storeInfoError(payload) ?? requireShiftProblem(db, payload.requireShift);
     if (problem) return error(400, problem);
-    db.storeInfo = payload;
+    db.companyInfo = companyInfoOf(payload);
+    const branch = requestBranch(db);
+    Object.assign(branch, {
+      name: payload.placeName || branch.name,
+      address: payload.address,
+      phone: payload.phone,
+      receiptFooter: payload.receiptFooter,
+    });
+    db.storeInfo = storeInfoOf(db.companyInfo, branch);
     return ok(db.storeInfo);
+  }
+  return notFound(req, path);
+}
+
+const COMPANY_ADMIN_ONLY = 'ทำได้เฉพาะผู้ดูแลระบบระดับบริษัท (ทุกสาขา)';
+
+/** `requireShift` cannot be switched off while any shift is open (`requireShiftChangeError()`). */
+function requireShiftProblem(db: MockDb, next: boolean): string | null {
+  return requireShiftChangeError(
+    db.companyInfo.requireShift,
+    next,
+    db.shifts.filter((s) => s.status === 'open').length,
+  );
+}
+
+/**
+ * Company settings (E11): GET for everyone, PUT company admin (E6) — `companyInfoError()`.
+ * GET/PUT /settings/branch: details of the request's branch, PUT by an admin of that branch.
+ */
+function handleCompanySettings(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  if (path === 'settings/company') {
+    if (req.method === 'GET') return ok(db.companyInfo);
+    if (req.method === 'PUT') {
+      if (!isCompanyAdmin(actor)) return error(403, COMPANY_ADMIN_ONLY);
+      const payload = normalizeCompanyInfo(req.body as CompanyInfo);
+      const problem = companyInfoError(payload) ?? requireShiftProblem(db, payload.requireShift);
+      if (problem) return error(400, problem);
+      db.companyInfo = payload;
+      return ok(db.companyInfo);
+    }
+  }
+  if (path === 'settings/branch') {
+    const branch = requestBranch(db);
+    if (req.method === 'GET') return ok(branch);
+    if (req.method === 'PUT') {
+      // `handle()` already refused a branch the admin may not work in (403).
+      const body = normalizeBranch((req.body ?? {}) as Partial<BranchDetails>);
+      const next: Branch = {
+        ...branch,
+        name: body.name ?? branch.name,
+        address: body.address ?? branch.address,
+        phone: body.phone ?? branch.phone,
+        receiptFooter: body.receiptFooter ?? branch.receiptFooter,
+      };
+      const problem = branchDetailsError(next);
+      if (problem) return error(400, problem);
+      Object.assign(branch, next);
+      return ok(branch);
+    }
+  }
+  return notFound(req, path);
+}
+
+/**
+ * GET/POST /branches, GET/PUT /branches/:id — reads for everyone, writes by a company admin (E6).
+ * No delete: a branch is deactivated (`branchError()` keeps one active).
+ */
+function handleBranches(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  if (path === 'branches' && req.method === 'GET') return ok(db.branches);
+  if (req.method !== 'GET' && !isCompanyAdmin(actor)) return error(403, COMPANY_ADMIN_ONLY);
+  if (path === 'branches' && req.method === 'POST') {
+    // An `id` in the body is never taken: the server numbers branches.
+    const payload = normalizeBranch({ ...BRANCH_DEFAULTS, ...(req.body as BranchPayload) });
+    delete (payload as Partial<Branch>).id;
+    const problem = branchError(payload, db.branches);
+    if (problem) return error(400, problem);
+    const branch: Branch = { ...payload, id: db.nextBranchId++ };
+    db.branches.push(branch);
+    return ok(branch);
+  }
+  const idMatch = /^branches\/(\d+)$/.exec(path);
+  const index = idMatch ? db.branches.findIndex((b) => b.id === Number(idMatch[1])) : -1;
+  if (idMatch && index < 0) return error(404, 'ไม่พบสาขา');
+  if (idMatch && req.method === 'GET') return ok(db.branches[index]);
+  if (idMatch && req.method === 'PUT') {
+    const current = db.branches[index];
+    const payload = normalizeBranch({ ...current, ...(req.body as Partial<BranchPayload>) });
+    const problem = branchError(payload, db.branches);
+    if (problem) return error(400, problem);
+    db.branches[index] = { ...payload, id: current.id };
+    return ok(db.branches[index]);
   }
   return notFound(req, path);
 }
@@ -3233,7 +3381,7 @@ function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
 function companySession(db: MockDb, user: User): { company: Company; branches: Branch[] } {
   const stored = db.companies[0];
   return {
-    company: { ...stored, name: db.storeInfo.name, taxId: db.storeInfo.taxId },
+    company: { ...stored, name: db.companyInfo.name, taxId: db.companyInfo.taxId },
     branches: db.branches.filter((b) => canWorkIn(user, b)),
   };
 }
@@ -3243,21 +3391,44 @@ function allowedBranch(db: MockDb, user: User, header: string): Branch | undefin
   return companySession(db, user).branches.find((b) => String(b.id) === header.trim());
 }
 
-/** Older stored data (and the seed) get one branch made from the store's details. */
-function ensureBranch(db: MockDb): boolean {
-  if (db.branches.length > 0) return false;
-  const info = db.storeInfo;
-  db.branches = [
-    {
-      id: 1,
-      code: 'HQ',
-      name: info.placeName || 'สำนักงานใหญ่',
-      branchNo:
-        info.branchType === 'branch' && info.branchNo ? info.branchNo : HEAD_OFFICE_BRANCH_NO,
-      active: true,
-    },
-  ];
+/**
+ * Stored dbs from before E11 kept one `storeInfo`: its company part becomes `companyInfo`, and the
+ * branches (step 1 made one, older data none) get its address / phone / receipt footer. Once.
+ */
+function splitStoreInfo(db: MockDb, stored: Partial<MockDb> | null): boolean {
+  if (!stored || stored.companyInfo) return false;
+  const legacy: StoreInfo = { ...STORE_INFO_DEFAULTS, ...SEED_STORE_INFO, ...stored.storeInfo };
+  db.companyInfo = companyInfoOf(legacy);
+  const branches: Partial<Branch>[] = stored.branches?.length
+    ? stored.branches
+    : [
+        {
+          id: 1,
+          code: 'HQ',
+          name: legacy.placeName || 'สำนักงานใหญ่',
+          branchNo:
+            legacy.branchType === 'branch' && legacy.branchNo
+              ? legacy.branchNo
+              : HEAD_OFFICE_BRANCH_NO,
+        },
+      ];
+  db.branches = branches.map(
+    (b) =>
+      ({
+        address: legacy.address,
+        phone: legacy.phone,
+        receiptFooter: legacy.receiptFooter,
+        active: true,
+        ...b,
+      }) as Branch,
+  );
+  db.nextBranchId = Math.max(...db.branches.map((b) => b.id)) + 1;
   return true;
+}
+
+/** The branch of the request (`X-Branch-Id`; none / unknown = the first, the request may still be refused). */
+function requestBranch(db: MockDb): Branch {
+  return db.branches.find((b) => String(b.id) === branchHeader?.trim()) ?? db.branches[0];
 }
 
 function ok<T>(body: T): Observable<HttpResponse<T>> {

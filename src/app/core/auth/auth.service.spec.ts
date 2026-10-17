@@ -14,6 +14,9 @@ describe('AuthService', () => {
     code: `B${id}`,
     name: `สาขา ${id}`,
     branchNo: String(id - 1).padStart(5, '0'),
+    address: '',
+    phone: '',
+    receiptFooter: '',
     active,
   });
   const response = (branches: Branch[] = [branch(1)]): LoginResponse => ({

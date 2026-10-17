@@ -37,9 +37,15 @@ import { ThisTerminal } from '../../components/this-terminal/this-terminal';
     <mat-card appearance="outlined" class="section">
       <mat-card-header>
         <mat-card-title>ข้อมูลร้าน (หัว/ท้ายใบเสร็จ)</mat-card-title>
+        <mat-card-subtitle
+          >{{ auth.company()?.name }} · {{ auth.currentBranch()?.name }}</mat-card-subtitle
+        >
       </mat-card-header>
       <mat-card-content>
-        <app-store-info-form [editable]="auth.user()?.role === 'admin'" />
+        <app-store-info-form
+          [companyEditable]="auth.isCompanyAdmin()"
+          [branchEditable]="auth.isAdmin()"
+        />
       </mat-card-content>
     </mat-card>
 

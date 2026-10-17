@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  Branch,
+  BranchPayload,
   Category,
   CategoryPayload,
   PaymentMethod,
@@ -72,6 +74,18 @@ export class MasterDataApi {
 
   removePaymentMethod(id: number): Observable<void> {
     return this.api.delete(`payment-methods/${id}`);
+  }
+
+  branches(): Observable<Branch[]> {
+    return this.api.get<Branch[]>('branches');
+  }
+
+  createBranch(branch: BranchPayload): Observable<Branch> {
+    return this.api.post<Branch>('branches', branch);
+  }
+
+  updateBranch(id: number, branch: BranchPayload): Observable<Branch> {
+    return this.api.put<Branch>(`branches/${id}`, branch);
   }
 
   posTerminals(): Observable<PosTerminal[]> {

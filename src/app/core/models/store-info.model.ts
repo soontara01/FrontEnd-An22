@@ -1,4 +1,5 @@
-import { BranchType, isValidThaiTaxId } from './supplier.model';
+import { branchDetailsError, companyInfoError, companyInfoOf } from './company.model';
+import { BranchType } from './supplier.model';
 
 /**
  * The store's own details printed on receipts (decided 2026-10-04, edited in the Settings menu).
@@ -63,37 +64,18 @@ export const receiptTitle = (s: Pick<StoreInfo, 'vatRegistered'>): string =>
 export const placeName = (s: Pick<StoreInfo, 'name' | 'placeName'>): string =>
   s.placeName || s.name;
 
-/** The single rule for the settings form and the server. Thai message or null. */
+/**
+ * A whole `StoreInfo` (transition `PUT /settings/store`): the company rule, then the branch details
+ * — same messages as the two settings forms (E11).
+ */
 export function storeInfoError(s: StoreInfo): string | null {
-  if (!s.name.trim()) return 'กรุณากรอกชื่อร้าน';
   if (s.placeName.length > 100) return 'ชื่อสถานประกอบการต้องไม่เกิน 100 ตัวอักษร';
-  if (s.vatRegistered && !isValidThaiTaxId(s.taxId)) {
-    return 'เลขประจำตัวผู้เสียภาษีต้องเป็น 13 หลักที่ถูกต้อง';
-  }
-  if (s.taxId && !isValidThaiTaxId(s.taxId)) return 'เลขประจำตัวผู้เสียภาษีไม่ถูกต้อง';
   if (s.branchType === 'branch' && !/^\d{5}$/.test(s.branchNo)) {
     return 'เลขที่สาขาต้องเป็นตัวเลข 5 หลัก';
   }
-  if (!s.address.trim()) return 'กรุณากรอกที่อยู่';
-  if (s.receiptFooter.length > 200) return 'ข้อความท้ายใบเสร็จต้องไม่เกิน 200 ตัวอักษร';
-  if (s.taxInvoicePaper !== 'A4' && s.taxInvoicePaper !== '80mm') {
-    return 'ขนาดกระดาษใบกำกับภาษีไม่ถูกต้อง';
-  }
-  if (!Number.isInteger(s.exchangeDays) || s.exchangeDays < 0 || s.exchangeDays > 365) {
-    return 'จำนวนวันเปลี่ยนสินค้าต้องเป็นจำนวนเต็ม 0–365';
-  }
-  const max = s.manualDiscountMaxPercent;
-  if (!Number.isFinite(max) || max < 0 || max > 100) {
-    return 'เพดานส่วนลดพิเศษต้องอยู่ระหว่าง 0–100%';
-  }
-  const limit = s.shiftVarianceLimit;
-  if (!Number.isFinite(limit) || limit < 0 || limit > 100_000) {
-    return 'เกณฑ์ส่วนต่างปิดกะต้องอยู่ระหว่าง 0–100,000 บาท';
-  }
-  if (!Number.isInteger(s.shiftMaxHours) || s.shiftMaxHours < 1 || s.shiftMaxHours > 48) {
-    return 'ชั่วโมงเตือนกะเปิดค้างต้องเป็นจำนวนเต็ม 1–48';
-  }
-  return null;
+  return (
+    companyInfoError(companyInfoOf(s)) ?? branchDetailsError({ ...s, name: s.placeName || s.name })
+  );
 }
 
 /** Trims text fields and clears the branch number of a head office. */

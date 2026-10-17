@@ -9,6 +9,8 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
+  Branch,
+  CompanyInfo,
   LoginResponse,
   MeResponse,
   MenuAccess,
@@ -1950,8 +1952,10 @@ describe('mockBackendInterceptor – auth (B3)', () => {
     const session = await login(' demo ', 'admin', 'admin');
     expect(session.company).toMatchObject({ id: 1, code: 'DEMO', active: true });
     expect(session.company.name).toBe(SEED_STORE_INFO.name);
-    expect(session.branches).toEqual([
-      { id: 1, code: 'HQ', name: expect.any(String), branchNo: '00000', active: true },
+    // seed: HQ + BN, the admin has every branch
+    expect(session.branches.map((b) => [b.code, b.branchNo])).toEqual([
+      ['HQ', '00000'],
+      ['BN', '00001'],
     ]);
     const me = await call<MeResponse>('GET', 'me', undefined, session.token);
     expect(me).toEqual({
@@ -2136,6 +2140,132 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
     ]);
     expect(await asBoss('PUT', 'users/2/password', { password: '4321' })).toBeNull();
     expect(await asBoss('PUT', 'users/2', { name: 'สมชาย' })).toBeNull();
+  });
+});
+
+describe('mockBackendInterceptor – company / branch settings (E11)', () => {
+  let http: HttpClient;
+  const call = <T>(
+    method: string,
+    url: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ) => firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('prints each branch with the company details (storeInfo = company + branch)', async () => {
+    const hq = await call<StoreInfo>('GET', 'settings/store', undefined, { 'X-Branch-Id': '1' });
+    const bn = await call<StoreInfo>('GET', 'settings/store', undefined, { 'X-Branch-Id': '2' });
+    expect(hq).toMatchObject({ name: SEED_STORE_INFO.name, branchType: 'head', branchNo: '' });
+    expect(bn).toMatchObject({
+      name: SEED_STORE_INFO.name,
+      branchType: 'branch',
+      branchNo: '00001',
+    });
+    expect(bn.address).toContain('บางนา');
+    expect(localStorage.getItem('an22.mock.db')).not.toContain('"storeInfo"');
+  });
+
+  it('edits company settings, the current branch and the branch list', async () => {
+    const company = await call<CompanyInfo>('GET', 'settings/company');
+    await call('PUT', 'settings/company', { ...company, exchangeDays: 14 });
+    expect((await call<StoreInfo>('GET', 'settings/store')).exchangeDays).toBe(14);
+    expect(await failure(call('PUT', 'settings/company', { ...company, name: '' }))).toEqual([
+      400,
+      'กรุณากรอกชื่อร้าน',
+    ]);
+
+    await call('PUT', 'settings/branch', { receiptFooter: 'ขอบคุณ BN' }, { 'X-Branch-Id': '2' });
+    const bn = await call<StoreInfo>('GET', 'settings/store', undefined, { 'X-Branch-Id': '2' });
+    expect(bn.receiptFooter).toBe('ขอบคุณ BN');
+
+    const branch = await call<Branch>('POST', 'branches', {
+      code: 'cm1',
+      name: 'สาขาเชียงใหม่',
+      branchNo: '00002',
+      address: 'เชียงใหม่',
+    });
+    expect(branch).toMatchObject({
+      id: 3,
+      code: 'CM1',
+      active: true,
+      receiptFooter: 'ขอบคุณที่ใช้บริการ',
+    });
+    expect(await failure(call('POST', 'branches', { ...branch, code: 'X2' }))).toEqual([
+      400,
+      'เลขที่สาขานี้มีอยู่แล้ว',
+    ]);
+    await call('PUT', 'branches/3', { active: false });
+    expect((await call<Branch[]>('GET', 'branches')).map((b) => b.active)).toEqual([
+      true,
+      true,
+      false,
+    ]);
+  });
+
+  it('keeps company-level work to company admins (E6)', async () => {
+    const boss = await call<User>('POST', 'users', {
+      username: 'boss',
+      name: 'ผู้จัดการบางนา',
+      email: '',
+      role: 'admin',
+      active: true,
+      branchIds: [2],
+      allBranches: false,
+      password: '5678',
+    });
+    const asBoss = (method: string, url: string, body?: unknown, branch = '2') =>
+      failure(
+        call(method, url, body, {
+          Authorization: `Bearer ${mockToken(1, boss.id)}`,
+          'X-Branch-Id': branch,
+        }),
+      );
+    const companyOnly = [403, 'ทำได้เฉพาะผู้ดูแลระบบระดับบริษัท (ทุกสาขา)'];
+    const company = await call<CompanyInfo>('GET', 'settings/company');
+    expect(await asBoss('PUT', 'settings/company', company)).toEqual(companyOnly);
+    expect(await asBoss('PUT', 'branches/2', { name: 'x' })).toEqual(companyOnly);
+    expect(await asBoss('POST', 'branches', {})).toEqual(companyOnly);
+    // their own branch's details: yes; another branch: refused by X-Branch-Id
+    expect(await asBoss('PUT', 'settings/branch', { phone: '02-000-0000' })).toBeNull();
+    expect(await asBoss('PUT', 'settings/branch', { phone: '1' }, '1')).toEqual([
+      403,
+      'ไม่มีสิทธิ์ทำงานในสาขานี้',
+    ]);
+  });
+
+  it('splits an older stored store into company settings + branch details once', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        storeInfo: {
+          ...SEED_STORE_INFO,
+          name: 'ร้านเก่า',
+          address: 'ที่อยู่เก่า',
+          exchangeDays: 3,
+        },
+        branches: [{ id: 1, code: 'HQ', name: 'หน้าร้าน', branchNo: '00000', active: true }],
+      }),
+    );
+    expect(await call<Branch[]>('GET', 'branches')).toEqual([
+      expect.objectContaining({ code: 'HQ', name: 'หน้าร้าน', address: 'ที่อยู่เก่า' }),
+    ]);
+    expect(await call<CompanyInfo>('GET', 'settings/company')).toMatchObject({
+      name: 'ร้านเก่า',
+      exchangeDays: 3,
+    });
   });
 });
 

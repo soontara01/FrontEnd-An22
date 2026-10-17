@@ -2,7 +2,6 @@ import { DOCUMENT, Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../http/api.service';
 import type { Branch, Company, LoginRequest, LoginResponse, User } from '../models';
-import { normalizeCompanyCode } from '../models/company.model';
 import { StorageService } from '../services/storage.service';
 
 const TOKEN_KEY = 'token';
@@ -81,7 +80,8 @@ export class AuthService {
 
   /** Remembers (or with '' forgets — "เปลี่ยน" on the login page) the company code. */
   setCompanyCode(code: string): void {
-    const value = normalizeCompanyCode(code);
+    // = `normalizeCompanyCode()` (company.model.ts), inlined to keep that file out of the initial bundle
+    const value = code.trim().toUpperCase();
     this._companyCode.set(value);
     if (value) this.storage.set(COMPANY_CODE_KEY, value);
     else this.storage.remove(COMPANY_CODE_KEY);

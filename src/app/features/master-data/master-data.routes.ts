@@ -1,9 +1,11 @@
 import { Routes } from '@angular/router';
+import { BranchStore } from './data/branch.store';
 import { CategoryStore } from './data/category.store';
 import { MasterDataApi } from './data/master-data-api.service';
 import { PaymentMethodStore } from './data/payment-method.store';
 import { PosTerminalStore } from './data/pos-terminal.store';
 import { SupplierStore } from './data/supplier.store';
+import BranchList from './pages/branch-list/branch-list';
 import CategoryTree from './pages/category-tree/category-tree';
 import MasterDataShell from './pages/master-data-shell/master-data-shell';
 import PaymentMethodList from './pages/payment-method-list/payment-method-list';
@@ -20,7 +22,14 @@ export default [
     path: '',
     component: MasterDataShell,
     // Feature-scoped services: created once per page load of this menu.
-    providers: [MasterDataApi, CategoryStore, SupplierStore, PaymentMethodStore, PosTerminalStore],
+    providers: [
+      MasterDataApi,
+      CategoryStore,
+      SupplierStore,
+      PaymentMethodStore,
+      PosTerminalStore,
+      BranchStore,
+    ],
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'categories' },
       { path: 'categories', title: 'หมวดหมู่สินค้า', component: CategoryTree },
@@ -29,6 +38,7 @@ export default [
       { path: 'suppliers/:id/edit', title: 'แก้ไขผู้จำหน่าย', component: SupplierForm },
       { path: 'payment-methods', title: 'ช่องทางชำระเงิน', component: PaymentMethodList },
       { path: 'terminals', title: 'เครื่อง POS', component: PosTerminalList },
+      { path: 'branches', title: 'สาขา', component: BranchList },
     ],
   },
 ] satisfies Routes;

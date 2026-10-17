@@ -2,7 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { StoreInfo, STORE_INFO_DEFAULTS, normalizeStoreInfo, storeInfoError } from '@core/models';
+import {
+  BRANCH_DEFAULTS,
+  Branch,
+  COMPANY_INFO_DEFAULTS,
+  branchDetailsError,
+  companyInfoError,
+  normalizeBranch,
+  normalizeCompanyInfo,
+  storeInfoOf,
+} from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { Receipt } from '@shared/components/receipt/receipt';
 import { TaxInvoiceDocument } from '@shared/components/tax-invoice/tax-invoice-document';
@@ -13,8 +22,9 @@ import { SettingsApi } from '../../data/settings-api.service';
 import { SAMPLE_INVOICE, SAMPLE_SALE } from './sample-sale';
 
 /**
- * Store details printed on POS receipts, with a live preview of the receipt or the full tax
- * invoice on the selected paper. Admins only may edit.
+ * What documents print, in two parts (E11): the company (seller, VAT, shared rules incl. shifts —
+ * company admins edit) and this branch (business-place name, address, phone, receipt footer —
+ * the branch's admins edit), with a live preview of the receipt or the full tax invoice.
  */
 @Component({
   selector: 'app-store-info-form',
@@ -31,40 +41,64 @@ import { SAMPLE_INVOICE, SAMPLE_SALE } from './sample-sale';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class StoreInfoForm {
-  /** Only admins may change the receipt details */
-  readonly editable = input(false);
+  /** A company admin may change the company part (E6) */
+  readonly companyEditable = input(false);
+  /** An admin of this branch may change its details */
+  readonly branchEditable = input(false);
 
   private readonly api = inject(SettingsApi);
   private readonly notify = inject(NotificationService);
+  private readonly fb = inject(NonNullableFormBuilder);
 
   protected readonly sample = SAMPLE_SALE;
   protected readonly sampleInvoice = SAMPLE_INVOICE;
-  protected readonly loaded = signal(false);
-  protected readonly saving = signal(false);
+  protected readonly companyLoaded = signal(false);
+  protected readonly branchLoaded = signal(false);
+  protected readonly savingCompany = signal(false);
+  protected readonly savingBranch = signal(false);
+  /** Code / number / status of this branch (edited in ข้อมูลหลัก → สาขา) */
+  protected readonly branch = signal<Branch | null>(null);
 
-  protected readonly form = inject(NonNullableFormBuilder).group({
+  protected readonly company = this.fb.group({
     name: '',
-    placeName: '',
     vatRegistered: true,
     taxId: '',
-    branchType: STORE_INFO_DEFAULTS.branchType,
-    branchNo: '',
-    address: '',
-    phone: '',
-    receiptFooter: '',
-    taxInvoicePaper: STORE_INFO_DEFAULTS.taxInvoicePaper,
-    exchangeDays: STORE_INFO_DEFAULTS.exchangeDays,
-    manualDiscountMaxPercent: STORE_INFO_DEFAULTS.manualDiscountMaxPercent,
-    requireShift: STORE_INFO_DEFAULTS.requireShift,
-    shiftVarianceLimit: STORE_INFO_DEFAULTS.shiftVarianceLimit,
-    shiftMaxHours: STORE_INFO_DEFAULTS.shiftMaxHours,
+    taxInvoicePaper: COMPANY_INFO_DEFAULTS.taxInvoicePaper,
+    exchangeDays: COMPANY_INFO_DEFAULTS.exchangeDays,
+    manualDiscountMaxPercent: COMPANY_INFO_DEFAULTS.manualDiscountMaxPercent,
+    requireShift: COMPANY_INFO_DEFAULTS.requireShift,
+    shiftVarianceLimit: COMPANY_INFO_DEFAULTS.shiftVarianceLimit,
+    shiftMaxHours: COMPANY_INFO_DEFAULTS.shiftMaxHours,
   });
 
-  private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
-  protected readonly info = computed(() =>
-    normalizeStoreInfo({ ...STORE_INFO_DEFAULTS, ...this.value() } as StoreInfo),
+  protected readonly details = this.fb.group({
+    name: '',
+    address: '',
+    phone: '',
+    receiptFooter: BRANCH_DEFAULTS.receiptFooter,
+  });
+
+  private readonly companyValue = toSignal(this.company.valueChanges, {
+    initialValue: this.company.value,
+  });
+  private readonly detailsValue = toSignal(this.details.valueChanges, {
+    initialValue: this.details.value,
+  });
+  protected readonly companyInfo = computed(() =>
+    normalizeCompanyInfo({ ...COMPANY_INFO_DEFAULTS, ...this.companyValue() }),
   );
-  protected readonly problem = computed(() => storeInfoError(this.info()));
+  protected readonly branchDetails = computed(() =>
+    normalizeBranch({ ...BRANCH_DEFAULTS, name: '', ...this.detailsValue() }),
+  );
+  protected readonly companyProblem = computed(() => companyInfoError(this.companyInfo()));
+  protected readonly branchProblem = computed(() => branchDetailsError(this.branchDetails()));
+  /** What the documents of this branch print */
+  protected readonly info = computed(() =>
+    storeInfoOf(this.companyInfo(), {
+      ...this.branchDetails(),
+      branchNo: this.branch()?.branchNo ?? '00000',
+    }),
+  );
 
   protected readonly previewPick = signal<'receipt' | 'invoice'>('receipt');
   /** A store without VAT registration issues no full tax invoice → receipt only */
@@ -76,26 +110,50 @@ export class StoreInfoForm {
   );
 
   constructor() {
-    this.api.storeInfo().subscribe({
+    this.api.companyInfo().subscribe({
       next: (info) => {
-        this.form.reset(info);
-        this.loaded.set(true);
-        if (!this.editable()) this.form.disable();
+        this.company.reset(info);
+        this.companyLoaded.set(true);
+        if (!this.companyEditable()) this.company.disable();
       },
+      error: httpErrorShown,
+    });
+    this.api.branch().subscribe({
+      next: (branch) => this.setBranch(branch),
       error: httpErrorShown,
     });
   }
 
-  protected save(): void {
-    if (this.problem() || this.saving() || !this.editable()) return;
-    this.saving.set(true);
-    this.api.saveStoreInfo(this.info()).subscribe({
+  protected saveCompany(): void {
+    if (this.companyProblem() || this.savingCompany() || !this.companyEditable()) return;
+    this.savingCompany.set(true);
+    this.api.saveCompanyInfo(this.companyInfo()).subscribe({
       next: (info) => {
-        this.form.reset(info);
-        this.saving.set(false);
-        this.notify.success('บันทึกข้อมูลร้านแล้ว');
+        this.company.reset(info);
+        this.savingCompany.set(false);
+        this.notify.success('บันทึกข้อมูลบริษัทแล้ว');
       },
-      error: () => this.saving.set(false),
+      error: () => this.savingCompany.set(false),
     });
+  }
+
+  protected saveBranch(): void {
+    if (this.branchProblem() || this.savingBranch() || !this.branchEditable()) return;
+    this.savingBranch.set(true);
+    this.api.saveBranch(this.branchDetails()).subscribe({
+      next: (branch) => {
+        this.setBranch(branch);
+        this.savingBranch.set(false);
+        this.notify.success('บันทึกข้อมูลสาขาแล้ว');
+      },
+      error: () => this.savingBranch.set(false),
+    });
+  }
+
+  private setBranch(branch: Branch): void {
+    this.branch.set(branch);
+    this.details.reset(branch);
+    this.branchLoaded.set(true);
+    if (!this.branchEditable()) this.details.disable();
   }
 }
