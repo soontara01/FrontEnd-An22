@@ -41,7 +41,7 @@ import {
   Supplier,
   User,
 } from '../models';
-import { addDaysIso, serialMovements, storeInfoError, todayIso } from '../models';
+import { addDaysIso, priceCart, serialMovements, storeInfoError, todayIso } from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backend.interceptor';
 
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
@@ -2518,6 +2518,7 @@ describe('mockBackendInterceptor – branch stock', () => {
 describe('mockBackendInterceptor – selling per branch', () => {
   let http: HttpClient;
   const NOTEBOOK = 1; // serial: HQ 12 units, BN 2
+  const MOUSE = 2; // HQ 3 at 350, BN 8 at 380
   const CASH = 1;
   /** Branch + its POS terminal (seed: terminals 1–2 at HQ, 3 at BN) */
   const HQ = { branch: '1', terminal: '1' };
@@ -2549,18 +2550,25 @@ describe('mockBackendInterceptor – selling per branch', () => {
     );
   const serials = (at: At) => call<SerialNumber[]>('GET', `products/${NOTEBOOK}/serials`, at);
   const product = (id: number, at: At) => call<Product>('GET', `products/${id}`, at);
-  /** One unit at the price the server computes (the first try tells the total). */
+  /** One unit, priced like the POS does (`priceCart()` with the branch's promotions), paid in cash. */
   async function sell(at: At, productId: number, serial: string | null = null): Promise<Sale> {
-    const body = (expectedTotal: number) => ({
-      items: [{ productId, factor: 1, qty: 1, serial }],
+    const items = [{ productId, factor: 1, qty: 1, serial }];
+    const cart = priceCart(items, {
+      products: await call<Product[]>('GET', 'products', at),
+      promotions: await call<Promotion[]>('GET', 'promotions', at),
+      categories: await call<Category[]>('GET', 'categories', at),
+      date: todayIso(),
+      vatRegistered: true,
+      branchId: Number(at.branch),
+    });
+    const cash = Math.ceil(cart.total);
+    return call<Sale>('POST', 'sales', at, {
+      items,
       freeSerials: [],
       customer: '',
-      expectedTotal,
-      payments: [{ methodId: CASH, amount: expectedTotal, reference: '', installmentMonths: null }],
+      expectedTotal: cart.total,
+      payments: [{ methodId: CASH, amount: cash, reference: '', installmentMonths: null }],
     });
-    const products = await call<Product[]>('GET', 'products', at);
-    const price = products.find((p) => p.id === productId)!.currentPrice!;
-    return call<Sale>('POST', 'sales', at, body(price));
   }
 
   it('lists and sells only the serials of the branch (E16)', async () => {
@@ -2586,6 +2594,40 @@ describe('mockBackendInterceptor – selling per branch', () => {
         }),
       ),
     ).toBe('มี Serial ที่ไม่อยู่ในคลังแล้ว กรุณาโหลดใหม่');
+  });
+
+  it('sells and voids at BN out of / back into BN stock only; HQ cannot void it (E12, D3)', async () => {
+    const sale = await sell(BN, MOUSE);
+    expect(sale).toMatchObject({ branchId: 2, orderNo: 'POS3-20261017-0001' });
+    expect(sale.lines[0].cogs).toBe(380);
+    expect((await product(MOUSE, BN)).stock).toBe(7);
+    expect((await product(MOUSE, HQ)).stock).toBe(3);
+    expect(
+      await errorOf(call('POST', `sales/${sale.id}/void`, HQ, { reason: 'ลูกค้าเปลี่ยนใจ' })),
+    ).toBe('บิลนี้ขายที่สาขา BN — ยกเลิกได้ที่สาขานั้น');
+    await call('POST', `sales/${sale.id}/void`, BN, { reason: 'ลูกค้าเปลี่ยนใจ' });
+    expect(await product(MOUSE, BN)).toEqual(expect.objectContaining({ stock: 8, avgCost: 380 }));
+    const card = await call<StockCardResult>('GET', `products/${MOUSE}/movements`, BN);
+    expect(card.movements.map((m) => [m.type, m.qty, m.branchId])).toEqual([
+      ['issue', -1, 2],
+      ['receive', 1, 2],
+    ]);
+    expect((await call<StockCardResult>('GET', `products/${MOUSE}/movements`)).movements).toEqual(
+      [],
+    );
+  });
+
+  it('returns a serial sold at BN into BN stock on void', async () => {
+    const [unit] = await serials(BN);
+    const sale = await sell(BN, NOTEBOOK, unit.serial);
+    expect((await product(NOTEBOOK, BN)).stock).toBe(1);
+    await call('POST', `sales/${sale.id}/void`, BN, { reason: 'x' });
+    expect((await serials(BN)).find((s) => s.id === unit.id)).toMatchObject({
+      status: 'in_stock',
+      branchId: 2,
+    });
+    expect((await product(NOTEBOOK, BN)).stock).toBe(2);
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(12);
   });
 
   it('moves a serial by issuing it at HQ and receiving it at BN (E16, before transfers)', async () => {

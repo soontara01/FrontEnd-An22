@@ -1,4 +1,11 @@
-import { SaleLine, isFreeLine, normalizeSale, saleDay, voidError } from './sale.model';
+import {
+  SaleLine,
+  branchMismatchError,
+  isFreeLine,
+  normalizeSale,
+  saleDay,
+  voidError,
+} from './sale.model';
 
 describe('sale model', () => {
   // Local timestamps, so the test does not depend on the machine's time zone.
@@ -19,6 +26,25 @@ describe('sale model', () => {
     expect(voidError({ ...sale, status: 'cancelled' }, 'x', '2026-10-04')).toBe(
       'ยกเลิกได้เฉพาะบิลที่ชำระแล้ว',
     );
+  });
+
+  it('voids / credits / exchanges a bill only at the branch it was sold at (D3, E12)', () => {
+    const branches = [
+      { id: 1, code: 'HQ' },
+      { id: 2, code: 'BN' },
+    ];
+    const atBn = { branchId: 2, branches };
+    const sale = { date: at(9), status: 'paid' as const, branchId: 1 };
+    expect(branchMismatchError(sale, { branchId: 1, branches }, 'ยกเลิก')).toBeNull();
+    expect(voidError(sale, 'x', '2026-10-04', atBn)).toBe(
+      'บิลนี้ขายที่สาขา HQ — ยกเลิกได้ที่สาขานั้น',
+    );
+    // A branch the user cannot see is not named; older bills (no branch) are not blocked.
+    expect(branchMismatchError(sale, { branchId: 2, branches: [] }, 'คืน')).toBe(
+      'บิลนี้ขายที่สาขาอื่น — คืนได้ที่สาขานั้น',
+    );
+    expect(voidError({ ...sale, branchId: null }, 'x', '2026-10-04', atBn)).toBeNull();
+    expect(voidError(sale, 'x', '2026-10-04', { branchId: null, branches })).toBeNull();
   });
 
   it('fills fields a stored sale or an API response may lack (B24)', () => {

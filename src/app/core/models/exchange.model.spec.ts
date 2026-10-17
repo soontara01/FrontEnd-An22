@@ -97,6 +97,10 @@ describe('exchange model', () => {
     expect(exchangeDeadline(sale, { exchangeDays: 7 })).toBe('2026-10-08');
     expect(exchangeDeadline(sale, { exchangeDays: 0 })).toBeNull();
     expect(exchangeBlocker(sale, ctx({ today: '2026-10-08' }))).toBeNull();
+    const here = { branchId: 2, branches: [{ id: 1, code: 'HQ' }] };
+    expect(exchangeBlocker({ ...sale, branchId: 1 }, ctx({ today: '2026-10-08', here }))).toBe(
+      'บิลนี้ขายที่สาขา HQ — เปลี่ยนสินค้าได้ที่สาขานั้น',
+    );
     expect(exchangeBlocker(sale, ctx({ today: '2026-10-09' }))).toBe(
       'เกินกำหนดเปลี่ยนสินค้า 7 วัน — ให้ผู้ดูแลระบบทำรายการ',
     );

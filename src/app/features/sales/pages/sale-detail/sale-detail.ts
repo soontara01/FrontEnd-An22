@@ -41,6 +41,8 @@ import {
   soldWithVat,
   voidError,
   VoidPayload,
+  BranchHere,
+  branchMismatchError,
   isFreeLine,
 } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
@@ -118,6 +120,17 @@ export default class SaleDetail {
     this.notes.hasValue() ? this.notes.value() : [],
   );
   protected readonly isAdmin = this.auth.isAdmin;
+  /** The working branch: void / credit note / exchange only at the branch of sale (D3, E12). */
+  private readonly here = computed<BranchHere>(() => ({
+    branchId: this.auth.currentBranch()?.id ?? null,
+    branches: this.auth.branches(),
+  }));
+  /** Shown when the bill belongs to another branch (its buttons are hidden). */
+  protected readonly otherBranch = computed(() =>
+    this.sale.hasValue() && this.isPos()
+      ? branchMismatchError(this.sale.value(), this.here(), 'ยกเลิก / คืน / เปลี่ยนสินค้า')
+      : null,
+  );
   protected readonly exchangesRes = rxResource({
     params: () => Number(this.id()),
     stream: ({ params }) => this.store.exchangesOf(params),
@@ -134,6 +147,7 @@ export default class SaleDetail {
       store: this.store.storeInfo() ?? STORE_INFO_DEFAULTS,
       isAdmin: this.isAdmin(),
       today: todayIso(),
+      here: this.here(),
     });
   });
   /** Credit notes are for paid POS bills from the day after the sale, with units left. */
@@ -142,6 +156,7 @@ export default class SaleDetail {
     const s = this.sale.value();
     return (
       s.status === 'paid' &&
+      !this.otherBranch() &&
       saleDay(s) !== todayIso() &&
       s.lines.some((l, i) => l.qty > creditedQty(this.creditNotes(), i))
     );
@@ -188,7 +203,7 @@ export default class SaleDetail {
 
   /** Why the bill cannot be voided (a reason is asked later, so pass a placeholder). */
   protected readonly voidBlocker = computed(() =>
-    this.sale.hasValue() ? voidError(this.sale.value(), '-', todayIso()) : null,
+    this.sale.hasValue() ? voidError(this.sale.value(), '-', todayIso(), this.here()) : null,
   );
   protected readonly isPos = computed(
     () => this.sale.hasValue() && !!this.sale.value().lines.length,

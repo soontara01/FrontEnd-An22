@@ -1,7 +1,7 @@
 import { CreditNote, remainingQty } from './credit-note.model';
 import { addDaysIso, fromIsoDate, toIsoDate } from './price.model';
 import type { Product } from './product.model';
-import { Sale, currentSerial, saleDay } from './sale.model';
+import { BranchHere, Sale, branchMismatchError, currentSerial, saleDay } from './sale.model';
 import type { StoreInfo } from './store-info.model';
 
 /**
@@ -50,6 +50,8 @@ export interface Exchange {
   lines: ExchangeLine[];
   /** Open shift of the terminal at the time, if any — counted in its report (no money moves) */
   shiftId?: number | null;
+  /** Branch it was made at (server-set, E12) — stock moves there; = the bill's for now (D3) */
+  branchId?: number | null;
   /** Terminal it was made at + its POS ID (server-set snapshot; missing = unknown) */
   terminalId?: number | null;
   posId?: string;
@@ -75,6 +77,8 @@ export interface ExchangeContext {
   store: Pick<StoreInfo, 'exchangeDays'>;
   isAdmin: boolean;
   today: string;
+  /** The working branch (server + form); the sale branch must match (D3) */
+  here?: BranchHere;
   /** Current stock of the bill's SKUs: replacements must be in stock *before* the exchange */
   products: readonly Pick<Product, 'id' | 'sku' | 'stock' | 'unit'>[];
 }
@@ -92,6 +96,8 @@ export function exchangeBlocker(sale: Sale, ctx: Omit<ExchangeContext, 'products
   if (sale.status !== 'paid' || !sale.lines.length) {
     return 'เปลี่ยนสินค้าได้เฉพาะบิลขายหน้าร้านที่ชำระแล้ว';
   }
+  const elsewhere = ctx.here && branchMismatchError(sale, ctx.here, 'เปลี่ยนสินค้า');
+  if (elsewhere) return elsewhere;
   const deadline = exchangeDeadline(sale, ctx.store);
   if (deadline && ctx.today > deadline && !ctx.isAdmin) {
     return `เกินกำหนดเปลี่ยนสินค้า ${ctx.store.exchangeDays} วัน — ให้ผู้ดูแลระบบทำรายการ`;

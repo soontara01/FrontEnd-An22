@@ -113,6 +113,7 @@ export default class ExchangeForm {
       store: this.store.storeInfo() ?? STORE_INFO_DEFAULTS,
       isAdmin: this.auth.user()?.role === 'admin',
       today: todayIso(),
+      here: { branchId: this.auth.currentBranch()?.id ?? null, branches: this.auth.branches() },
       products: this.products.hasValue() ? this.products.value() : [],
     };
   });

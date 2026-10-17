@@ -14,6 +14,7 @@ import {
   CategoryLevel,
   CategoryPayload,
   Branch,
+  BranchHere,
   BranchStock,
   Company,
   HEAD_OFFICE_BRANCH_NO,
@@ -2548,6 +2549,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     manualDiscountBy: cart.manualDiscount > 0 ? actorName() : '',
     shiftId: shift.shiftId,
     voidShiftId: null,
+    branchId: stockBranch,
     ...here,
     vatRegistered: db.storeInfo.vatRegistered,
   };
@@ -2565,6 +2567,11 @@ function nextOrderNo(db: MockDb, today: string, terminal: number): string {
     .map((s) => Number(s.orderNo.slice(prefix.length)))
     .reduce((max, n) => Math.max(max, n), 0);
   return prefix + String(last + 1).padStart(4, '0');
+}
+
+/** The request's branch for the D3 rules (void / credit note / exchange only where sold, E12). */
+function branchHere(db: MockDb): BranchHere {
+  return { branchId: stockBranch, branches: db.branches };
 }
 
 /** Code of a branch for messages ('สาขา HQ'); an unknown id shows as its number. */
@@ -2646,6 +2653,7 @@ function createCreditNote(
   };
   const exchanges = db.exchanges.filter((x) => x.saleId === sale.id);
   const problem = creditNoteError(sale, notes, payload, {
+    here: branchHere(db),
     promotions: db.promotions,
     methods: db.paymentMethods,
     today,
@@ -2743,6 +2751,7 @@ function createCreditNote(
     vat: draft.vat,
     refunds: toRefunds(payload.refunds, db.paymentMethods),
     shiftId: shift.shiftId,
+    branchId: stockBranch,
     ...terminalSnapshot(db),
     ...(soldWithVat(sale) ? {} : { vatRegistered: false }),
   };
@@ -2771,6 +2780,7 @@ function createExchange(
     reason: (body.reason ?? '').trim(),
   };
   const problem = exchangeError(sale, payload, {
+    here: branchHere(db),
     creditNotes: db.creditNotes.filter((n) => n.saleId === sale.id),
     exchanges,
     store: db.storeInfo,
@@ -2892,6 +2902,7 @@ function createExchange(
     lines,
     // No money moves, so no shift is required; an open one counts it in its report.
     shiftId: db.storeInfo.requireShift ? (openShiftOf(db, terminalId)?.id ?? null) : null,
+    branchId: stockBranch,
     ...terminalSnapshot(db),
   };
   db.exchanges.push(created);
@@ -2955,7 +2966,7 @@ function voidSale(
   approvedBy: string | null,
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
-  const problem = voidError(sale, reason, todayIso());
+  const problem = voidError(sale, reason, todayIso(), branchHere(db));
   if (problem) return error(400, problem);
   // The money goes back out of the drawer of the shift the void is made in.
   const shift = moneyShift(db, 'void');

@@ -1,3 +1,4 @@
+import type { Branch } from './company.model';
 import type { Exchange } from './exchange.model';
 import type { PaymentType } from './payment-method.model';
 import { toIsoDate } from './price.model';
@@ -145,6 +146,11 @@ export interface Sale {
   voidedBy?: string | null;
   /** Admin who approved a non-admin's void at the terminal (server-set; null = voided by an admin) */
   voidApprovedBy?: string | null;
+  /**
+   * Branch the bill was sold at (server-set from `X-Branch-Id`, E12; older data = the first branch).
+   * Void / credit notes / exchanges happen only there (D3, `branchMismatchError()`).
+   */
+  branchId?: number | null;
   /** Terminal (POS device) the bill was made at (server-set snapshot; missing = before the registry) */
   terminalId?: number | null;
   /** That terminal's Revenue Dept POS ID when the bill was made — printed on its receipts */
@@ -242,17 +248,44 @@ export function currentSerial(
   return swaps.at(-1)?.newSerial ?? sale.lines[index]?.serial ?? null;
 }
 
+/** The working branch (`X-Branch-Id`) and the branches whose codes a message may name. */
+export interface BranchHere {
+  branchId: number | null;
+  branches: readonly Pick<Branch, 'id' | 'code'>[];
+}
+
+/**
+ * D3 (SaaS step 3, E12): a bill is voided / credited / exchanged only at the branch it was sold at,
+ * e.g. 'บิลนี้ขายที่สาขา HQ — ยกเลิกได้ที่สาขานั้น'. A bill without a branch (older data) or an
+ * unknown working branch is not blocked here (the server refuses writes without one, E17).
+ */
+export function branchMismatchError(
+  sale: Pick<Sale, 'branchId'>,
+  here: BranchHere,
+  action: string,
+): string | null {
+  if (sale.branchId == null || here.branchId === null || sale.branchId === here.branchId) {
+    return null;
+  }
+  const code = here.branches.find((b) => b.id === sale.branchId)?.code;
+  return `บิลนี้ขายที่${code ? `สาขา ${code}` : 'สาขาอื่น'} — ${action}ได้ที่สาขานั้น`;
+}
+
 /**
  * Void rule (decided 2026-10-04), shared by the sales menu and the server: a paid bill can be
  * voided only on the day of sale and with a reason. From the next day on the sale stays as it is
  * and goods/money go back through a credit note (ใบลดหนี้) instead.
  */
 export function voidError(
-  sale: Pick<Sale, 'date' | 'status'>,
+  sale: Pick<Sale, 'date' | 'status' | 'branchId'>,
   reason: string,
   today: string,
+  /** The working branch (server + bill page); the sale branch must match (D3) */
+  here?: BranchHere,
 ): string | null {
   if (sale.status !== 'paid') return 'ยกเลิกได้เฉพาะบิลที่ชำระแล้ว';
+  const elsewhere = here && branchMismatchError(sale, here, 'ยกเลิก');
+  if (elsewhere) return elsewhere;
   if (saleDay(sale) !== today) return 'ยกเลิกได้เฉพาะบิลของวันนี้ บิลข้ามวันต้องออกใบลดหนี้';
   if (!reason.trim()) return 'กรุณาระบุเหตุผลการยกเลิก';
   return null;

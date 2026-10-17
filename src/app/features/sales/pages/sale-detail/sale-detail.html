@@ -36,6 +36,9 @@
       </button>
     }
   </app-page-header>
+  @if (otherBranch(); as message) {
+    <p class="other-branch"><mat-icon>store</mat-icon>{{ message }}</p>
+  }
 
   <div class="layout">
     <div class="main">
