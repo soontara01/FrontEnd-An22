@@ -59,7 +59,8 @@ export interface HeldBill {
   total: number;
 }
 
-const HOLDS_KEY = 'pos.holds';
+/** Bills parked before SaaS step 2 (one store): moved once into the branch that opens the POS. */
+const LEGACY_HOLDS_KEY = 'pos.holds';
 /** Id of the shift whose screen is locked (survives reloads / menu switches). */
 const LOCK_KEY = 'pos.locked';
 
@@ -88,7 +89,9 @@ export class PosStore {
   private readonly _buyer = signal<TaxInvoiceBuyer | null>(null);
   private readonly _billManual = signal<ManualDiscount | null>(null);
   private readonly _manualReason = signal('');
-  private readonly _holds = signal<HeldBill[]>(this.storage.get<HeldBill[]>(HOLDS_KEY) ?? []);
+  /** Parked bills belong to this device's company + branch (saas-plan section 3). */
+  private readonly holdsKey = `pos.held.${this.auth.company()?.id ?? 0}.${this.auth.currentBranch()?.id ?? 0}`;
+  private readonly _holds = signal<HeldBill[]>(this.loadHolds());
   private readonly _lastSale = signal<Sale | null>(null);
   private readonly _lastInvoice = signal<TaxInvoice | null>(null);
   private readonly _shift = signal<Shift | null>(null);
@@ -503,6 +506,15 @@ export class PosStore {
 
   private saveHolds(holds: HeldBill[]): void {
     this._holds.set(holds);
-    this.storage.set(HOLDS_KEY, holds);
+    this.storage.set(this.holdsKey, holds);
+  }
+
+  private loadHolds(): HeldBill[] {
+    const holds = this.storage.get<HeldBill[]>(this.holdsKey) ?? [];
+    const legacy = this.storage.get<HeldBill[]>(LEGACY_HOLDS_KEY);
+    if (!legacy) return holds;
+    this.storage.remove(LEGACY_HOLDS_KEY);
+    this.storage.set(this.holdsKey, [...holds, ...legacy]);
+    return [...holds, ...legacy];
   }
 }

@@ -1,18 +1,18 @@
 import { Routes } from '@angular/router';
-import { adminGuard, authGuard, guestGuard, menuGuard } from '@core/auth/auth.guard';
+import { adminGuard, authGuard, branchGuard, menuGuard } from '@core/auth/auth.guard';
 import { MENU } from '@core/navigation/menu.config';
 
 export const routes: Routes = [
   {
     path: 'auth',
     loadComponent: () => import('@layout/auth-layout/auth-layout').then((m) => m.AuthLayout),
-    canMatch: [guestGuard],
+    // Guards per page: login for guests, branch choice for logged-in users (auth.routes.ts).
     loadChildren: () => import('@features/auth/auth.routes'),
   },
   {
     path: '',
     loadComponent: () => import('@layout/main-layout/main-layout').then((m) => m.MainLayout),
-    canMatch: [authGuard],
+    canMatch: [authGuard, branchGuard],
     children: [
       { path: '', pathMatch: 'full', redirectTo: MENU[0].path },
       // 1 menu = 1 lazy feature module (built from MENU)

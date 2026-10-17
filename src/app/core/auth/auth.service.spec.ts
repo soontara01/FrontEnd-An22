@@ -118,4 +118,23 @@ describe('AuthService', () => {
     service.setCompanyCode('');
     expect(localStorage.getItem('an22.companyCode')).toBeNull();
   });
+
+  it('chooses among several branches and refreshes the session from /me', () => {
+    const service = create();
+    login(service, response([branch(1), branch(2)]));
+    expect(service.currentBranch()).toBeNull();
+    service.selectBranch(9); // not allowed: ignored
+    expect(service.currentBranch()).toBeNull();
+    service.selectBranch(2);
+    expect(service.currentBranch()?.id).toBe(2);
+    expect(localStorage.getItem('an22.branch')).toBe('2');
+
+    // the admin took branch 2 away: /me drops it
+    const { user, company, branches } = response([branch(1)]);
+    const me = { user, company, branches };
+    service.refresh().subscribe();
+    http.expectOne({ method: 'GET', url: '/api/me' }).flush(me);
+    expect(service.currentBranch()?.id).toBe(1);
+    expect(service.branches().map((b) => b.id)).toEqual([1]);
+  });
 });

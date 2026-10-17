@@ -31,7 +31,33 @@
         <mat-icon>{{ menuOpen() && !isCompact() ? 'menu_open' : 'menu' }}</mat-icon>
       </button>
       <!-- Always visible so nobody sells in the wrong company / branch (saas-plan section 8). -->
-      <span class="tenant" [title]="tenantLabel()">{{ tenantLabel() }}</span>
+      @if (auth.branches().length > 1) {
+        <div class="tenant">
+          <button
+            mat-button
+            class="switch"
+            [matMenuTriggerFor]="branchMenu"
+            [title]="tenantLabel() + ' — สลับสาขา'"
+          >
+            <span class="label">{{ tenantLabel() }}</span>
+            <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+          </button>
+        </div>
+        <mat-menu #branchMenu="matMenu">
+          @for (b of auth.branches(); track b.id) {
+            <button
+              mat-menu-item
+              [disabled]="b.id === auth.currentBranch()?.id"
+              (click)="switchBranch(b.id)"
+            >
+              <mat-icon>{{ b.id === auth.currentBranch()?.id ? 'check' : 'store' }}</mat-icon>
+              <span>{{ b.code }} · {{ b.name }}</span>
+            </button>
+          }
+        </mat-menu>
+      } @else {
+        <span class="tenant" [title]="tenantLabel()">{{ tenantLabel() }}</span>
+      }
 
       <button
         mat-icon-button

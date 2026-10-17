@@ -146,9 +146,9 @@ describe('PosStore', () => {
     expect(store.customer()).toBe('');
     const [held] = store.holds();
     expect(held).toMatchObject({ customer: 'คุณเอ', total: 100 });
-    expect(JSON.parse(localStorage.getItem('an22.pos.holds') ?? '[]') as HeldBill[]).toHaveLength(
-      1,
-    );
+    expect(
+      JSON.parse(localStorage.getItem('an22.pos.held.0.0') ?? '[]') as HeldBill[],
+    ).toHaveLength(1);
 
     store.add(1, 10);
     store.resume(held.id);

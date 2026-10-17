@@ -4,19 +4,27 @@ import { Route, UrlSegment, UrlTree, provideRouter } from '@angular/router';
 import { Observable, firstValueFrom, of } from 'rxjs';
 import { MenuAccessService } from '../navigation/menu-access.service';
 import { NotificationService } from '../services/notification.service';
-import { adminGuard, adminGuardTo, authGuard, guestGuard, menuGuard } from './auth.guard';
+import {
+  adminGuard,
+  adminGuardTo,
+  authGuard,
+  branchGuard,
+  guestGuard,
+  menuGuard,
+} from './auth.guard';
 import { AuthService } from './auth.service';
 
 describe('auth guards', () => {
   const isLoggedIn = signal(false);
   const isAdmin = signal(false);
+  const currentBranch = signal<{ id: number } | null>(null);
   const notify = { error: vi.fn() };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: AuthService, useValue: { isLoggedIn, isAdmin } },
+        { provide: AuthService, useValue: { isLoggedIn, isAdmin, currentBranch } },
         { provide: NotificationService, useValue: notify },
         {
           provide: MenuAccessService,
@@ -44,6 +52,13 @@ describe('auth guards', () => {
   it('authGuard allows when logged in', () => {
     isLoggedIn.set(true);
     expect(run(authGuard)).toBe(true);
+  });
+
+  it('branchGuard sends a session without a working branch to the branch page', () => {
+    currentBranch.set(null);
+    expect(String(run(branchGuard))).toBe('/auth/select-branch');
+    currentBranch.set({ id: 2 });
+    expect(run(branchGuard)).toBe(true);
   });
 
   it('guestGuard redirects home when logged in', () => {

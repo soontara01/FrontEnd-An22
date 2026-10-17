@@ -44,6 +44,13 @@ export const menuGuard =
     );
   };
 
+/**
+ * The main app needs a working branch (`X-Branch-Id`): logged in with several branches and none
+ * chosen on this device → the branch page.
+ */
+export const branchGuard: CanMatchFn = () =>
+  !!inject(AuthService).currentBranch() || inject(Router).createUrlTree(['/auth/select-branch']);
+
 /** Matches only when logged out (login page); otherwise redirects home. */
 export const guestGuard: CanMatchFn = () =>
   !inject(AuthService).isLoggedIn() || inject(Router).createUrlTree(['/']);

@@ -33,6 +33,18 @@
   white-space: nowrap;
   font: var(--mat-sys-title-small);
   color: var(--mat-sys-on-surface-variant);
+
+  .switch {
+    max-width: 100%;
+    color: inherit;
+    font: inherit;
+  }
+
+  .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .progress {

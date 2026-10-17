@@ -1,7 +1,7 @@
 import { DOCUMENT, Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../http/api.service';
-import type { Branch, Company, LoginRequest, LoginResponse, User } from '../models';
+import type { Branch, Company, LoginRequest, LoginResponse, MeResponse, User } from '../models';
 import { StorageService } from '../services/storage.service';
 
 const TOKEN_KEY = 'token';
@@ -61,21 +61,43 @@ export class AuthService {
 
   login(credentials: LoginRequest): Observable<LoginResponse> {
     return this.api.post<LoginResponse>('auth/login', credentials).pipe(
-      tap(({ token, user, company, branches }) => {
-        this.storage.set(TOKEN_KEY, token);
-        this.storage.set(USER_KEY, user);
-        this.storage.set(COMPANY_KEY, company);
-        this.storage.set(BRANCHES_KEY, branches);
-        this._token.set(token);
-        this._user.set(user);
-        this._company.set(company);
-        this._branches.set(branches);
-        this.setCompanyCode(company.code);
-        const branchId = pickBranch(branches, this.storage.get<number>(BRANCH_KEY));
-        this._branchId.set(branchId);
-        if (branchId !== null) this.storage.set(BRANCH_KEY, branchId);
+      tap((session) => {
+        this.storage.set(TOKEN_KEY, session.token);
+        this._token.set(session.token);
+        this.setSession(session);
+        this.setCompanyCode(session.company.code);
       }),
     );
+  }
+
+  /**
+   * Reloads user / company / branches (`GET /me`, once per page load and on the branch page):
+   * role or branch rights changed by an admin take effect; a branch no longer allowed is dropped.
+   */
+  refresh(): Observable<MeResponse> {
+    return this.api.get<MeResponse>('me').pipe(tap((session) => this.setSession(session)));
+  }
+
+  /**
+   * Works in this branch from now on (saved on the device). The caller reloads the page: every
+   * menu's state belongs to one branch.
+   */
+  selectBranch(id: number): void {
+    if (!this._branches().some((b) => b.id === id && b.active)) return;
+    this._branchId.set(id);
+    this.storage.set(BRANCH_KEY, id);
+  }
+
+  private setSession({ user, company, branches }: MeResponse): void {
+    this.storage.set(USER_KEY, user);
+    this.storage.set(COMPANY_KEY, company);
+    this.storage.set(BRANCHES_KEY, branches);
+    this._user.set(user);
+    this._company.set(company);
+    this._branches.set(branches);
+    const branchId = pickBranch(branches, this.storage.get<number>(BRANCH_KEY));
+    this._branchId.set(branchId);
+    if (branchId !== null) this.storage.set(BRANCH_KEY, branchId);
   }
 
   /** Remembers (or with '' forgets — "เปลี่ยน" on the login page) the company code. */
@@ -104,7 +126,7 @@ export class AuthService {
   }
 }
 
-/** The remembered branch when still allowed, else the only one, else none (chosen in step 2). */
+/** The remembered branch when still allowed, else the only one, else none (`/auth/select-branch`). */
 function pickBranch(branches: readonly Branch[], remembered: number | null): number | null {
   const active = branches.filter((b) => b.active);
   if (active.some((b) => b.id === remembered)) return remembered;
