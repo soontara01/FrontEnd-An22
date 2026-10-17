@@ -1,6 +1,11 @@
 import {
   User,
+  canWorkIn,
+  isCompanyAdmin,
   normalizeUsername,
+  passwordError,
+  userBranchError,
+  userScopeError,
   userChangeError,
   userIdentityError,
   usernameError,
@@ -70,5 +75,66 @@ describe('userIdentityError', () => {
     expect(check('somying', 'x@')).toBe('รูปแบบอีเมลไม่ถูกต้อง');
     expect(check('somying', ' Admin@Example.com')).toBe('อีเมลนี้มีผู้ใช้อื่นใช้แล้ว');
     expect(check('admin', 'admin@example.com', 1)).toBeNull();
+  });
+});
+
+describe('user branch rights and passwords', () => {
+  const branches = [
+    { id: 1, active: true },
+    { id: 2, active: true },
+    { id: 3, active: false },
+  ];
+  const admin = (allBranches: boolean, branchIds: number[] = []) => ({
+    role: 'admin' as const,
+    allBranches,
+    branchIds,
+  });
+
+  it('knows the company admin (E5) and who may work in a branch', () => {
+    expect(isCompanyAdmin(admin(true))).toBe(true);
+    expect(isCompanyAdmin(admin(false, [1]))).toBe(false);
+    expect(isCompanyAdmin({ role: 'user', allBranches: true })).toBe(false);
+    expect(canWorkIn({ allBranches: false, branchIds: [1] }, branches[0])).toBe(true);
+    expect(canWorkIn({ allBranches: false, branchIds: [1] }, branches[1])).toBe(false);
+    expect(canWorkIn({ allBranches: true, branchIds: [] }, branches[2])).toBe(false);
+  });
+
+  it('needs all branches or at least one active branch', () => {
+    expect(userBranchError({ allBranches: true, branchIds: [] }, branches)).toBeNull();
+    expect(userBranchError({ allBranches: false, branchIds: [] }, branches)).toBe(
+      'กรุณาเลือกสาขาอย่างน้อย 1 สาขา',
+    );
+    expect(userBranchError({ allBranches: false, branchIds: [1, 3] }, branches)).toBe(
+      'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว',
+    );
+    expect(userBranchError({ allBranches: false, branchIds: [2] }, branches)).toBeNull();
+  });
+
+  it('keeps a branch admin to users of their own branches (E6)', () => {
+    const branchAdmin = admin(false, [1, 2]);
+    const user = (branchIds: number[], allBranches = false) => ({ allBranches, branchIds });
+    expect(userScopeError(admin(true), user([], true), null)).toBeNull();
+    expect(userScopeError(branchAdmin, null, user([2]))).toBeNull();
+    expect(userScopeError(branchAdmin, user([1]), user([1, 2]))).toBeNull();
+    expect(userScopeError(branchAdmin, user([3]), user([1]))).toBe(
+      'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(userScopeError(branchAdmin, user([], true), null)).toBe(
+      'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(userScopeError(branchAdmin, null, user([], true))).toBe(
+      'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(userScopeError(branchAdmin, user([1]), user([1, 3]))).toBe(
+      'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+  });
+
+  it('checks a password (E10)', () => {
+    expect(passwordError('')).toBe('กรุณากรอกรหัสผ่าน');
+    expect(passwordError(' 1234')).toBe('รหัสผ่านต้องไม่ขึ้นต้นหรือลงท้ายด้วยช่องว่าง');
+    expect(passwordError('123')).toBe('รหัสผ่านต้องมีอย่างน้อย 4 ตัว');
+    expect(passwordError('x'.repeat(65))).toBe('รหัสผ่านต้องไม่เกิน 64 ตัว');
+    expect(passwordError('1234')).toBeNull();
   });
 });

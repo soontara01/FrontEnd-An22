@@ -25,6 +25,8 @@ describe('AuthService', () => {
       email: 'admin@example.com',
       role: 'admin',
       active: true,
+      branchIds: [],
+      allBranches: true,
       createdAt: '2026-01-01T00:00:00Z',
     },
     company: { id: 1, code: 'DEMO', name: 'ร้านตัวอย่าง', taxId: '', active: true },

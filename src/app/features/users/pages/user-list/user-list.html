@@ -40,6 +40,11 @@
         <td mat-cell *matCellDef="let u">{{ u.email || '-' }}</td>
       </ng-container>
 
+      <ng-container matColumnDef="branches">
+        <th mat-header-cell *matHeaderCellDef>สาขา</th>
+        <td mat-cell *matCellDef="let u">{{ branchText(u) }}</td>
+      </ng-container>
+
       <ng-container matColumnDef="role">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>สิทธิ์</th>
         <td mat-cell *matCellDef="let u">{{ u.role }}</td>
@@ -63,6 +68,16 @@
           <a mat-icon-button matTooltip="แก้ไข" [routerLink]="[u.id, 'edit']">
             <mat-icon>edit</mat-icon>
           </a>
+          <span [matTooltip]="scopeBlocker(u) || 'ตั้งรหัสผ่านใหม่'">
+            <button
+              mat-icon-button
+              aria-label="ตั้งรหัสผ่านใหม่"
+              [disabled]="!!scopeBlocker(u)"
+              (click)="setPassword(u)"
+            >
+              <mat-icon>key</mat-icon>
+            </button>
+          </span>
           <span [matTooltip]="deleteBlocker(u) || 'ลบ'">
             <button
               mat-icon-button

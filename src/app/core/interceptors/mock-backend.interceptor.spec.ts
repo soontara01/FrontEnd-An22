@@ -2009,8 +2009,18 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
       () => null,
       (e: { error: { message: string } }) => e.error.message,
     );
-  const newUser = (username: string, email = '') =>
-    call<User>('POST', 'users', { username, name: 'ทดสอบ', email, role: 'user', active: true });
+  const newUser = (username: string, email = '', extra: Record<string, unknown> = {}) =>
+    call<User>('POST', 'users', {
+      username,
+      name: 'ทดสอบ',
+      email,
+      role: 'user',
+      active: true,
+      branchIds: [1],
+      allBranches: false,
+      password: '5678',
+      ...extra,
+    });
 
   beforeEach(() => {
     localStorage.clear();
@@ -2034,7 +2044,7 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
     const login = await call<LoginResponse>('POST', 'auth/login', {
       companyCode: 'DEMO',
       username: 'somsak',
-      password: '1234',
+      password: '5678',
     });
     expect(login.user.id).toBe(user.id);
   });
@@ -2061,6 +2071,71 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
     );
     const users = await call<User[]>('GET', 'users');
     expect(users.map((u) => u.username)).toEqual(['admin', 'nok', 'nok-3', 'user4']);
+    // E9: admins get every branch, the others the first one
+    expect(users.map((u) => [u.allBranches, u.branchIds])).toEqual([
+      [true, []],
+      [false, [1]],
+      [false, [1]],
+      [false, [1]],
+    ]);
+  });
+
+  it('needs branch rights and a password for a new user; admins set new passwords (E10)', async () => {
+    expect(await errorOf(newUser('somsak', '', { branchIds: [] }))).toBe(
+      'กรุณาเลือกสาขาอย่างน้อย 1 สาขา',
+    );
+    expect(await errorOf(newUser('somsak', '', { branchIds: [9] }))).toBe(
+      'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว',
+    );
+    expect(await errorOf(newUser('somsak', '', { password: '12' }))).toBe(
+      'รหัสผ่านต้องมีอย่างน้อย 4 ตัว',
+    );
+    const user = await newUser('somsak');
+    expect(user).not.toHaveProperty('password');
+    const login = (password: string) =>
+      call<LoginResponse>('POST', 'auth/login', {
+        companyCode: 'DEMO',
+        username: 'somsak',
+        password,
+      });
+    expect((await login('5678')).branches.map((b) => b.id)).toEqual([1]);
+
+    expect(await errorOf(call('PUT', `users/${user.id}/password`, { password: ' x' }))).toBe(
+      'รหัสผ่านต้องไม่ขึ้นต้นหรือลงท้ายด้วยช่องว่าง',
+    );
+    await call('PUT', `users/${user.id}/password`, { password: 'abcd' });
+    expect(await errorOf(login('5678'))).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+    expect((await login('abcd')).user.id).toBe(user.id);
+    // the seed passwords still work until changed
+    await call('PUT', 'users/2/password', { password: '9999' });
+    expect(
+      await errorOf(
+        call('POST', 'auth/login', { companyCode: 'DEMO', username: 'somchai', password: '1234' }),
+      ),
+    ).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+  });
+
+  it('keeps a branch admin to users of their own branches (E6)', async () => {
+    const boss = await newUser('boss', '', { role: 'admin' });
+    const asBoss = (method: string, url: string, body?: unknown) =>
+      firstValueFrom(
+        http.request(method, `/api/${url}`, {
+          body,
+          headers: { Authorization: `Bearer ${mockToken(1, boss.id)}` },
+        }),
+      ).then(
+        () => null,
+        (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+      );
+    const notMine = [403, 'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท'];
+    expect(await asBoss('PUT', 'users/1/password', { password: 'hack' })).toEqual(notMine);
+    expect(await asBoss('PUT', 'users/1', { name: 'x' })).toEqual(notMine);
+    expect(await asBoss('PUT', 'users/2', { allBranches: true })).toEqual([
+      403,
+      'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    ]);
+    expect(await asBoss('PUT', 'users/2/password', { password: '4321' })).toBeNull();
+    expect(await asBoss('PUT', 'users/2', { name: 'สมชาย' })).toBeNull();
   });
 });
 

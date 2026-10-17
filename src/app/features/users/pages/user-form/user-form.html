@@ -46,7 +46,39 @@
           </mat-select>
         </mat-form-field>
 
+        @if (auth.isCompanyAdmin()) {
+          <mat-slide-toggle formControlName="allBranches"
+            >ทุกสาขา (รวมสาขาที่เพิ่มภายหลัง)</mat-slide-toggle
+          >
+        }
+        @if (!form.controls.allBranches.value) {
+          <mat-form-field appearance="outline">
+            <mat-label>สาขาที่เข้าได้</mat-label>
+            <mat-select formControlName="branchIds" multiple>
+              @for (branch of branches(); track branch.id) {
+                <mat-option [value]="branch.id">{{ branch.code }} · {{ branch.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+
+        @if (!isEdit()) {
+          <mat-form-field appearance="outline">
+            <mat-label>รหัสผ่าน</mat-label>
+            <input
+              matInput
+              type="password"
+              formControlName="password"
+              autocomplete="new-password"
+            />
+            <mat-hint>อย่างน้อย 4 ตัว</mat-hint>
+          </mat-form-field>
+        }
+
         <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
+        @if (accessProblem(); as p) {
+          <p class="problem">{{ p }}</p>
+        }
         @if (identityProblem(); as p) {
           <p class="problem">{{ p }}</p>
         }
@@ -60,7 +92,7 @@
         <button
           mat-flat-button
           type="submit"
-          [disabled]="saving() || !!problem() || !!identityProblem()"
+          [disabled]="saving() || !!problem() || !!identityProblem() || !!accessProblem()"
         >
           <mat-icon>save</mat-icon>
           บันทึก

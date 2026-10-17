@@ -1,3 +1,5 @@
+import type { Branch } from './company.model';
+
 export type UserRole = 'admin' | 'user';
 
 export interface User {
@@ -9,10 +11,70 @@ export interface User {
   email: string;
   role: UserRole;
   active: boolean;
+  /** Branches this user may work in (ignored when `allBranches`) */
+  branchIds: number[];
+  /** Every branch of the company, now and later (an admin with it = company admin, E5) */
+  allBranches: boolean;
   createdAt: string;
 }
 
 export type UserPayload = Omit<User, 'id' | 'createdAt'>;
+
+/** `POST /users`: a new user needs a password (E10); the API never returns it. */
+export type NewUserPayload = UserPayload & { password: string };
+
+/** Who may do company-level work (branches, company settings, branch-limited promotions — E5 / E6). */
+export const isCompanyAdmin = (u: Pick<User, 'role' | 'allBranches'> | null | undefined): boolean =>
+  !!u && u.role === 'admin' && u.allBranches;
+
+/** Whether the user may work in this branch (an inactive branch is never open to anyone). */
+export const canWorkIn = (
+  u: Pick<User, 'allBranches' | 'branchIds'>,
+  branch: Pick<Branch, 'id' | 'active'>,
+): boolean => branch.active && (u.allBranches || u.branchIds.includes(branch.id));
+
+/** Branch rights of a user form / `POST`·`PUT /users`: all branches or at least one active one. */
+export function userBranchError(
+  p: Pick<UserPayload, 'allBranches' | 'branchIds'>,
+  branches: readonly Pick<Branch, 'id' | 'active'>[],
+): string | null {
+  if (p.allBranches) return null;
+  if (p.branchIds.length === 0) return 'กรุณาเลือกสาขาอย่างน้อย 1 สาขา';
+  const active = new Set(branches.filter((b) => b.active).map((b) => b.id));
+  if (p.branchIds.some((id) => !active.has(id))) return 'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว';
+  return null;
+}
+
+/**
+ * E6: an admin limited to some branches manages only users within those branches, and cannot give
+ * all branches or a branch they don't have. `before` null = a new user, `after` null = a delete.
+ */
+export function userScopeError(
+  actor: Pick<User, 'role' | 'allBranches' | 'branchIds'>,
+  before: Pick<User, 'allBranches' | 'branchIds'> | null,
+  after: Pick<User, 'allBranches' | 'branchIds'> | null,
+): string | null {
+  if (isCompanyAdmin(actor)) return null;
+  const mine = new Set(actor.branchIds);
+  const within = (u: Pick<User, 'allBranches' | 'branchIds'>) =>
+    !u.allBranches && u.branchIds.every((id) => mine.has(id));
+  if (before && !within(before)) {
+    return 'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท';
+  }
+  if (after && !within(after)) {
+    return 'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท';
+  }
+  return null;
+}
+
+/** A password set by an admin (E10): 4–64 characters, no spaces at either end. */
+export function passwordError(password: string): string | null {
+  if (!password) return 'กรุณากรอกรหัสผ่าน';
+  if (password !== password.trim()) return 'รหัสผ่านต้องไม่ขึ้นต้นหรือลงท้ายด้วยช่องว่าง';
+  if (password.length < 4) return 'รหัสผ่านต้องมีอย่างน้อย 4 ตัว';
+  if (password.length > 64) return 'รหัสผ่านต้องไม่เกิน 64 ตัว';
+  return null;
+}
 
 /** The form a username is stored and compared in (trimmed, lower case). */
 export const normalizeUsername = (username: string): string => username.trim().toLowerCase();

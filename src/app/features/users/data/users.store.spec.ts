@@ -13,6 +13,8 @@ describe('UsersStore', () => {
     email: `${name}@example.com`,
     role: 'user',
     active: true,
+    branchIds: [1],
+    allBranches: false,
     createdAt: '2026-01-01T00:00:00Z',
   });
 
@@ -53,6 +55,9 @@ describe('UsersStore', () => {
       email: 'c@example.com',
       role: 'user' as const,
       active: true,
+      branchIds: [1],
+      allBranches: false,
+      password: '1234',
     };
 
     store.create(payload).subscribe();

@@ -42,6 +42,15 @@ export class AuthService {
   readonly isLoggedIn = computed(() => !!this._token() && !!this._company());
   /** Admin-only screens and buttons (the server checks the same rules → 403). */
   readonly isAdmin = computed(() => this._user()?.role === 'admin');
+  /**
+   * Admin of every branch = company-level work: branches, company settings, … (E5 / E6). Same rule
+   * as `isCompanyAdmin()` in `user.model.ts`, inlined: importing that file adds ~3 kB to the
+   * initial bundle.
+   */
+  readonly isCompanyAdmin = computed(() => {
+    const user = this._user();
+    return user?.role === 'admin' && !!user.allBranches;
+  });
   /** The working branch (sent as `X-Branch-Id`); null = not chosen yet (only one → automatic). */
   readonly currentBranch = computed(
     () => this._branches().find((b) => b.id === this._branchId()) ?? null,

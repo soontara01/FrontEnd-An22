@@ -57,10 +57,15 @@ import {
   Supplier,
   SupplierPayload,
   User,
+  NewUserPayload,
   UserPayload,
   normalizeUsername,
+  canWorkIn,
+  passwordError,
+  userBranchError,
   userChangeError,
   userIdentityError,
+  userScopeError,
   usernameError,
   allBarcodes,
   canPurchase,
@@ -214,6 +219,8 @@ interface MockDb {
   companies: StoredCompany[];
   /** Branches of the company; created once from `storeInfo` for older stored data. */
   branches: Branch[];
+  /** Passwords by user id (a real API keeps a hash); none = `admin` for the first user, else `1234` (E10). */
+  passwords: Record<number, string>;
 }
 
 type StoredCompany = Pick<Company, 'id' | 'code' | 'active'>;
@@ -229,6 +236,8 @@ const SEED_USERS: User[] = [
     email: 'admin@example.com',
     role: 'admin',
     active: true,
+    branchIds: [],
+    allBranches: true,
     createdAt: '2026-01-05T09:00:00Z',
   },
   {
@@ -238,6 +247,8 @@ const SEED_USERS: User[] = [
     email: 'somchai@example.com',
     role: 'user',
     active: true,
+    branchIds: [1],
+    allBranches: false,
     createdAt: '2026-02-11T10:30:00Z',
   },
   {
@@ -247,6 +258,8 @@ const SEED_USERS: User[] = [
     email: 'somying@example.com',
     role: 'user',
     active: false,
+    branchIds: [1],
+    allBranches: false,
     createdAt: '2026-03-20T14:15:00Z',
   },
   {
@@ -256,6 +269,8 @@ const SEED_USERS: User[] = [
     email: 'john@example.com',
     role: 'user',
     active: true,
+    branchIds: [1],
+    allBranches: false,
     createdAt: '2026-05-02T08:45:00Z',
   },
 ];
@@ -823,6 +838,7 @@ const seedDb = (): MockDb => ({
   posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
   companies: [{ id: 1, code: 'DEMO', active: true }],
   branches: [],
+  passwords: {},
 });
 
 const LATENCY_MS = 300;
@@ -867,8 +883,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
   db.shifts = db.shifts.map(normalizeShift);
-  fillUsernames(db.users);
   const branched = ensureBranch(db);
+  fillUserDefaults(db);
   db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
@@ -923,16 +939,16 @@ function handle(
     // Checks a login of the token's company without starting a session (shift approval, unlocking
     // the POS). Always a 400, never a 401: the error interceptor logs out on 401.
     const { username, password } = (req.body ?? {}) as Partial<LoginRequest>;
-    const user = actor ? checkCredentials(username, password, db.users) : WRONG_LOGIN;
+    const user = actor ? checkCredentials(username, password, db) : WRONG_LOGIN;
     return typeof user === 'string' ? error(400, user) : ok({ user });
   }
   // No fallback user: the company comes only from the token, an unknown one never passes.
   if (!actor) return error(401, 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
   // `/me` answers whatever branch the client remembers, so a stale one can be corrected (step 2).
   if (path === 'me' && req.method === 'GET') {
-    return ok({ user: actor, ...companySession(db) } satisfies MeResponse);
+    return ok({ user: actor, ...companySession(db, actor) } satisfies MeResponse);
   }
-  if (branchHeader !== null && !allowedBranch(db, branchHeader)) {
+  if (branchHeader !== null && !allowedBranch(db, actor, branchHeader)) {
     return error(403, 'ไม่มีสิทธิ์ทำงานในสาขานี้');
   }
   const forbidden = adminOnlyError(req, path);
@@ -1032,20 +1048,37 @@ function handleUsers(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   const { users } = db;
+  // Only admins reach this handler (`adminOnlyError()`).
+  const caller = actor as User;
   if (path === 'users' && req.method === 'GET') {
     return ok([...users]);
   }
   if (path === 'users' && req.method === 'POST') {
-    const body = req.body as UserPayload;
-    const problem = userIdentityError(users, body, null);
+    const { password, ...body } = withUserRules(req.body as NewUserPayload);
+    const scope = userScopeError(caller, null, body);
+    if (scope) return error(403, scope);
+    const problem =
+      userIdentityError(users, body, null) ??
+      userBranchError(body, db.branches) ??
+      passwordError(password ?? '');
     if (problem) return error(400, problem);
-    const user: User = {
-      ...withIdentity(body),
-      id: db.nextId++,
-      createdAt: new Date().toISOString(),
-    };
+    const user: User = { ...body, id: db.nextId++, createdAt: new Date().toISOString() };
     users.push(user);
+    db.passwords[user.id] = password;
     return ok(user);
+  }
+  const passwordMatch = /^users\/(\d+)\/password$/.exec(path);
+  if (passwordMatch && req.method === 'PUT') {
+    // An admin sets a new password for a user (D4 section 14: staff have no e-mail reset).
+    const user = users.find((u) => u.id === Number(passwordMatch[1]));
+    if (!user) return error(404, 'ไม่พบผู้ใช้');
+    const scope = userScopeError(caller, user, user);
+    if (scope) return error(403, scope);
+    const password = (req.body as { password?: string } | null)?.password ?? '';
+    const problem = passwordError(password);
+    if (problem) return error(400, problem);
+    db.passwords[user.id] = password;
+    return ok(null);
   }
   const idMatch = /^users\/(\d+)$/.exec(path);
   if (idMatch) {
@@ -1055,8 +1088,12 @@ function handleUsers(
       case 'GET':
         return ok(users[index]);
       case 'PUT': {
-        const payload = withIdentity({ ...users[index], ...(req.body as Partial<UserPayload>) });
-        const identity = userIdentityError(users, payload, users[index].id);
+        const payload = withUserRules({ ...users[index], ...(req.body as Partial<UserPayload>) });
+        const scope = userScopeError(caller, users[index], payload);
+        if (scope) return error(403, scope);
+        const identity =
+          userIdentityError(users, payload, users[index].id) ??
+          userBranchError(payload, db.branches);
         if (identity) return error(400, identity);
         const problem = userChangeError(
           users,
@@ -1068,6 +1105,8 @@ function handleUsers(
         return ok(users[index]);
       }
       case 'DELETE': {
+        const scope = userScopeError(caller, users[index], null);
+        if (scope) return error(403, scope);
         const problem = userChangeError(
           users,
           { kind: 'delete', id: users[index].id },
@@ -1075,6 +1114,7 @@ function handleUsers(
         );
         if (problem) return error(400, problem);
         users.splice(index, 1);
+        delete db.passwords[Number(idMatch[1])];
         return ok(null);
       }
     }
@@ -1082,16 +1122,34 @@ function handleUsers(
   return notFound(req, path);
 }
 
-/** A username / e-mail as stored: trimmed, username lower case, e-mail '' when not given. */
-function withIdentity<T extends Pick<User, 'username' | 'email'>>(u: T): T {
-  return { ...u, username: normalizeUsername(u.username), email: (u.email ?? '').trim() };
+/**
+ * A user as stored: username lower case, e-mail trimmed ('' when not given), branch ids unique and
+ * sorted — none when the user has all branches.
+ */
+function withUserRules<T extends Pick<User, 'username' | 'email' | 'allBranches' | 'branchIds'>>(
+  u: T,
+): T {
+  return {
+    ...u,
+    username: normalizeUsername(u.username ?? ''),
+    email: (u.email ?? '').trim(),
+    allBranches: !!u.allBranches,
+    branchIds: u.allBranches ? [] : [...new Set(u.branchIds ?? [])].sort((a, b) => a - b),
+  };
 }
 
 /**
- * Users stored before usernames existed (E4, 2026-10-16): the first user (the admin login) gets
- * `admin`, the others the part of their e-mail before @, with `-<id>` added on a clash.
+ * Users stored before usernames / branch rights existed: the first user (the admin login) gets
+ * `admin`, the others the part of their e-mail before @, with `-<id>` added on a clash (E4);
+ * admins get all branches, the others the first branch (E9).
  */
-function fillUsernames(users: User[]): void {
+function fillUserDefaults(db: MockDb): void {
+  const { users } = db;
+  for (const u of users) {
+    if (u.allBranches !== undefined) continue;
+    u.allBranches = u.role === 'admin';
+    u.branchIds = u.allBranches ? [] : [db.branches[0].id];
+  }
   const taken = new Set(users.filter((u) => u.username).map((u) => normalizeUsername(u.username)));
   users.forEach((u, i) => {
     if (u.username) return;
@@ -2074,7 +2132,7 @@ function handleSales(
     let approver: string | null = null;
     if (!actorIsAdmin()) {
       if (!approval) return error(403, 'ยกเลิกบิลต้องให้ผู้ดูแลระบบอนุมัติ');
-      const found = checkCredentials(approval.username, approval.password, db.users);
+      const found = checkCredentials(approval.username, approval.password, db);
       if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
       if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
       approver = found.name;
@@ -3032,11 +3090,7 @@ function handleShifts(
     // terminal; otherwise a variance above the limit waits as `pending`.
     let approver: string | null = isAdmin ? user : null;
     if (!approver && payload.approval) {
-      const found = checkCredentials(
-        payload.approval.username,
-        payload.approval.password,
-        db.users,
-      );
+      const found = checkCredentials(payload.approval.username, payload.approval.password, db);
       if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
       if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
       approver = found.name;
@@ -3121,14 +3175,14 @@ function login(
   db: MockDb,
 ): Observable<HttpResponse<LoginResponse>> {
   const company = db.companies.find((c) => c.code === normalizeCompanyCode(companyCode ?? ''));
-  const user = company ? checkCredentials(username, password, db.users) : WRONG_LOGIN;
+  const user = company ? checkCredentials(username, password, db) : WRONG_LOGIN;
   if (!company || typeof user === 'string') {
     return error(401, 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
   }
   if (!company.active) {
     return error(401, 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
   }
-  return ok({ token: mockToken(company.id, user.id), user, ...companySession(db) });
+  return ok({ token: mockToken(company.id, user.id), user, ...companySession(db, user) });
 }
 
 const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
@@ -3140,17 +3194,21 @@ const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ�
 function checkCredentials(
   username: string | undefined,
   password: string | undefined,
-  users: User[],
+  db: MockDb,
 ): User | string {
   const name = normalizeUsername(username ?? '');
-  const user = users.find((u) => normalizeUsername(u.username) === name);
-  const expected = user && user.id === users[0]?.id ? 'admin' : MOCK_USER_PASSWORD;
-  if (!user || !user.active || password !== expected) return WRONG_LOGIN;
+  const user = db.users.find((u) => normalizeUsername(u.username) === name);
+  if (!user || !user.active || password !== passwordOf(db, user.id)) return WRONG_LOGIN;
   return user;
 }
 
-/** Password of every non-admin mock user. */
+/** Password of every non-admin mock user that never got one of their own. */
 const MOCK_USER_PASSWORD = '1234';
+
+/** A user's password: the stored one, else `admin` for the first user and `1234` for the rest. */
+function passwordOf(db: MockDb, userId: number): string {
+  return db.passwords[userId] ?? (userId === db.users[0]?.id ? 'admin' : MOCK_USER_PASSWORD);
+}
 
 /** A fake token naming tenant + user (a real one is a signed JWT with these claims). Specs use it. */
 export const mockToken = (companyId: number, userId: number): string =>
@@ -3171,21 +3229,18 @@ function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
   return user?.active ? user : undefined;
 }
 
-/** Company + the active branches of the session (step 1: every user may work in all of them). */
-function companySession(db: MockDb): { company: Company; branches: Branch[] } {
+/** Company + the branches the user may work in (`canWorkIn()`: active, theirs or all). */
+function companySession(db: MockDb, user: User): { company: Company; branches: Branch[] } {
   const stored = db.companies[0];
   return {
     company: { ...stored, name: db.storeInfo.name, taxId: db.storeInfo.taxId },
-    branches: db.branches.filter((b) => b.active),
+    branches: db.branches.filter((b) => canWorkIn(user, b)),
   };
 }
 
-/**
- * The branch an `X-Branch-Id` names when the user may work in it: an active branch of the company
- * (step 1: every user may work in all; step 2 adds `branchIds` / `allBranches`). undefined → 403.
- */
-function allowedBranch(db: MockDb, header: string): Branch | undefined {
-  return companySession(db).branches.find((b) => String(b.id) === header.trim());
+/** The branch an `X-Branch-Id` names when the user may work in it; undefined → 403. */
+function allowedBranch(db: MockDb, user: User, header: string): Branch | undefined {
+  return companySession(db, user).branches.find((b) => String(b.id) === header.trim());
 }
 
 /** Older stored data (and the seed) get one branch made from the store's details. */

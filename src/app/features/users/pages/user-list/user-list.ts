@@ -14,7 +14,7 @@ import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
-import { User, userChangeError } from '@core/models';
+import { User, userChangeError, userScopeError } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
@@ -24,6 +24,7 @@ import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { UsersStore } from '../../data/users.store';
+import { PasswordDialog } from '../../dialogs/password-dialog/password-dialog';
 
 @Component({
   selector: 'app-user-list',
@@ -53,6 +54,7 @@ export default class UserList {
     'username',
     'name',
     'email',
+    'branches',
     'role',
     'active',
     'createdAt',
@@ -79,14 +81,33 @@ export default class UserList {
     });
   }
 
+  /** "ทุกสาขา" or the codes of the user's branches. */
+  protected branchText(user: User): string {
+    if (user.allBranches) return 'ทุกสาขา';
+    const codes = new Map(this.auth.branches().map((b) => [b.id, b.code]));
+    return user.branchIds.map((id) => codes.get(id) ?? `#${id}`).join(', ') || '-';
+  }
+
+  /** Why this admin may not manage the user ('' = may): branch admins only theirs (E6). */
+  protected scopeBlocker(user: User): string {
+    const actor = this.auth.user();
+    return (actor && userScopeError(actor, user, user)) ?? '';
+  }
+
+  protected setPassword(user: User): void {
+    this.dialog.open(PasswordDialog, { data: user, width: '400px' });
+  }
+
   /** Why this user cannot be deleted ('' = can): yourself / the last active admin. */
   protected deleteBlocker(user: User): string {
     return (
-      userChangeError(
-        this.store.users(),
-        { kind: 'delete', id: user.id },
-        this.auth.user()?.id ?? null,
-      ) ?? ''
+      (this.scopeBlocker(user) ||
+        userChangeError(
+          this.store.users(),
+          { kind: 'delete', id: user.id },
+          this.auth.user()?.id ?? null,
+        )) ??
+      ''
     );
   }
 

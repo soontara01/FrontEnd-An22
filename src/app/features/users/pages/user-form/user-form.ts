@@ -11,7 +11,14 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '@core/auth/auth.service';
-import { UserRole, userChangeError, userIdentityError } from '@core/models';
+import {
+  UserRole,
+  passwordError,
+  userBranchError,
+  userChangeError,
+  userIdentityError,
+  userScopeError,
+} from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -38,7 +45,11 @@ export default class UserForm implements OnInit {
   private readonly store = inject(UsersStore);
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
+  /** Branches the signed-in admin may give (a company admin: every active branch). */
+  protected readonly branches = this.auth.branches;
+  /** Rights of the user as loaded (null = new), for the branch-admin scope rule (E6). */
+  private readonly before = signal<{ allBranches: boolean; branchIds: number[] } | null>(null);
 
   /** Bound from the `:id` route param (withComponentInputBinding). */
   readonly id = input<string>();
@@ -54,6 +65,9 @@ export default class UserForm implements OnInit {
     email: [''],
     role: ['user' as UserRole, Validators.required],
     active: [true],
+    allBranches: [false],
+    branchIds: [[] as number[]],
+    password: [''],
   });
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
 
@@ -61,6 +75,17 @@ export default class UserForm implements OnInit {
   protected readonly identityProblem = computed(() => {
     const { username = '', email = '' } = this.value();
     return userIdentityError(this.store.users(), { username, email }, Number(this.id()) || null);
+  });
+
+  /** Branch rights + password (new users only), same rules as the server (E6 / E10). */
+  protected readonly accessProblem = computed(() => {
+    const { allBranches = false, branchIds = [], password = '' } = this.value();
+    const actor = this.auth.user();
+    return (
+      userBranchError({ allBranches, branchIds }, this.branches()) ??
+      (actor ? userScopeError(actor, this.before(), { allBranches, branchIds }) : null) ??
+      (this.isEdit() ? null : passwordError(password))
+    );
   });
 
   /** Same rule as the server: not yourself, never the last active admin (`userChangeError()`). */
@@ -82,6 +107,7 @@ export default class UserForm implements OnInit {
     this.store.getById(id).subscribe({
       next: (user) => {
         this.form.patchValue(user);
+        this.before.set({ allBranches: user.allBranches, branchIds: user.branchIds });
         this.loading.set(false);
       },
       error: () => void this.router.navigate(['/users']),
@@ -89,15 +115,15 @@ export default class UserForm implements OnInit {
   }
 
   protected save(): void {
-    if (this.form.invalid || this.problem() || this.identityProblem()) {
+    if (this.form.invalid || this.problem() || this.identityProblem() || this.accessProblem()) {
       this.form.markAllAsTouched();
       return;
     }
     this.saving.set(true);
-    const payload = this.form.getRawValue();
+    const { password, ...payload } = this.form.getRawValue();
     const request$ = this.isEdit()
       ? this.store.update(Number(this.id()), payload)
-      : this.store.create(payload);
+      : this.store.create({ ...payload, password });
 
     request$.subscribe({
       next: () => {
