@@ -39,10 +39,22 @@ export default class PosTerminalList {
   protected readonly thisTerminal = inject(TerminalService).terminalId;
 
   protected readonly isAdmin = this.auth.isAdmin;
-  protected readonly columns = ['id', 'name', 'posId', 'status', 'actions'];
+  protected readonly columns = ['id', 'branch', 'name', 'posId', 'status', 'actions'];
 
   constructor() {
     this.store.load();
+  }
+
+  protected branchCode(t: PosTerminal): string {
+    return this.store.branches().find((b) => b.id === t.branchId)?.code ?? `#${t.branchId}`;
+  }
+
+  /** Admins edit terminals of the branches they work in (a company admin: all, E6). */
+  protected canEdit(t: PosTerminal): boolean {
+    return (
+      this.isAdmin() &&
+      (this.auth.isCompanyAdmin() || this.auth.branches().some((b) => b.id === t.branchId))
+    );
   }
 
   protected posIdMissing(t: PosTerminal): boolean {

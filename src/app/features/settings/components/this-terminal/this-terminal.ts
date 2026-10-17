@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
 import { PosTerminal, Shift, terminalError, terminalLabel } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { TerminalService } from '@core/services/terminal.service';
 import { MATERIAL } from '@shared/material';
@@ -42,7 +43,7 @@ import { SettingsApi } from '../../data/settings-api.service';
                 <mat-option [value]="t.id">{{ label(t.id) }}</mat-option>
               }
             </mat-select>
-            <mat-hint>เพิ่ม / แก้เครื่องได้ที่ ข้อมูลหลัก → เครื่อง POS</mat-hint>
+            <mat-hint>เครื่องของสาขานี้ · เพิ่ม / แก้ได้ที่ ข้อมูลหลัก → เครื่อง POS</mat-hint>
           </mat-form-field>
           <button
             mat-flat-button
@@ -85,6 +86,8 @@ export class ThisTerminal {
   private readonly api = inject(SettingsApi);
   private readonly terminal = inject(TerminalService);
   private readonly notify = inject(NotificationService);
+  private readonly auth = inject(AuthService);
+  private readonly branchId = computed(() => this.auth.currentBranch()?.id ?? null);
 
   protected readonly terminalId = this.terminal.terminalId;
   private readonly terminals = signal<PosTerminal[]>([]);
@@ -92,10 +95,15 @@ export class ThisTerminal {
   protected readonly loaded = signal(false);
   protected readonly picked = signal<number | null>(this.terminalId());
 
-  protected readonly activeTerminals = computed(() => this.terminals().filter((t) => t.active));
-  /** Same rule as the POS / server: a set terminal must be an active registered one. */
+  /** Terminals this device may be set to: active ones of the working branch (E8). */
+  protected readonly activeTerminals = computed(() =>
+    this.terminals().filter((t) => t.active && t.branchId === this.branchId()),
+  );
+  /** Same rule as the POS / server: an active registered terminal of this branch. */
   protected readonly problem = computed(() =>
-    this.terminalId() === null ? null : terminalError(this.terminalId(), this.terminals()),
+    this.terminalId() === null
+      ? null
+      : terminalError(this.terminalId(), this.terminals(), this.branchId()),
   );
 
   constructor() {

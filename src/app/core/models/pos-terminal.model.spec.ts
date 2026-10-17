@@ -9,32 +9,46 @@ import {
 } from './pos-terminal.model';
 
 describe('pos terminal model', () => {
-  const t1: PosTerminal = { id: 1, name: 'หน้าร้าน', posId: 'E051234567890', active: true };
-  const t2: PosTerminal = { id: 2, name: 'ชั้น 2', posId: '', active: true };
+  const t1: PosTerminal = {
+    id: 1,
+    name: 'หน้าร้าน',
+    posId: 'E051234567890',
+    branchId: 1,
+    active: true,
+  };
+  const t2: PosTerminal = { id: 2, name: 'ชั้น 2', posId: '', branchId: 1, active: true };
+  const branches = [
+    { id: 1, active: true },
+    { id: 2, active: false },
+  ];
 
   it('accepts a valid terminal', () => {
-    expect(posTerminalError(t2, [t1])).toBeNull();
-    expect(posTerminalError({ ...t2, posId: 'E059999' }, [t1])).toBeNull();
+    expect(posTerminalError(t2, [t1], branches)).toBeNull();
+    expect(posTerminalError({ ...t2, posId: 'E059999' }, [t1], branches)).toBeNull();
   });
 
   it('validates the number, name and POS ID', () => {
-    expect(posTerminalError({ ...t2, id: 0 }, [t1])).toBe('เลขเครื่องต้องเป็นจำนวนเต็ม 1–999');
-    expect(posTerminalError({ ...t2, id: 1.5 }, [t1])).toBe('เลขเครื่องต้องเป็นจำนวนเต็ม 1–999');
-    expect(posTerminalError({ ...t2, id: 1 }, [t1])).toBe('มีเครื่อง 1 อยู่แล้ว');
-    expect(posTerminalError({ ...t2, name: ' ' }, [t1])).toBe('กรุณากรอกชื่อเครื่อง');
-    expect(posTerminalError({ ...t2, name: 'x'.repeat(41) }, [t1])).toBe(
+    expect(posTerminalError({ ...t2, id: 0 }, [t1], branches)).toBe(
+      'เลขเครื่องต้องเป็นจำนวนเต็ม 1–999',
+    );
+    expect(posTerminalError({ ...t2, id: 1.5 }, [t1], branches)).toBe(
+      'เลขเครื่องต้องเป็นจำนวนเต็ม 1–999',
+    );
+    expect(posTerminalError({ ...t2, id: 1 }, [t1], branches)).toBe('มีเครื่อง 1 อยู่แล้ว');
+    expect(posTerminalError({ ...t2, name: ' ' }, [t1], branches)).toBe('กรุณากรอกชื่อเครื่อง');
+    expect(posTerminalError({ ...t2, name: 'x'.repeat(41) }, [t1], branches)).toBe(
       'ชื่อเครื่องต้องไม่เกิน 40 ตัวอักษร',
     );
-    expect(posTerminalError({ ...t2, posId: 'x'.repeat(31) }, [t1])).toBe(
+    expect(posTerminalError({ ...t2, posId: 'x'.repeat(31) }, [t1], branches)).toBe(
       'POS ID ต้องไม่เกิน 30 ตัวอักษร',
     );
-    expect(posTerminalError({ ...t2, posId: ' E051234567890 ' }, [t1])).toBe(
+    expect(posTerminalError({ ...t2, posId: ' E051234567890 ' }, [t1], branches)).toBe(
       'POS ID E051234567890 ใช้กับเครื่องอื่นแล้ว',
     );
   });
 
   it('allows several terminals without a POS ID', () => {
-    expect(posTerminalError({ ...t2, id: 3 }, [t1, t2])).toBeNull();
+    expect(posTerminalError({ ...t2, id: 3 }, [t1, t2], branches)).toBeNull();
   });
 
   it('labels, trims and warns', () => {
@@ -52,15 +66,29 @@ describe('pos terminal model', () => {
   });
 
   it('lets only an active registered terminal sell', () => {
-    expect(terminalError(1, [t1, t2])).toBeNull();
-    expect(terminalError(null, [t1])).toBe(
+    expect(terminalError(1, [t1, t2], null)).toBeNull();
+    expect(terminalError(null, [t1], null)).toBe(
       'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า',
     );
-    expect(terminalError(3, [t1])).toBe(
+    expect(terminalError(3, [t1], null)).toBe(
       'ไม่พบเครื่อง 3 ในทะเบียนเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าใหม่',
     );
-    expect(terminalError(2, [{ ...t2, active: false }])).toBe(
+    expect(terminalError(2, [{ ...t2, active: false }], null)).toBe(
       'เครื่อง 2 ถูกปิดใช้งาน กรุณาให้ผู้ดูแลตั้งค่าใหม่',
+    );
+  });
+
+  it('needs an active branch and sells only in its own branch (E8)', () => {
+    expect(posTerminalError({ ...t2, branchId: 9 }, [t1], branches)).toBe(
+      'กรุณาเลือกสาขาของเครื่อง',
+    );
+    expect(posTerminalError({ ...t2, branchId: 2 }, [t1], branches)).toBe(
+      'สาขานี้ปิดใช้งานแล้ว เครื่องที่ใช้งานต้องอยู่สาขาที่ใช้งาน',
+    );
+    expect(posTerminalError({ ...t2, branchId: 2, active: false }, [t1], branches)).toBeNull();
+    expect(terminalError(1, [t1], 1)).toBeNull();
+    expect(terminalError(1, [t1], 2)).toBe(
+      'เครื่อง 1 เป็นเครื่องของสาขาอื่น กรุณาให้ผู้ดูแลตั้งค่าเครื่องนี้ใหม่',
     );
   });
 

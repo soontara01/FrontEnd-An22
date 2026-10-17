@@ -6,13 +6,14 @@ import { PosTerminalStore } from './pos-terminal.store';
 
 describe('PosTerminalStore', () => {
   const terminals: PosTerminal[] = [
-    { id: 3, name: 'ชั้น 3', posId: '', active: true },
-    { id: 1, name: 'หน้าร้าน', posId: 'E051', active: true },
-    { id: 4, name: 'สำรอง', posId: '', active: false },
+    { id: 3, name: 'ชั้น 3', posId: '', branchId: 1, active: true },
+    { id: 1, name: 'หน้าร้าน', posId: 'E051', branchId: 1, active: true },
+    { id: 4, name: 'สำรอง', posId: '', branchId: 1, active: false },
   ];
   const api = {
     posTerminals: vi.fn(() => of(terminals)),
     storeInfo: vi.fn(() => of({ vatRegistered: true })),
+    branches: vi.fn(() => of([])),
     removePosTerminal: vi.fn(() => of(undefined)),
   };
 

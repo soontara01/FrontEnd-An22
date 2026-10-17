@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, forkJoin, tap } from 'rxjs';
-import { PosTerminal, missingPosId } from '@core/models';
+import { Branch, PosTerminal, missingPosId } from '@core/models';
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { MasterDataApi } from './master-data-api.service';
 
@@ -11,6 +11,9 @@ export class PosTerminalStore {
 
   private readonly _terminals = signal<PosTerminal[]>([]);
   private readonly _vatRegistered = signal(false);
+  private readonly _branches = signal<Branch[]>([]);
+  /** Every branch of the company (names in the list, the rule in the form). */
+  readonly branches = this._branches.asReadonly();
   private readonly _loading = signal(false);
   private loaded = false;
 
@@ -36,12 +39,13 @@ export class PosTerminalStore {
   load(force = false): void {
     if (this.loaded && !force) return;
     this._loading.set(true);
-    forkJoin([this.api.posTerminals(), this.api.storeInfo()])
+    forkJoin([this.api.posTerminals(), this.api.storeInfo(), this.api.branches()])
       .pipe(finalize(() => this._loading.set(false)))
       .subscribe({
-        next: ([terminals, store]) => {
+        next: ([terminals, store, branches]) => {
           this._terminals.set(terminals);
           this._vatRegistered.set(store.vatRegistered);
+          this._branches.set(branches);
           this.loaded = true;
         },
         error: httpErrorShown,

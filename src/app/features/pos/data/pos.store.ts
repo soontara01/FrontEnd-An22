@@ -163,11 +163,13 @@ export class PosStore {
     return id === null ? 'ยังไม่ได้ตั้งเลขเครื่อง' : terminalLabel(id, this._terminals());
   });
   /**
-   * Why this device cannot sell or open a shift: it must be an active terminal of the registry —
-   * same rule as the server (`terminalError()`). Null until the data has loaded.
+   * Why this device cannot sell or open a shift: it must be an active terminal of the registry in
+   * the working branch — same rule as the server (`terminalError()`). Null until the data has loaded.
    */
   readonly terminalProblem = computed(() =>
-    this._shiftLoaded() ? terminalError(this.terminalId(), this._terminals()) : null,
+    this._shiftLoaded()
+      ? terminalError(this.terminalId(), this._terminals(), this.auth.currentBranch()?.id ?? null)
+      : null,
   );
   /** Shifts in use (`StoreInfo.requireShift`); unknown until the store info has loaded */
   readonly requireShift = computed(() => this._storeInfo()?.requireShift ?? false);

@@ -1587,22 +1587,46 @@ describe('mockBackendInterceptor – POS terminals', () => {
   it('keeps the registry for admins and protects terminals in use', async () => {
     start();
     const terminals = await call<PosTerminal[]>('GET', 'pos-terminals');
-    expect(terminals.map((t) => t.id)).toEqual([1, 2]);
-    const add = { id: 3, name: ' ชั้น 3 ', posId: '', active: true };
+    expect(terminals.map((t) => [t.id, t.branchId])).toEqual([
+      [1, 1],
+      [2, 1],
+      [3, 2],
+    ]);
+    const add = { id: 4, name: ' ชั้น 4 ', posId: '', branchId: 1, active: true };
     expect(await errorOf(call('POST', 'pos-terminals', add, undefined, STAFF))).toBe(
       'แก้ทะเบียนเครื่อง POS ได้เฉพาะผู้ดูแลระบบ',
     );
-    expect(await call<PosTerminal>('POST', 'pos-terminals', add)).toMatchObject({ name: 'ชั้น 3' });
-    expect(await errorOf(call('POST', 'pos-terminals', add))).toBe('มีเครื่อง 3 อยู่แล้ว');
+    expect(await call<PosTerminal>('POST', 'pos-terminals', add)).toMatchObject({ name: 'ชั้น 4' });
+    expect(await errorOf(call('POST', 'pos-terminals', add))).toBe('มีเครื่อง 4 อยู่แล้ว');
 
-    await call('POST', 'shifts/open', { openingFloat: 0, openingDenominations: [] }, 3);
-    expect(await errorOf(call('PUT', 'pos-terminals/3', { ...add, id: 99, active: false }))).toBe(
-      'เครื่อง 3 มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้',
+    await call('POST', 'shifts/open', { openingFloat: 0, openingDenominations: [] }, 4);
+    expect(await errorOf(call('PUT', 'pos-terminals/4', { ...add, id: 99, active: false }))).toBe(
+      'เครื่อง 4 มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้',
     );
-    expect(await errorOf(call('DELETE', 'pos-terminals/3'))).toBe(
-      'เครื่อง 3 มีกะหรือเอกสารแล้ว ลบไม่ได้ (ปิดใช้งานแทน)',
+    expect(await errorOf(call('DELETE', 'pos-terminals/4'))).toBe(
+      'เครื่อง 4 มีกะหรือเอกสารแล้ว ลบไม่ได้ (ปิดใช้งานแทน)',
     );
     expect(await call('DELETE', 'pos-terminals/2')).toBeNull();
+  });
+
+  it('opens a shift / sells only in the own branch of the terminal (E8)', async () => {
+    start();
+    const openAt = (terminal: number, branch: string) =>
+      firstValueFrom(
+        http.post<Shift>(
+          '/api/shifts/open',
+          { openingFloat: 0, openingDenominations: [] },
+          { headers: { 'X-Terminal-Id': String(terminal), 'X-Branch-Id': branch } },
+        ),
+      );
+    expect(await errorOf(openAt(3, '1'))).toBe(
+      'เครื่อง 3 เป็นเครื่องของสาขาอื่น กรุณาให้ผู้ดูแลตั้งค่าเครื่องนี้ใหม่',
+    );
+    expect(await openAt(3, '2')).toMatchObject({ terminalId: 3, posId: 'E051234567892' });
+    // the branch cannot be closed while its shift is open
+    expect(await errorOf(call('PUT', 'branches/2', { active: false }))).toBe(
+      'สาขา BN มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้',
+    );
   });
 
   it('opens a shift only at the registered terminal it names', async () => {

@@ -844,8 +844,9 @@ const SEED_BRANCHES: Branch[] = [
 ];
 
 const SEED_POS_TERMINALS: PosTerminal[] = [
-  { id: 1, name: 'แคชเชียร์หน้าร้าน', posId: 'E051234567890', active: true },
-  { id: 2, name: 'แคชเชียร์โซนมือถือ', posId: 'E051234567891', active: true },
+  { id: 1, name: 'แคชเชียร์หน้าร้าน', posId: 'E051234567890', branchId: 1, active: true },
+  { id: 2, name: 'แคชเชียร์โซนมือถือ', posId: 'E051234567891', branchId: 1, active: true },
+  { id: 3, name: 'แคชเชียร์สาขาบางนา', posId: 'E051234567892', branchId: 2, active: true },
 ];
 
 const seedDb = (): MockDb => ({
@@ -954,6 +955,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const costed = migrateCosting(db);
   const shiftsOn = enableShifts(db);
   const registered = migrateTerminals(db, stored);
+  // Terminals registered before E8 stand in the first branch.
+  db.posTerminals = db.posTerminals.map((t) => ({
+    ...t,
+    branchId: t.branchId ?? db.branches[0].id,
+  }));
   fillTerminalSnapshots(db);
   const path = req.url.slice(base.length + 1);
   // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
@@ -2249,7 +2255,7 @@ function handleSales(
  */
 function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknown>> {
   // The receipt needs this device's POS ID, so only a registered terminal sells (T2).
-  const terminalProblem = terminalError(terminalId, db.posTerminals);
+  const terminalProblem = terminalError(terminalId, db.posTerminals, requestBranchId());
   if (terminalProblem) return error(400, terminalProblem);
   const shift = moneyShift(db, 'sell');
   if (shift.problem) return error(400, shift.problem);
@@ -2782,6 +2788,7 @@ function migrateTerminals(db: MockDb, stored: Partial<MockDb> | null): boolean {
     id,
     name: `เครื่อง ${id}`,
     posId: id === 1 ? legacy : '',
+    branchId: db.branches[0].id,
     active: true,
   }));
   db.legacyPosId = legacy;
@@ -2830,6 +2837,12 @@ function handlePosTerminals(
     return ok([...db.posTerminals].sort((a, b) => a.id - b.id));
   }
   if (!actorIsAdmin()) return error(403, 'แก้ทะเบียนเครื่อง POS ได้เฉพาะผู้ดูแลระบบ');
+  // A branch admin edits only terminals of their own branches (E6), in and out of a branch.
+  const notMine = (branchId: number) => {
+    const branch = db.branches.find((b) => b.id === branchId);
+    return !isCompanyAdmin(actor) && !!branch && !canWorkIn(actor as User, branch);
+  };
+  const BRANCH_ONLY = 'แก้เครื่อง POS ได้เฉพาะสาขาของตัวเอง';
   const normalize = (body: unknown, id?: number): PosTerminal =>
     normalizePosTerminal({
       ...POS_TERMINAL_DEFAULTS,
@@ -2838,7 +2851,8 @@ function handlePosTerminals(
     });
   if (path === 'pos-terminals' && req.method === 'POST') {
     const created = normalize(req.body);
-    const problem = posTerminalError(created, db.posTerminals);
+    if (notMine(created.branchId)) return error(403, BRANCH_ONLY);
+    const problem = posTerminalError(created, db.posTerminals, db.branches);
     if (problem) return error(400, problem);
     db.posTerminals.push(created);
     return ok(created);
@@ -2851,10 +2865,14 @@ function handlePosTerminals(
   switch (req.method) {
     case 'PUT': {
       // The terminal number never changes (documents and shifts refer to it).
-      const updated = normalize(req.body, id);
+      const updated = normalize({ ...db.posTerminals[index], ...(req.body as object) }, id);
+      if (notMine(db.posTerminals[index].branchId) || notMine(updated.branchId)) {
+        return error(403, BRANCH_ONLY);
+      }
       const problem = posTerminalError(
         updated,
         db.posTerminals.filter((t) => t.id !== id),
+        db.branches,
       );
       if (problem) return error(400, problem);
       if (!updated.active && openShiftOf(db, id)) {
@@ -2864,6 +2882,7 @@ function handlePosTerminals(
       return ok(updated);
     }
     case 'DELETE': {
+      if (notMine(db.posTerminals[index].branchId)) return error(403, BRANCH_ONLY);
       const used =
         db.shifts.some((s) => s.terminalId === id) ||
         db.sales.some((s) => s.terminalId === id) ||
@@ -2938,7 +2957,7 @@ function handleShifts(
   }
   if (path === 'shifts/open' && req.method === 'POST') {
     // The drawer is this device's registered terminal; the body may only repeat it (T2).
-    const terminalProblem = terminalError(terminalId, db.posTerminals);
+    const terminalProblem = terminalError(terminalId, db.posTerminals, requestBranchId());
     if (terminalProblem) return error(400, terminalProblem);
     const body = (req.body ?? {}) as Partial<ShiftOpenPayload>;
     if (body.terminalId !== undefined && body.terminalId !== terminalId) {
@@ -3306,6 +3325,12 @@ function handleBranches(
     const payload = normalizeBranch({ ...current, ...(req.body as Partial<BranchPayload>) });
     const problem = branchError(payload, db.branches);
     if (problem) return error(400, problem);
+    const openHere = db.posTerminals.some(
+      (t) => t.branchId === current.id && openShiftOf(db, t.id),
+    );
+    if (!payload.active && openHere) {
+      return error(400, `สาขา ${current.code} มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้`);
+    }
     db.branches[index] = { ...payload, id: current.id };
     return ok(db.branches[index]);
   }
@@ -3424,6 +3449,11 @@ function splitStoreInfo(db: MockDb, stored: Partial<MockDb> | null): boolean {
   );
   db.nextBranchId = Math.max(...db.branches.map((b) => b.id)) + 1;
   return true;
+}
+
+/** `X-Branch-Id` as a number; null when not sent (step 1–2 still serve it, E2). */
+function requestBranchId(): number | null {
+  return branchHeader === null ? null : Number(branchHeader);
 }
 
 /** The branch of the request (`X-Branch-Id`; none / unknown = the first, the request may still be refused). */

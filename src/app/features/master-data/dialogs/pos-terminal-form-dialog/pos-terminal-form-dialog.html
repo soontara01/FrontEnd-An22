@@ -18,6 +18,16 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline" class="span-2">
+        <mat-label>สาขา</mat-label>
+        <mat-select formControlName="branchId">
+          @for (b of branches(); track b.id) {
+            <mat-option [value]="b.id">{{ b.code }} · {{ b.name }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>เลขเครื่องไม่ซ้ำทั้งบริษัท · ขาย / เปิดกะได้เฉพาะที่สาขานี้</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
         <mat-label>POS ID (กรมสรรพากร)</mat-label>
         <input matInput formControlName="posId" class="mono" maxlength="30" />
         <mat-hint>หมายเลขเครื่องที่ได้รับอนุมัติ พิมพ์บนใบกำกับภาษีอย่างย่อของเครื่องนี้</mat-hint>
