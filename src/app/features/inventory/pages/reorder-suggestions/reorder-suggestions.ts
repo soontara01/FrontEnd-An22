@@ -7,6 +7,7 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { AuthService } from '@core/auth/auth.service';
 import { InventoryStore } from '../../data/inventory.store';
 
 /**
@@ -22,6 +23,8 @@ import { InventoryStore } from '../../data/inventory.store';
 })
 export default class ReorderSuggestions {
   protected readonly store = inject(InventoryStore);
+  /** Suggestions use the working branch's stock and reorder levels (D1, E13). */
+  protected readonly workingBranch = inject(AuthService).currentBranch;
   private readonly document = inject(DOCUMENT);
 
   protected readonly branch = branchLabel;

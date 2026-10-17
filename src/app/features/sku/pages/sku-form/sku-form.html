@@ -137,10 +137,10 @@
 
         @if (!isService()) {
           <mat-form-field appearance="outline">
-            <mat-label>จุดสั่งซื้อ (สต็อกขั้นต่ำ)</mat-label>
+            <mat-label>จุดสั่งซื้อ (สต็อกขั้นต่ำ) · สาขา {{ branch()?.code }}</mat-label>
             <input matInput type="number" min="0" formControlName="minStock" />
             <span matTextSuffix>{{ baseUnit() }}</span>
-            <mat-hint>ถึงค่านี้ = "ใกล้หมด" และควรสั่งซื้อ</mat-hint>
+            <mat-hint>ถึงค่านี้ = "ใกล้หมด" และควรสั่งซื้อ — เฉพาะสาขานี้</mat-hint>
             @if (form.controls.minStock.hasError('required')) {
               <mat-error>กรุณากรอกจุดสั่งซื้อ</mat-error>
             } @else if (form.controls.minStock.invalid) {
@@ -149,7 +149,7 @@
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>สต็อกสูงสุด</mat-label>
+            <mat-label>สต็อกสูงสุด · สาขา {{ branch()?.code }}</mat-label>
             <input matInput type="number" min="0" formControlName="maxStock" />
             <span matTextSuffix>{{ baseUnit() }}</span>
             <mat-hint>สั่งเติมให้ถึงค่านี้ (0 = 2 เท่าของจุดสั่งซื้อ)</mat-hint>

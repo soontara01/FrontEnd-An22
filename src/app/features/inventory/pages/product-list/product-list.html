@@ -1,4 +1,7 @@
-<app-page-header title="คลังสินค้า" subtitle="รายการสินค้าและจำนวนคงเหลือ">
+<app-page-header
+  title="คลังสินค้า"
+  [subtitle]="'รายการสินค้าและจำนวนคงเหลือ · สาขา ' + (branch()?.code ?? '-')"
+>
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
     <mat-icon>refresh</mat-icon>
   </button>

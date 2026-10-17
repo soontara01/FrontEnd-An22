@@ -23,6 +23,7 @@ import {
   isDiscontinued,
   isService,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
@@ -66,6 +67,7 @@ const matchesType = (s: Product, type: TypeFilter): boolean => {
 })
 export default class SkuList {
   protected readonly store = inject(SkuStore);
+  private readonly branch = inject(AuthService).currentBranch;
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
@@ -141,7 +143,9 @@ export default class SkuList {
         this.store.categories(),
         this.store.suppliers(),
       );
-      saveBlob(blob, `${timestampedName('sku')}.xlsx`);
+      // Reorder levels in the file are the working branch's (E13).
+      const code = this.branch()?.code;
+      saveBlob(blob, `${timestampedName(code ? `sku-${code}` : 'sku')}.xlsx`);
     } finally {
       this.exporting.set(false);
     }

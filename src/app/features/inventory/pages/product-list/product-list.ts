@@ -71,6 +71,8 @@ export default class ProductList {
   private readonly injector = inject(Injector);
   /** Taking stock out (issue / serial removal) is admin only (P2, server → 403); receiving is not. */
   protected readonly isAdmin = inject(AuthService).isAdmin;
+  /** Every figure on this page is the working branch's (D1, E19). */
+  protected readonly branch = inject(AuthService).currentBranch;
 
   protected readonly columns = [
     'sku',
@@ -136,8 +138,9 @@ export default class ProductList {
       const serials: SerialNumber[] = serialIds.length
         ? (await firstValueFrom(forkJoin(serialIds.map((id) => this.store.serials(id))))).flat()
         : [];
-      const blob = await inventoryXlsx(rows, serials);
-      saveBlob(blob, `${timestampedName('inventory')}.xlsx`);
+      const code = this.branch()?.code ?? '';
+      const blob = await inventoryXlsx(rows, serials, new Date(), code && `สาขา ${code}`);
+      saveBlob(blob, `${timestampedName(code ? `inventory-${code}` : 'inventory')}.xlsx`);
     } catch (err) {
       // A failed serial lookup was already shown by errorInterceptor; anything else is a bug.
       if (!(err instanceof HttpErrorResponse)) throw err;

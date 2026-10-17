@@ -26,6 +26,7 @@ import {
   stockLevel,
   vatBreakdown,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -52,6 +53,8 @@ const LEVEL = {
 export default class SkuDetail implements OnInit {
   protected readonly menus = inject(MenuAccessService);
   protected readonly store = inject(SkuStore);
+  /** Stock and reorder levels shown are the working branch's (D1, E13). */
+  protected readonly branch = inject(AuthService).currentBranch;
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
