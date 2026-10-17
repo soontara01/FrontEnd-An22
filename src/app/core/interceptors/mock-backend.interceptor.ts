@@ -1784,6 +1784,13 @@ function handleSerials(
         : returning.length === serials.length
           ? 'รับคืนเข้าคลัง'
           : `รับคืนเข้าคลัง ${returning.join(', ')}`);
+    // E32: units last at another branch (the stop-gap move of E16) — the screen suggests a transfer.
+    const fromOtherBranch = serials.flatMap((serial) => {
+      const existing = db.serials.find((s) => s.serial === serial);
+      return existing && existing.branchId !== stockBranch
+        ? [{ serial, branchCode: branchCode(db, existing.branchId) }]
+        : [];
+    });
     const received = serials.map((serial) => {
       const existing = db.serials.find((s) => s.serial === serial);
       if (existing) {
@@ -1825,7 +1832,7 @@ function handleSerials(
       received.map((s) => s.serial),
       movementNote,
     );
-    const result: SerialReceiveResult = { product: updated, received };
+    const result: SerialReceiveResult = { product: updated, received, fromOtherBranch };
     return ok(result);
   }
 

@@ -1,0 +1,59 @@
+<app-page-header title="โอนสินค้า" subtitle="ใบโอนสินค้าระหว่างสาขา">
+  <a mat-flat-button routerLink="new">
+    <mat-icon>add</mat-icon>
+    สร้างใบโอน
+  </a>
+</app-page-header>
+
+<div class="filter-row">
+  <app-branch-scope-select [value]="scope()" (changed)="select({ branch: $event })" />
+  <mat-button-toggle-group
+    [value]="direction()"
+    (change)="select({ dir: $event.value })"
+    aria-label="ทิศทาง"
+  >
+    @for (t of tabs; track t.value) {
+      <mat-button-toggle [value]="t.value">{{ t.label }}</mat-button-toggle>
+    }
+  </mat-button-toggle-group>
+  @if (waiting()) {
+    <span class="badge badge-warn">รอรับเข้าสาขานี้ {{ waiting() }} ใบ</span>
+  }
+</div>
+
+@if (data.hasValue()) {
+  @if (transfers().length) {
+    <div class="table-wrap">
+      <table class="list">
+        <thead>
+          <tr>
+            <th>เลขที่</th>
+            <th>วันที่</th>
+            <th>ต้นทาง → ปลายทาง</th>
+            <th class="num">จำนวน</th>
+            <th>สถานะ</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (t of transfers(); track t.id) {
+            <tr>
+              <td>
+                <a class="mono" [routerLink]="[t.id]">{{ t.transferNo }}</a>
+              </td>
+              <td>{{ t.createdAt | thaiDate }}</td>
+              <td>{{ store.branchName(t.fromBranchId) }} → {{ store.branchName(t.toBranchId) }}</td>
+              <td class="num">{{ itemCount(t) }} ({{ t.lines.length }} รายการ)</td>
+              <td>
+                <span class="badge" [class]="statusBadge(t)">{{ statusText(t) }}</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <app-empty-state icon="local_shipping" message="ยังไม่มีใบโอน" />
+  }
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+}

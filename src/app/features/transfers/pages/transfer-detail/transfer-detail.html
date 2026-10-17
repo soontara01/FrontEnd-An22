@@ -1,0 +1,186 @@
+@if (data.hasValue()) {
+  @let t = data.value();
+  <app-page-header
+    [title]="'ใบโอน ' + t.transferNo"
+    [subtitle]="store.branchName(t.fromBranchId) + ' → ' + store.branchName(t.toBranchId)"
+  >
+    <a mat-button routerLink="/transfers">
+      <mat-icon>arrow_back</mat-icon>
+      ใบโอนสินค้า
+    </a>
+    <button mat-stroked-button (click)="print()">
+      <mat-icon>print</mat-icon>
+      พิมพ์ใบโอน
+    </button>
+    @if (canCancel() && !cancelling()) {
+      <button mat-stroked-button class="danger" (click)="cancelling.set(true)">
+        <mat-icon>cancel</mat-icon>
+        ยกเลิกใบโอน
+      </button>
+    }
+  </app-page-header>
+
+  <div class="meta">
+    <div>
+      <div class="label">สถานะ</div>
+      <span class="badge" [class]="statusBadge(t)">{{ statusText(t) }}</span>
+    </div>
+    <div>
+      <div class="label">ส่งเมื่อ</div>
+      {{ t.createdAt | thaiDate: 'long' }} · {{ t.createdBy }}
+    </div>
+    @if (t.receivedAt) {
+      <div>
+        <div class="label">รับเมื่อ</div>
+        {{ t.receivedAt | thaiDate: 'long' }} · {{ t.receivedBy }}
+      </div>
+    }
+    @if (t.cancelledAt) {
+      <div>
+        <div class="label">ยกเลิกเมื่อ</div>
+        {{ t.cancelledAt | thaiDate: 'long' }} · {{ t.cancelledBy }} — {{ t.cancelReason }}
+      </div>
+    }
+    @if (t.note) {
+      <div>
+        <div class="label">หมายเหตุ</div>
+        {{ t.note }}
+      </div>
+    }
+    @if (t.shortReason) {
+      <div>
+        <div class="label">ของขาด / เสียหาย</div>
+        {{ t.shortReason }}
+      </div>
+    }
+  </div>
+
+  <div class="table-wrap">
+    <table class="list">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>รายการ</th>
+          <th class="num">ส่ง</th>
+          @if (showCost()) {
+            <th class="num">ทุนโอน / หน่วย</th>
+            <th class="num">มูลค่า</th>
+          }
+          <th class="num">{{ canReceive() ? 'รับจริง' : 'รับแล้ว' }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (l of t.lines; track l.productId) {
+          <tr>
+            <td class="mono">{{ l.sku }}</td>
+            <td>
+              {{ l.name }}
+              @if (l.serials.length) {
+                <div class="serials small">
+                  @for (s of l.serials; track s) {
+                    @if (canReceive()) {
+                      <mat-checkbox
+                        [checked]="row(l.productId)?.receivedSerials?.includes(s)"
+                        (change)="toggleSerial(l.productId, s, $event.checked)"
+                        >{{ s }}</mat-checkbox
+                      >
+                    } @else {
+                      <span class="mono">{{ s }}</span>
+                    }
+                  }
+                </div>
+              }
+            </td>
+            <td class="num">{{ l.qty }} {{ l.unit }}</td>
+            @if (showCost()) {
+              <td class="num">{{ l.unitCost | number: '1.2-2' }}</td>
+              <td class="num">{{ value(l) | number: '1.2-2' }}</td>
+            }
+            <td class="num">
+              @if (canReceive() && !l.serials.length) {
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="qty">
+                  <input
+                    matInput
+                    type="number"
+                    min="0"
+                    [max]="l.qty"
+                    [value]="row(l.productId)?.receivedQty"
+                    (input)="setQty(l.productId, $any($event.target).value)"
+                  />
+                </mat-form-field>
+              } @else if (canReceive()) {
+                {{ row(l.productId)?.receivedQty }}
+              } @else if (l.receivedQty !== null) {
+                {{ l.receivedQty }}
+                @if (short(l)) {
+                  <span class="problem">(ขาด {{ short(l) }})</span>
+                }
+              } @else {
+                -
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (canReceive()) {
+    <div class="actions">
+      @if (isShort()) {
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="reason">
+          <mat-label>เหตุผลของที่ขาด / เสียหาย</mat-label>
+          <input
+            matInput
+            [value]="shortReason()"
+            (input)="shortReason.set($any($event.target).value)"
+          />
+        </mat-form-field>
+      }
+      <button mat-flat-button [disabled]="!!receiveProblem() || busy()" (click)="receive(t)">
+        <mat-icon>inventory</mat-icon>
+        รับเข้าสาขานี้
+      </button>
+      @if (receiveProblem(); as p) {
+        <span class="problem">{{ p }}</span>
+      }
+    </div>
+  } @else if (t.status === 'in_transit') {
+    <p class="text-muted small">รอสาขาปลายทาง ({{ store.branchName(t.toBranchId) }}) กดรับของ</p>
+  }
+
+  @if (cancelling()) {
+    <div class="actions">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="reason">
+        <mat-label>เหตุผลการยกเลิก</mat-label>
+        <input
+          matInput
+          [value]="cancelReason()"
+          (input)="cancelReason.set($any($event.target).value)"
+        />
+      </mat-form-field>
+      <button
+        mat-flat-button
+        class="danger"
+        [disabled]="!!cancelProblem() || busy()"
+        (click)="cancel(t)"
+      >
+        ยืนยันยกเลิก — ของกลับเข้าสาขานี้
+      </button>
+      <button mat-button (click)="cancelling.set(false)">ไม่ยกเลิก</button>
+    </div>
+  }
+
+  <!-- Off-screen A4 slip, printed by print() -->
+  <div class="print-stage" aria-hidden="true">
+    <app-transfer-document
+      #slip
+      [transfer]="t"
+      [from]="store.branchName(t.fromBranchId)"
+      [to]="store.branchName(t.toBranchId)"
+      [company]="company()"
+    />
+  </div>
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+}

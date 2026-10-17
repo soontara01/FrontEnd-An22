@@ -2713,13 +2713,15 @@ describe('mockBackendInterceptor – selling per branch', () => {
       status: 'other',
       note: 'ย้ายไป BN',
     });
-    const { received } = await call<SerialReceiveResult>(
+    const { received, fromOtherBranch } = await call<SerialReceiveResult>(
       'POST',
       `products/${NOTEBOOK}/serials`,
       BN,
       { serials: [unit.serial], unitCost: unit.cost, note: 'ย้ายจาก HQ' },
     );
     expect(received[0]).toMatchObject({ id: unit.id, branchId: 2, status: 'in_stock' });
+    // The screen suggests a transfer next time (E32).
+    expect(fromOtherBranch).toEqual([{ serial: unit.serial, branchCode: 'HQ' }]);
     expect((await product(NOTEBOOK, HQ)).stock).toBe(11);
     expect((await product(NOTEBOOK, BN)).stock).toBe(3);
     expect((await serials(HQ)).some((s) => s.id === unit.id)).toBe(false);

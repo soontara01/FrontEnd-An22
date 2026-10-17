@@ -42,6 +42,12 @@ export const MENU: MenuItem[] = [
     loadChildren: () => import('@features/inventory/inventory.routes'),
   },
   {
+    label: 'โอนสินค้า',
+    icon: 'local_shipping',
+    path: 'transfers',
+    loadChildren: () => import('@features/transfers/transfers.routes'),
+  },
+  {
     label: 'จัดการ SKU',
     icon: 'barcode',
     path: 'sku',

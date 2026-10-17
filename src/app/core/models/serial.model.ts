@@ -29,6 +29,11 @@ export interface SerialNumber {
 export interface SerialReceiveResult {
   product: Product;
   received: SerialNumber[];
+  /**
+   * Units last at another branch (removed there, received here): the stop-gap move of E16 — a
+   * transfer is the way to move goods (E32; server-set, missing = none)
+   */
+  fromOtherBranch?: { serial: string; branchCode: string }[];
 }
 
 export const SERIAL_STATUS_LABEL: Record<SerialStatus, string> = {
