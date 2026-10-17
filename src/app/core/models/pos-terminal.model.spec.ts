@@ -88,7 +88,10 @@ describe('pos terminal model', () => {
     expect(posTerminalError({ ...t2, branchId: 2, active: false }, [t1], branches)).toBeNull();
     expect(terminalError(1, [t1], 1)).toBeNull();
     expect(terminalError(1, [t1], 2)).toBe(
-      'เครื่อง 1 เป็นเครื่องของสาขาอื่น กรุณาให้ผู้ดูแลตั้งค่าเครื่องนี้ใหม่',
+      'เครื่อง 1 เป็นเครื่องของสาขาอื่น — สลับไปสาขาของเครื่อง หรือให้ผู้ดูแลตั้งเครื่องนี้ใหม่',
+    );
+    expect(terminalError(1, [t1], 2, [{ id: 1, code: 'HQ', name: 'สำนักงานใหญ่' }])).toBe(
+      'เครื่อง 1 เป็นเครื่องของสาขา HQ · สำนักงานใหญ่ — สลับไปสาขานั้น หรือให้ผู้ดูแลตั้งเครื่องนี้ใหม่',
     );
   });
 

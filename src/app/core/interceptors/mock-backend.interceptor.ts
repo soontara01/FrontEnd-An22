@@ -2267,7 +2267,12 @@ function handleSales(
  */
 function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknown>> {
   // The receipt needs this device's POS ID, so only a registered terminal sells (T2).
-  const terminalProblem = terminalError(terminalId, db.posTerminals, requestBranchId());
+  const terminalProblem = terminalError(
+    terminalId,
+    db.posTerminals,
+    requestBranchId(),
+    db.branches,
+  );
   if (terminalProblem) return error(400, terminalProblem);
   const shift = moneyShift(db, 'sell');
   if (shift.problem) return error(400, shift.problem);
@@ -2970,7 +2975,12 @@ function handleShifts(
   }
   if (path === 'shifts/open' && req.method === 'POST') {
     // The drawer is this device's registered terminal; the body may only repeat it (T2).
-    const terminalProblem = terminalError(terminalId, db.posTerminals, requestBranchId());
+    const terminalProblem = terminalError(
+      terminalId,
+      db.posTerminals,
+      requestBranchId(),
+      db.branches,
+    );
     if (terminalProblem) return error(400, terminalProblem);
     const body = (req.body ?? {}) as Partial<ShiftOpenPayload>;
     if (body.terminalId !== undefined && body.terminalId !== terminalId) {

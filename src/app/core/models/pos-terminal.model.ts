@@ -67,12 +67,14 @@ export function terminalLabel(id: number, terminals: readonly PosTerminal[] = []
 /**
  * Why this device cannot sell or open a shift (T2): it must be set to an active terminal of the
  * registry (Settings → "เครื่องนี้") standing in the working branch (E8; `branchId` null = not sent,
- * not checked). Single rule for the POS and the server; null = OK.
+ * not checked). `branches` names the terminal's branch in the message (usually the wrong branch was
+ * chosen); one the caller doesn't know is "สาขาอื่น". Single rule for the POS and the server; null = OK.
  */
 export function terminalError(
   id: number | null,
   terminals: readonly Pick<PosTerminal, 'id' | 'active' | 'branchId'>[],
   branchId: number | null,
+  branches: readonly Pick<Branch, 'id' | 'code' | 'name'>[] = [],
 ): string | null {
   if (id === null) {
     return 'เครื่องนี้ยังไม่ได้ตั้งเลขเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าที่เมนูตั้งค่า';
@@ -81,7 +83,10 @@ export function terminalError(
   if (!terminal) return `ไม่พบเครื่อง ${id} ในทะเบียนเครื่อง POS กรุณาให้ผู้ดูแลตั้งค่าใหม่`;
   if (!terminal.active) return `เครื่อง ${id} ถูกปิดใช้งาน กรุณาให้ผู้ดูแลตั้งค่าใหม่`;
   if (branchId !== null && terminal.branchId !== branchId) {
-    return `เครื่อง ${id} เป็นเครื่องของสาขาอื่น กรุณาให้ผู้ดูแลตั้งค่าเครื่องนี้ใหม่`;
+    const own = branches.find((b) => b.id === terminal.branchId);
+    return own
+      ? `เครื่อง ${id} เป็นเครื่องของสาขา ${own.code} · ${own.name} — สลับไปสาขานั้น หรือให้ผู้ดูแลตั้งเครื่องนี้ใหม่`
+      : `เครื่อง ${id} เป็นเครื่องของสาขาอื่น — สลับไปสาขาของเครื่อง หรือให้ผู้ดูแลตั้งเครื่องนี้ใหม่`;
   }
   return null;
 }

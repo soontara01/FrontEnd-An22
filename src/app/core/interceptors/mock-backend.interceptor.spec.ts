@@ -1621,7 +1621,7 @@ describe('mockBackendInterceptor – POS terminals', () => {
         ),
       );
     expect(await errorOf(openAt(3, '1'))).toBe(
-      'เครื่อง 3 เป็นเครื่องของสาขาอื่น กรุณาให้ผู้ดูแลตั้งค่าเครื่องนี้ใหม่',
+      'เครื่อง 3 เป็นเครื่องของสาขา BN · ร้านไอทีดี คอมพิวเตอร์ สาขาบางนา — สลับไปสาขานั้น หรือให้ผู้ดูแลตั้งเครื่องนี้ใหม่',
     );
     expect(await openAt(3, '2')).toMatchObject({ terminalId: 3, posId: 'E051234567892' });
     // the branch cannot be closed while its shift is open

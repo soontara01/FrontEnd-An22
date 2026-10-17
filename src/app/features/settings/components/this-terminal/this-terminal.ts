@@ -103,7 +103,7 @@ export class ThisTerminal {
   protected readonly problem = computed(() =>
     this.terminalId() === null
       ? null
-      : terminalError(this.terminalId(), this.terminals(), this.branchId()),
+      : terminalError(this.terminalId(), this.terminals(), this.branchId(), this.auth.branches()),
   );
 
   constructor() {

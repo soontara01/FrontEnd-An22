@@ -173,7 +173,12 @@ export class PosStore {
    */
   readonly terminalProblem = computed(() =>
     this._shiftLoaded()
-      ? terminalError(this.terminalId(), this._terminals(), this.auth.currentBranch()?.id ?? null)
+      ? terminalError(
+          this.terminalId(),
+          this._terminals(),
+          this.auth.currentBranch()?.id ?? null,
+          this.auth.branches(),
+        )
       : null,
   );
   /** Shifts in use (`StoreInfo.requireShift`); unknown until the store info has loaded */
