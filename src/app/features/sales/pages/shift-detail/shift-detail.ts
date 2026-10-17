@@ -4,6 +4,7 @@ import {
   Component,
   ElementRef,
   computed,
+  effect,
   inject,
   input,
   viewChild,
@@ -96,6 +97,10 @@ export default class ShiftDetail {
 
   constructor() {
     this.store.loadLookups();
+    // The Z report prints the shift's own branch (E22).
+    effect(() => {
+      if (this.data.hasValue()) this.store.loadBranchInfo(this.data.value().shift.branchId);
+    });
   }
 
   protected statusText(): string {

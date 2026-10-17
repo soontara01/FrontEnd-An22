@@ -116,8 +116,12 @@ export class SalesApi {
     return this.api.get<SerialNumber[]>(`products/${productId}/serials`);
   }
 
-  storeInfo(): Observable<StoreInfo> {
-    return this.api.get<StoreInfo>('settings/store');
+  /** Seller details for printing: the working branch's, or `branchId`'s (a document's, E22). */
+  storeInfo(branchId?: number): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>(
+      'settings/store',
+      branchId ? { branchId: String(branchId) } : {},
+    );
   }
 
   posTerminals(): Observable<PosTerminal[]> {

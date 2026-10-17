@@ -296,6 +296,11 @@ export class PosStore {
     return this.api.shift(id);
   }
 
+  /** Seller details of another branch (Z report of a shift closed on its behalf, E22). */
+  fetchStoreInfo(branchId: number): Observable<StoreInfo> {
+    return this.api.storeInfo(branchId);
+  }
+
   /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน' for any terminal number. */
   terminalLabelOf(id: number): string {
     return terminalLabel(id, this._terminals());

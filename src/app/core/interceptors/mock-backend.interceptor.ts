@@ -3574,7 +3574,13 @@ function handleStoreInfo(
 ): Observable<HttpResponse<unknown>> {
   // Kept during the move to /settings/company + /settings/branch: the request's branch with its
   // company (E11). A write changes both parts, so it needs a company admin.
-  if (req.method === 'GET') return ok(db.storeInfo);
+  if (req.method === 'GET') {
+    // A document made at another branch prints that branch's details (E22).
+    const asked = req.params.get('branchId');
+    if (!asked) return ok(db.storeInfo);
+    const branch = db.branches.find((b) => String(b.id) === asked);
+    return branch ? ok(storeInfoOf(db.companyInfo, branch)) : error(404, 'ไม่พบสาขา');
+  }
   if (req.method === 'PUT') {
     if (!isCompanyAdmin(actor)) return error(403, COMPANY_ADMIN_ONLY);
     const payload = normalizeStoreInfo(req.body as StoreInfo);

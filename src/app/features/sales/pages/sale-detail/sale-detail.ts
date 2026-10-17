@@ -125,6 +125,10 @@ export default class SaleDetail {
     branchId: this.auth.currentBranch()?.id ?? null,
     branches: this.auth.branches(),
   }));
+  /** Seller details printed on this bill's documents: its own branch's (E22). */
+  protected readonly docInfo = computed(() =>
+    this.sale.hasValue() ? this.store.storeInfoFor(this.sale.value().branchId) : null,
+  );
   /** Shown when the bill belongs to another branch (its buttons are hidden). */
   protected readonly otherBranch = computed(() =>
     this.sale.hasValue() && this.isPos()
@@ -221,6 +225,9 @@ export default class SaleDetail {
     this.store.loadLookups();
     effect(() => {
       if (this.sale.error()) void this.router.navigate(['/sales']);
+    });
+    effect(() => {
+      if (this.sale.hasValue()) this.store.loadBranchInfo(this.sale.value().branchId);
     });
     // Print the original of a tax invoice just issued by the tax-invoice page (once).
     effect(() => {

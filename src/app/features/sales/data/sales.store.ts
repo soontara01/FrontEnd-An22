@@ -21,6 +21,7 @@ import {
   terminalLabel,
   toIsoDate,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { SalesApi } from './sales-api.service';
 
 /**
@@ -32,7 +33,12 @@ import { SalesApi } from './sales-api.service';
 export class SalesStore {
   private readonly api = inject(SalesApi);
 
+  private readonly auth = inject(AuthService);
+
   private readonly _storeInfo = signal<StoreInfo | null>(null);
+  /** Seller details of other branches, for documents made there (E22) */
+  private readonly _branchInfo = signal<ReadonlyMap<number, StoreInfo>>(new Map());
+  private readonly branchInfoLoading = new Set<number>();
   private readonly _promotions = signal<Promotion[]>([]);
   private readonly _methods = signal<PaymentMethod[]>([]);
   private readonly _terminals = signal<PosTerminal[]>([]);
@@ -118,6 +124,26 @@ export class SalesStore {
     this.api.promotions().subscribe({ next: (list) => this._promotions.set(list), error: retry });
     this.api.paymentMethods().subscribe({ next: (list) => this._methods.set(list), error: retry });
     this.api.posTerminals().subscribe({ next: (list) => this._terminals.set(list), error: retry });
+  }
+
+  /**
+   * Seller details to print on a document of `branchId` (E22): the working branch's from the
+   * lookups, another branch's once `loadBranchInfo()` brought it (null until then).
+   */
+  storeInfoFor(branchId: number | null | undefined): StoreInfo | null {
+    if (branchId == null || branchId === this.auth.currentBranch()?.id) return this._storeInfo();
+    return this._branchInfo().get(branchId) ?? null;
+  }
+
+  /** Fetches another branch's seller details once per page load (see `storeInfoFor()`). */
+  loadBranchInfo(branchId: number | null | undefined): void {
+    if (branchId == null || branchId === this.auth.currentBranch()?.id) return;
+    if (this._branchInfo().has(branchId) || this.branchInfoLoading.has(branchId)) return;
+    this.branchInfoLoading.add(branchId);
+    this.api.storeInfo(branchId).subscribe({
+      next: (info) => this._branchInfo.update((m) => new Map(m).set(branchId, info)),
+      error: () => this.branchInfoLoading.delete(branchId),
+    });
   }
 
   /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน'; '-' when unknown (bills from before the registry). */

@@ -117,6 +117,10 @@ export default class TaxInvoiceForm {
   });
 
   /** Preview document (number and date are set by the server on save). */
+  /** Seller details of the bill's branch, printed on its invoice (E22). */
+  protected readonly docInfo = computed(() =>
+    this.sale.hasValue() ? this.store.storeInfoFor(this.sale.value().branchId) : null,
+  );
   protected readonly preview = computed<TaxInvoice | null>(() => {
     if (!this.sale.hasValue()) return null;
     const s = this.sale.value();
@@ -142,6 +146,9 @@ export default class TaxInvoiceForm {
     this.store.loadLookups();
     effect(() => {
       if (this.sale.error()) void this.router.navigate(['/sales']);
+    });
+    effect(() => {
+      if (this.sale.hasValue()) this.store.loadBranchInfo(this.sale.value().branchId);
     });
     // Reissue: start from the current buyer details, to correct them.
     effect(() => {

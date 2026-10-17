@@ -48,7 +48,7 @@
           }
         </div>
         @if (zSummary(); as z) {
-          <app-shift-slip #slip [shift]="closed" [summary]="z" [store]="store.storeInfo()" />
+          <app-shift-slip #slip [shift]="closed" [summary]="z" [store]="slipInfo()" />
         } @else {
           <app-loading-spinner />
         }

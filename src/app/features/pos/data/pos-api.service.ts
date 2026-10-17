@@ -54,8 +54,12 @@ export class PosApi {
     return this.api.get<SerialNumber[]>(`products/${productId}/serials`);
   }
 
-  storeInfo(): Observable<StoreInfo> {
-    return this.api.get<StoreInfo>('settings/store');
+  /** Seller details: the working branch's, or `branchId`'s (another branch's shift, E22). */
+  storeInfo(branchId?: number): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>(
+      'settings/store',
+      branchId ? { branchId: String(branchId) } : {},
+    );
   }
 
   posTerminals(): Observable<PosTerminal[]> {

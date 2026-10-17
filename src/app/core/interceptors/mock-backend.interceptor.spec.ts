@@ -2771,6 +2771,19 @@ describe('mockBackendInterceptor – documents per branch', () => {
     expect(stored.docBranchFixed).toBe(true);
   });
 
+  it('answers the seller details of the branch of a document (E22)', async () => {
+    const here = await call<StoreInfo>('GET', 'settings/store');
+    const bn = await call<StoreInfo>('GET', 'settings/store?branchId=2');
+    expect(here.branchType).toBe('head');
+    expect(bn).toMatchObject({
+      branchType: 'branch',
+      branchNo: '00001',
+      placeName: 'ร้านไอทีดี คอมพิวเตอร์ สาขาบางนา',
+    });
+    expect(bn.name).toBe(here.name);
+    expect(await errorOf(call('GET', 'settings/store?branchId=9'))).toEqual([404, 'ไม่พบสาขา']);
+  });
+
   it('opens a shift in the terminal branch and refuses shift writes without a branch (E24)', async () => {
     const open = { terminalId: 3, openingFloat: 0, openingDenominations: [] };
     expect(await errorOf(call('POST', 'shifts/open', 'none', '3', open))).toEqual([
