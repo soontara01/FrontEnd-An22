@@ -2513,3 +2513,97 @@ describe('mockBackendInterceptor – branch stock', () => {
     ]);
   });
 });
+
+/** SaaS step 3: serials and documents belong to a branch (E12, E16). */
+describe('mockBackendInterceptor – selling per branch', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // serial: HQ 12 units, BN 2
+  const CASH = 1;
+  /** Branch + its POS terminal (seed: terminals 1–2 at HQ, 3 at BN) */
+  const HQ = { branch: '1', terminal: '1' };
+  const BN = { branch: '2', terminal: '3' };
+  type At = typeof HQ;
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 17, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+    // Selling itself is under test here; shifts have their own describe.
+    const company = await call<CompanyInfo>('GET', 'settings/company');
+    await call('PUT', 'settings/company', HQ, { ...company, requireShift: false });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function call<T>(method: string, url: string, at: At = HQ, body?: unknown): Promise<T> {
+    const headers = new HttpHeaders({ 'X-Branch-Id': at.branch, 'X-Terminal-Id': at.terminal });
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  }
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+  const serials = (at: At) => call<SerialNumber[]>('GET', `products/${NOTEBOOK}/serials`, at);
+  const product = (id: number, at: At) => call<Product>('GET', `products/${id}`, at);
+  /** One unit at the price the server computes (the first try tells the total). */
+  async function sell(at: At, productId: number, serial: string | null = null): Promise<Sale> {
+    const body = (expectedTotal: number) => ({
+      items: [{ productId, factor: 1, qty: 1, serial }],
+      freeSerials: [],
+      customer: '',
+      expectedTotal,
+      payments: [{ methodId: CASH, amount: expectedTotal, reference: '', installmentMonths: null }],
+    });
+    const products = await call<Product[]>('GET', 'products', at);
+    const price = products.find((p) => p.id === productId)!.currentPrice!;
+    return call<Sale>('POST', 'sales', at, body(price));
+  }
+
+  it('lists and sells only the serials of the branch (E16)', async () => {
+    const atBn = await serials(BN);
+    expect(atBn).toHaveLength(2);
+    expect(atBn.every((s) => s.branchId === 2 && s.status === 'in_stock')).toBe(true);
+    const [hqUnit] = await serials(HQ);
+    expect(hqUnit.branchId).toBe(1);
+    expect(await errorOf(sell(BN, NOTEBOOK, hqUnit.serial))).toBe(
+      `ซีเรียล ${hqUnit.serial} อยู่ที่สาขา HQ — ขายที่สาขานี้ไม่ได้`,
+    );
+    expect(
+      await errorOf(
+        call('POST', `products/${NOTEBOOK}/serials`, BN, { serials: [hqUnit.serial], unitCost: 1 }),
+      ),
+    ).toBe(`รับเข้าไม่ได้ — ${hqUnit.serial}: อยู่ในคลังสาขา HQ`);
+    expect(
+      await errorOf(
+        call('POST', `products/${NOTEBOOK}/serials/remove`, BN, {
+          ids: [hqUnit.id],
+          status: 'other',
+          note: '',
+        }),
+      ),
+    ).toBe('มี Serial ที่ไม่อยู่ในคลังแล้ว กรุณาโหลดใหม่');
+  });
+
+  it('moves a serial by issuing it at HQ and receiving it at BN (E16, before transfers)', async () => {
+    const [unit] = await serials(HQ);
+    await call('POST', `products/${NOTEBOOK}/serials/remove`, HQ, {
+      ids: [unit.id],
+      status: 'other',
+      note: 'ย้ายไป BN',
+    });
+    const { received } = await call<SerialReceiveResult>(
+      'POST',
+      `products/${NOTEBOOK}/serials`,
+      BN,
+      { serials: [unit.serial], unitCost: unit.cost, note: 'ย้ายจาก HQ' },
+    );
+    expect(received[0]).toMatchObject({ id: unit.id, branchId: 2, status: 'in_stock' });
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(11);
+    expect((await product(NOTEBOOK, BN)).stock).toBe(3);
+    expect((await serials(HQ)).some((s) => s.id === unit.id)).toBe(false);
+  });
+});

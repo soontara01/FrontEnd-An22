@@ -58,6 +58,7 @@
   บริการ → `cost` × qty ไม่มี movement
 - **รับเข้า**: non-serial → `movingAverage()`; serial → `avgCost` = ค่าเฉลี่ยทุนของ serial ที่อยู่ในคลัง
 - **ทุกอย่างข้างบนคิดต่อสาขา** (D1, SaaS ขั้น 3): stock / avg ของแถว `branch_stock` (สาขาใน `X-Branch-Id`, ไม่มีแถว = 0), `suggestReorderQty()` ใช้ min / max ของสาขา — สูตรเดิมทั้งหมด ไม่มีการรวมข้ามสาขา
+- **Serial อยู่สาขาเดียว** (E16): ขาย / ของแถม / ตัวใหม่ของใบเปลี่ยน / ตัดออก ต้องเป็น serial in_stock **ของสาขาใน header** (สาขาอื่น → 400 "ซีเรียล X อยู่ที่สาขา HQ — ขายที่สาขานี้ไม่ได้"); void / ใบลดหนี้ / ใบเปลี่ยนรับตัวเก่าคืนเข้าสาขาของเอกสาร (ตั้ง `branch_id`)
 - **ทุกการเปลี่ยนสต็อกเขียน `StockMovement`** (+ `branch_id`) พร้อมยอดคงเหลือ (qty / avg / value) ของสาขานั้น — บัตรสต็อกอ่านจากตารางนี้
 - **ค่าที่คำนวณตอนอ่าน (ไม่เก็บ)**: `Product.currentPrice`, `categoryPath`, `Category.productCount`, `Supplier.productCount`,
   `Sale.returnStatus` / `creditedTotal` / `creditNoteNos` / `exchangeNos`, `Shift.adjustmentTotal` (ดู `data-model.md`)

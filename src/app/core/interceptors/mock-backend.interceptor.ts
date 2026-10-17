@@ -1702,8 +1702,11 @@ function handleSerials(
       const formatError = serialFormatError(serial, product);
       if (formatError) problems.push(`${serial}: ${formatError}`);
       else if (serials.indexOf(serial) !== i) problems.push(`${serial}: ซ้ำในรายการ`);
-      else if (db.serials.some((s) => s.serial === serial && s.status === 'in_stock')) {
-        problems.push(`${serial}: มีอยู่ในคลังแล้ว`);
+      else {
+        // Serial numbers are unique company-wide: one in stock elsewhere is not received again (E16).
+        const held = db.serials.find((s) => s.serial === serial && s.status === 'in_stock');
+        if (held?.branchId === stockBranch) problems.push(`${serial}: มีอยู่ในคลังแล้ว`);
+        else if (held) problems.push(`${serial}: อยู่ในคลังสาขา ${branchCode(db, held.branchId)}`);
       }
     });
     if (problems.length) return error(400, `รับเข้าไม่ได้ — ${problems.join(', ')}`);
@@ -2490,10 +2493,8 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   if (manualProblem) return error(400, manualProblem);
   for (const line of cart.lines) {
     if (!line.serial) continue;
-    const unit = db.serials.find((s) => s.serial === line.serial);
-    if (unit?.productId !== line.productId || unit.status !== 'in_stock') {
-      return error(400, `ซีเรียล ${line.serial} ไม่อยู่ในคลังของ ${line.sku}`);
-    }
+    const problem = serialHereProblem(db, line.serial, line.productId, line.sku, 'ขาย');
+    if (problem) return error(400, problem);
   }
   if (round2(body.expectedTotal) !== cart.total) {
     return error(400, 'ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง กรุณาตรวจสอบบิลอีกครั้ง');
@@ -2564,6 +2565,31 @@ function nextOrderNo(db: MockDb, today: string, terminal: number): string {
     .map((s) => Number(s.orderNo.slice(prefix.length)))
     .reduce((max, n) => Math.max(max, n), 0);
   return prefix + String(last + 1).padStart(4, '0');
+}
+
+/** Code of a branch for messages ('สาขา HQ'); an unknown id shows as its number. */
+function branchCode(db: MockDb, branchId: number): string {
+  return db.branches.find((b) => b.id === branchId)?.code ?? String(branchId);
+}
+
+/**
+ * Why `serial` cannot leave this branch's stock as a unit of `productId` (null = it can): it must be
+ * in stock here — one in another branch is sold / handed out only there (E16).
+ */
+function serialHereProblem(
+  db: MockDb,
+  serial: string,
+  productId: number,
+  sku: string,
+  what: string,
+): string | null {
+  const unit = db.serials.find((s) => s.serial === serial);
+  if (unit?.productId !== productId || unit.status !== 'in_stock') {
+    return `ซีเรียล ${serial} ไม่อยู่ในคลังของ ${sku}`;
+  }
+  return unit.branchId === stockBranch
+    ? null
+    : `ซีเรียล ${serial} อยู่ที่สาขา ${branchCode(db, unit.branchId)} — ${what}ที่สาขานี้ไม่ได้`;
 }
 
 /** Takes one sale line out of stock (stock card + serial status); returns its COGS. */
@@ -2656,9 +2682,21 @@ function createCreditNote(
     if (unit) {
       Object.assign(
         unit,
+        // Back into (or written off at) the branch of the credit note (E16).
         line.restock
-          ? { status: 'in_stock', removedAt: null, receivedAt: now.toISOString(), note }
-          : { status: 'damaged', removedAt: now.toISOString(), note: `${note} · ไม่รับเข้าคลัง` },
+          ? {
+              branchId: stockBranch,
+              status: 'in_stock',
+              removedAt: null,
+              receivedAt: now.toISOString(),
+              note,
+            }
+          : {
+              branchId: stockBranch,
+              status: 'damaged',
+              removedAt: now.toISOString(),
+              note: `${note} · ไม่รับเข้าคลัง`,
+            },
       );
       if (line.restock) {
         db.products[index] = withSerialStock(product, db);
@@ -2752,10 +2790,14 @@ function createExchange(
     if (oldUnit?.productId !== line.productId || oldUnit.status !== 'sold') {
       return error(400, `ซีเรียล ${old} ไม่อยู่ในสถานะขายแล้ว เปลี่ยนไม่ได้`);
     }
-    const newUnit = db.serials.find((s) => s.serial === input.newSerial);
-    if (newUnit?.productId !== line.productId || newUnit.status !== 'in_stock') {
-      return error(400, `ซีเรียล ${input.newSerial} ไม่อยู่ในคลังของ ${line.sku}`);
-    }
+    const newProblem = serialHereProblem(
+      db,
+      input.newSerial ?? '',
+      line.productId,
+      line.sku,
+      'เปลี่ยนให้ลูกค้า',
+    );
+    if (newProblem) return error(400, newProblem);
   }
 
   const now = new Date();
@@ -2781,8 +2823,19 @@ function createExchange(
       Object.assign(
         unit,
         input.restock
-          ? { status: 'in_stock', removedAt: null, receivedAt: now.toISOString(), note }
-          : { status: 'damaged', removedAt: now.toISOString(), note: `${note} · ชำรุด` },
+          ? {
+              branchId: stockBranch,
+              status: 'in_stock',
+              removedAt: null,
+              receivedAt: now.toISOString(),
+              note,
+            }
+          : {
+              branchId: stockBranch,
+              status: 'damaged',
+              removedAt: now.toISOString(),
+              note: `${note} · ชำรุด`,
+            },
       );
       if (input.restock) {
         db.products[index] = withSerialStock(db.products[index], db);
@@ -2929,7 +2982,13 @@ function voidSale(
     const serial = serialOf(i);
     if (serial) {
       const unit = db.serials.find((s) => s.serial === serial)!;
-      Object.assign(unit, { status: 'in_stock', removedAt: null, receivedAt: now, note });
+      Object.assign(unit, {
+        branchId: stockBranch,
+        status: 'in_stock',
+        removedAt: null,
+        receivedAt: now,
+        note,
+      });
       db.products[index] = withSerialStock(product, db);
       recordMovement(
         db,

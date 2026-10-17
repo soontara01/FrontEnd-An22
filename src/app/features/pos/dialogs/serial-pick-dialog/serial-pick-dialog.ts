@@ -84,7 +84,7 @@ export class SerialPickDialog {
       return;
     }
     if (!this.available().some((s) => s.serial === serial)) {
-      this.scanError.set(`ไม่พบ ${serial} ในคลังของ ${this.data.product.sku}`);
+      this.scanError.set(`ไม่พบ ${serial} ในคลังสาขานี้ของ ${this.data.product.sku}`);
       return;
     }
     this.scanError.set('');
