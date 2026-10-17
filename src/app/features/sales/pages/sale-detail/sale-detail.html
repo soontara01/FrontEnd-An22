@@ -80,7 +80,7 @@
               }
             </div>
           }
-          @if (isPos() && s.status === 'paid' && voidBlocker()) {
+          @if (isPos() && s.status === 'paid' && voidBlocker() && !otherBranch()) {
             <div class="text-muted small hint">
               <mat-icon inline>info</mat-icon> {{ voidBlocker() }}
               @if (canCredit() && !isAdmin()) {
