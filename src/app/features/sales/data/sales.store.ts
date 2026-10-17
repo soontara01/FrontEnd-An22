@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, forkJoin, map, of } from 'rxjs';
 import {
+  BranchScope,
   CreditNote,
   CreditNotePayload,
   Exchange,
@@ -54,8 +55,8 @@ export class SalesStore {
     () => new Map(this._promotions().map((p) => [p.id, `${p.code} ${p.name}`])),
   );
 
-  list(from: string | null, to: string | null): Observable<Sale[]> {
-    return this.api.list(from, to);
+  list(from: string | null, to: string | null, branch?: BranchScope): Observable<Sale[]> {
+    return this.api.list(from, to, branch);
   }
 
   get(id: number): Observable<Sale> {
@@ -66,8 +67,12 @@ export class SalesStore {
     return this.api.creditNotesOf(saleId);
   }
 
-  creditNotes(from: string | null, to: string | null): Observable<CreditNote[]> {
-    return this.api.creditNotes(from, to);
+  creditNotes(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<CreditNote[]> {
+    return this.api.creditNotes(from, to, branch);
   }
 
   /** Bills sold or voided in a shift, newest first (bill list `?shift=`). */
@@ -156,10 +161,10 @@ export class SalesStore {
   }
 
   /** Shifts opened within the range + the variance per cashier over them. */
-  shiftList(from: string | null, to: string | null) {
+  shiftList(from: string | null, to: string | null, branch?: BranchScope) {
     return forkJoin({
-      shifts: this.api.shifts(from, to),
-      report: this.api.varianceReport(from, to),
+      shifts: this.api.shifts(from, to, branch),
+      report: this.api.varianceReport(from, to, branch),
     });
   }
 
@@ -192,15 +197,15 @@ export class SalesStore {
   }
 
   /** Everything the monthly sales tax report needs ('YYYY-MM'). */
-  taxReportData(month: string) {
+  taxReportData(month: string, branchId?: number) {
     const from = `${month}-01`;
     // Last day of the month (a real server would reject 2026-02-31).
     const [y, m] = month.split('-').map(Number);
     const to = toIsoDate(new Date(y, m, 0));
     return forkJoin({
-      sales: this.api.list(from, to),
-      invoices: this.api.taxInvoices(from, to),
-      notes: this.api.creditNotes(from, to),
+      sales: this.api.list(from, to, branchId),
+      invoices: this.api.taxInvoices(from, to, branchId),
+      notes: this.api.creditNotes(from, to, branchId),
     });
   }
 

@@ -89,6 +89,11 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 - `userBranchError()` → 400: `allBranches` หรือ `branchIds` ≥ 1 สาขาที่ใช้งานอยู่ (เก็บ `branchIds: []` เมื่อ `allBranches`) · `passwordError()` → 400 (4–64 ตัว)
 - `userScopeError()` → **403** (E6): admin ที่ไม่ใช่ `allBranches` จัดการได้เฉพาะผู้ใช้ที่อยู่ในสาขาของตัวเองทั้งหมด และให้สิทธิ์ได้แค่สาขาของตัวเอง
 
+### ตัวกรองสาขาของรายการ (SaaS ขั้น 4, E23)
+
+`GET /sales`, `/credit-notes`, `/tax-invoices`, `/shifts`, `/shifts/variance-report` รับ `?branchId=<id>|all`: ไม่ส่ง = สาขาใน `X-Branch-Id`; รายการของกะเดียว (`shiftId=`) ใช้สาขาของกะ;
+`branchScopeError()` (`user.model.ts`) — admin บริษัทได้ทุกสาขาของบริษัทและ `all`, คนอื่นเฉพาะสาขาที่ `canWorkIn()` → **403** ("ไม่มีสิทธิ์ดูข้อมูลของสาขานี้" / "ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท"); ค่าที่อ่านไม่ได้ → 400
+
 ### SKU / สต็อก
 
 | method + path                       | body → response                                                  | หมายเหตุ                                                                                                                                                                                                                                                          |

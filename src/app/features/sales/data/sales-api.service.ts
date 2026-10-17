@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  BranchScope,
   CashMovement,
   CreditNote,
   CreditNotePayload,
@@ -34,9 +35,9 @@ export class SalesApi {
   private readonly api = inject(ApiService);
 
   /** Bills sold within a local-date range (null = open end), newest first. */
-  list(from: string | null, to: string | null): Observable<Sale[]> {
+  list(from: string | null, to: string | null, branch?: BranchScope): Observable<Sale[]> {
     return this.api
-      .get<Sale[]>('sales', rangeParams(from, to))
+      .get<Sale[]>('sales', rangeParams(from, to, branch))
       .pipe(map((l) => l.map(normalizeSale)));
   }
 
@@ -62,13 +63,21 @@ export class SalesApi {
   }
 
   /** Credit notes issued within a local-date range, newest first. */
-  creditNotes(from: string | null, to: string | null): Observable<CreditNote[]> {
-    return this.api.get<CreditNote[]>('credit-notes', rangeParams(from, to));
+  creditNotes(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<CreditNote[]> {
+    return this.api.get<CreditNote[]>('credit-notes', rangeParams(from, to, branch));
   }
 
   /** Full tax invoices issued within a local-date range, oldest first. */
-  taxInvoices(from: string | null, to: string | null): Observable<TaxInvoice[]> {
-    return this.api.get<TaxInvoice[]>('tax-invoices', rangeParams(from, to));
+  taxInvoices(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<TaxInvoice[]> {
+    return this.api.get<TaxInvoice[]>('tax-invoices', rangeParams(from, to, branch));
   }
 
   /** The bill's full tax invoice, or null when none was issued. */
@@ -137,9 +146,9 @@ export class SalesApi {
   }
 
   /** POS shifts opened within a local-date range (null = open end), newest first. */
-  shifts(from: string | null, to: string | null): Observable<Shift[]> {
+  shifts(from: string | null, to: string | null, branch?: BranchScope): Observable<Shift[]> {
     return this.api
-      .get<Shift[]>('shifts', rangeParams(from, to))
+      .get<Shift[]>('shifts', rangeParams(from, to, branch))
       .pipe(map((l) => l.map(normalizeShift)));
   }
 
@@ -173,8 +182,15 @@ export class SalesApi {
   }
 
   /** Variance per cashier over shifts opened within the range. */
-  varianceReport(from: string | null, to: string | null): Observable<VarianceReportRow[]> {
-    return this.api.get<VarianceReportRow[]>('shifts/variance-report', rangeParams(from, to));
+  varianceReport(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<VarianceReportRow[]> {
+    return this.api.get<VarianceReportRow[]>(
+      'shifts/variance-report',
+      rangeParams(from, to, branch),
+    );
   }
 
   /** Bills sold or voided in a shift, newest first. */
@@ -190,9 +206,15 @@ export class SalesApi {
   }
 }
 
-function rangeParams(from: string | null, to: string | null): Record<string, string> {
+/** Date range + branch (`?branchId=<id>|all`, none = the working branch, E23). */
+function rangeParams(
+  from: string | null,
+  to: string | null,
+  branch?: BranchScope,
+): Record<string, string> {
   const params: Record<string, string> = {};
   if (from) params['from'] = from;
   if (to) params['to'] = to;
+  if (branch !== undefined) params['branchId'] = String(branch);
   return params;
 }

@@ -2672,6 +2672,26 @@ describe('mockBackendInterceptor – selling per branch', () => {
     expect(invoice).toMatchObject({ invoiceNo: 'INV-BN-20261017-0001', branchId: 2 });
   });
 
+  it('lists the working branch by default, another or all only within the rights (E23)', async () => {
+    const atBn = await sell(BN, MOUSE);
+    const atHq = await sell(HQ, NOTEBOOK, (await serials(HQ))[0].serial);
+    const ids = (list: Sale[]) => list.filter((x) => x.lines.length).map((x) => x.id);
+    expect(ids(await call<Sale[]>('GET', 'sales'))).toEqual([atHq.id]);
+    expect(ids(await call<Sale[]>('GET', 'sales?branchId=2'))).toEqual([atBn.id]);
+    expect(ids(await call<Sale[]>('GET', 'sales?branchId=all')).sort()).toEqual([atBn.id, atHq.id]);
+    const asStaff = (url: string) =>
+      errorOf(
+        firstValueFrom(
+          http.get(`/api/${url}`, {
+            headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': '1' },
+          }),
+        ),
+      );
+    expect(await asStaff('sales?branchId=2')).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
+    expect(await asStaff('shifts?branchId=all')).toBe('ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท');
+    expect(await asStaff('sales')).toBeNull();
+  });
+
   it('returns a serial sold at BN into BN stock on void', async () => {
     const [unit] = await serials(BN);
     const sale = await sell(BN, NOTEBOOK, unit.serial);

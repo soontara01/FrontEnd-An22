@@ -21,6 +21,8 @@ import {
   Company,
   HEAD_OFFICE_BRANCH_NO,
   withBranchStock,
+  branchScopeError,
+  parseBranchScope,
   BRANCH_DEFAULTS,
   BranchDetails,
   BranchPayload,
@@ -1063,8 +1065,11 @@ function handle(
     const from = req.params.get('from') || null;
     const to = req.params.get('to') || null;
     const day = (t: TaxInvoice) => toIsoDate(new Date(t.date));
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
     return ok(
       db.taxInvoices
+        .filter(inScope)
         .filter((t) => (!from || day(t) >= from) && (!to || day(t) <= to))
         .sort((a, b) => a.date.localeCompare(b.date)),
     );
@@ -2404,8 +2409,11 @@ function handleSales(
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
     // Optional shift: bills sold or voided in it.
     const shiftId = Number(req.params.get('shiftId')) || null;
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
     return ok(
       sales
+        .filter(inScope)
         .filter((s) => (!from || saleDay(s) >= from) && (!to || saleDay(s) <= to))
         .filter((s) => !shiftId || s.shiftId === shiftId || s.voidShiftId === shiftId)
         .sort((a, b) => b.date.localeCompare(a.date))
@@ -2624,6 +2632,26 @@ function fixDocumentBranches(db: MockDb): boolean {
   return true;
 }
 
+/**
+ * Branch filter of a list (E23): `?branchId=<id>|all`, missing = the request's branch; a list of one
+ * shift's documents takes that shift's branch. A string = why it is refused (400 / 403).
+ */
+function listScope(
+  req: HttpRequest<unknown>,
+  db: MockDb,
+): ((doc: { branchId?: number | null }) => boolean) | { status: number; message: string } {
+  const shiftId = Number(req.params.get('shiftId')) || null;
+  const shiftBranch = shiftId ? db.shifts.find((s) => s.id === shiftId)?.branchId : undefined;
+  const scope = shiftBranch
+    ? shiftBranch
+    : parseBranchScope(req.params.get('branchId'), stockBranch);
+  if (scope === null) return { status: 400, message: 'รหัสสาขาไม่ถูกต้อง' };
+  const refused = actor ? branchScopeError(scope, actor, db.branches) : 'ไม่มีสิทธิ์';
+  if (refused) return { status: 403, message: refused };
+  const first = db.branches[0].id;
+  return scope === 'all' ? () => true : (doc) => (doc.branchId ?? first) === scope;
+}
+
 /** The request's branch for the D3 rules (void / credit note / exchange only where sold, E12). */
 function branchHere(db: MockDb): BranchHere {
   return { branchId: stockBranch, branches: db.branches };
@@ -2680,8 +2708,11 @@ function listCreditNotes(req: HttpRequest<unknown>, db: MockDb): Observable<Http
   const day = (n: CreditNote) => saleDay(n);
   // Optional shift: the notes whose refund was paid from it.
   const shiftId = Number(req.params.get('shiftId')) || null;
+  const inScope = listScope(req, db);
+  if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
   return ok(
     db.creditNotes
+      .filter(inScope)
       .filter((n) => (!from || day(n) >= from) && (!to || day(n) <= to))
       .filter((n) => !shiftId || n.shiftId === shiftId)
       .sort((a, b) => b.date.localeCompare(a.date)),
@@ -3357,9 +3388,12 @@ function handleShifts(
     const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
     // Non-admins see only their own shifts (P6).
     const inRange = db.shifts.filter(
       (s) =>
+        inScope(s) &&
         (isAdmin || s.cashier === user) &&
         (!from || shiftDay(s) >= from) &&
         (!to || shiftDay(s) <= to),

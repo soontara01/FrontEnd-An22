@@ -33,6 +33,37 @@ export const canWorkIn = (
   branch: Pick<Branch, 'id' | 'active'>,
 ): boolean => branch.active && (u.allBranches || u.branchIds.includes(branch.id));
 
+/** Which branch a list / report shows (E23): one branch's id, or every branch. */
+export type BranchScope = number | 'all';
+
+/** `?branchId=` of a list → its scope; missing = the working branch, anything odd = null (400). */
+export function parseBranchScope(
+  param: string | null,
+  workingBranchId: number,
+): BranchScope | null {
+  if (!param) return workingBranchId;
+  if (param === 'all') return 'all';
+  const id = Number(param);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/**
+ * Who may read the documents of a branch (E23, server + screens): company admins any branch of the
+ * company or all of them; everyone else only the branches they work in (`canWorkIn()`) → else 403.
+ */
+export function branchScopeError(
+  scope: BranchScope,
+  user: Pick<User, 'role' | 'allBranches' | 'branchIds'>,
+  branches: readonly Pick<Branch, 'id' | 'active'>[],
+): string | null {
+  if (scope === 'all') {
+    return isCompanyAdmin(user) ? null : 'ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท';
+  }
+  const branch = branches.find((b) => b.id === scope);
+  if (branch && (isCompanyAdmin(user) || canWorkIn(user, branch))) return null;
+  return 'ไม่มีสิทธิ์ดูข้อมูลของสาขานี้';
+}
+
 /** Branch rights of a user form / `POST`·`PUT /users`: all branches or at least one active one. */
 export function userBranchError(
   p: Pick<UserPayload, 'allBranches' | 'branchIds'>,

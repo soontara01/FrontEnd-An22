@@ -1,4 +1,6 @@
 import {
+  branchScopeError,
+  parseBranchScope,
   User,
   canWorkIn,
   isCompanyAdmin,
@@ -136,5 +138,35 @@ describe('user branch rights and passwords', () => {
     expect(passwordError('123')).toBe('รหัสผ่านต้องมีอย่างน้อย 4 ตัว');
     expect(passwordError('x'.repeat(65))).toBe('รหัสผ่านต้องไม่เกิน 64 ตัว');
     expect(passwordError('1234')).toBeNull();
+  });
+});
+
+describe('branch scope of lists (E23)', () => {
+  const branches = [
+    { id: 1, active: true },
+    { id: 2, active: true },
+    { id: 3, active: false },
+  ];
+  const companyAdmin = { role: 'admin' as const, allBranches: true, branchIds: [] };
+  const branchAdmin = { role: 'admin' as const, allBranches: false, branchIds: [2] };
+  const staff = { role: 'user' as const, allBranches: false, branchIds: [1] };
+
+  it('reads ?branchId= (missing = the working branch)', () => {
+    expect(parseBranchScope(null, 2)).toBe(2);
+    expect(parseBranchScope('all', 2)).toBe('all');
+    expect(parseBranchScope('1', 2)).toBe(1);
+    expect(parseBranchScope('x', 2)).toBeNull();
+  });
+
+  it('lets company admins see any branch or all, others only their own', () => {
+    expect(branchScopeError('all', companyAdmin, branches)).toBeNull();
+    expect(branchScopeError(3, companyAdmin, branches)).toBeNull();
+    expect(branchScopeError('all', branchAdmin, branches)).toBe(
+      'ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(branchScopeError(2, branchAdmin, branches)).toBeNull();
+    expect(branchScopeError(1, branchAdmin, branches)).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
+    expect(branchScopeError(1, staff, branches)).toBeNull();
+    expect(branchScopeError(9, companyAdmin, branches)).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
   });
 });

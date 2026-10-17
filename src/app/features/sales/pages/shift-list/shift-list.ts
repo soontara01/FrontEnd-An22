@@ -4,6 +4,7 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import { MatTableModule } from '@angular/material/table';
 import { Router, RouterLink } from '@angular/router';
 import {
+  BranchScope,
   SHIFT_APPROVAL_BADGE,
   SHIFT_APPROVAL_LABEL,
   SHIFT_STATUS_LABEL,
@@ -27,6 +28,7 @@ import {
   presetRange,
 } from '@shared/utils/date-range';
 import { SalesStore } from '../../data/sales.store';
+import { BranchScopeSelect } from '../../components/branch-scope-select';
 
 /**
  * POS shifts opened within a local-date range (`/sales/shifts?from=&to=`, `?all=1`; default this
@@ -35,6 +37,7 @@ import { SalesStore } from '../../data/sales.store';
 @Component({
   selector: 'app-shift-list',
   imports: [
+    BranchScopeSelect,
     DecimalPipe,
     RouterLink,
     MatTableModule,
@@ -52,16 +55,22 @@ import { SalesStore } from '../../data/sales.store';
 export default class ShiftList {
   protected readonly store = inject(SalesStore);
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
   /** Non-admins get only their own shifts from the server (P6). */
-  protected readonly isAdmin = inject(AuthService).isAdmin;
+  protected readonly isAdmin = this.auth.isAdmin;
 
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();
   readonly to = input<string>();
   readonly all = input<string>();
+  /** `?branch=<id>|all` (E23); none = the working branch */
+  readonly branch = input<string>();
+  protected readonly scope = computed<BranchScope>(() =>
+    this.branch() === 'all' ? 'all' : Number(this.branch()) || this.auth.currentBranch()?.id || 0,
+  );
 
   protected readonly presets = DATE_PRESETS;
-  protected readonly columns = [
+  private readonly baseColumns = [
     'shiftNo',
     'opened',
     'terminal',
@@ -70,6 +79,10 @@ export default class ShiftList {
     'variance',
     'approval',
   ];
+  /** + the branch when every branch is shown */
+  protected readonly columns = computed(() =>
+    this.scope() === 'all' ? ['shiftNo', 'branch', ...this.baseColumns.slice(1)] : this.baseColumns,
+  );
   protected readonly reportColumns = [
     'cashier',
     'shifts',
@@ -93,8 +106,8 @@ export default class ShiftList {
   });
 
   protected readonly data = rxResource({
-    params: () => this.range(),
-    stream: ({ params }) => this.store.shiftList(params.from, params.to),
+    params: () => ({ ...this.range(), scope: this.scope() }),
+    stream: ({ params }) => this.store.shiftList(params.from, params.to, params.scope),
   });
   protected readonly shifts = computed(() => {
     const list = this.data.hasValue() ? this.data.value().shifts : [];
@@ -136,6 +149,18 @@ export default class ShiftList {
 
   protected approvalBadge(shift: Shift): string {
     return SHIFT_APPROVAL_BADGE[shift.approvalStatus];
+  }
+
+  protected selectBranch(scope: BranchScope): void {
+    const working = scope === this.auth.currentBranch()?.id;
+    void this.router.navigate([], {
+      queryParams: { branch: working ? null : String(scope) },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  protected branchCode(shift: Shift): string {
+    return this.auth.branches().find((b) => b.id === shift.branchId)?.code ?? '-';
   }
 
   protected applyPreset(preset: DatePreset): void {
