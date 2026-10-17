@@ -265,4 +265,11 @@ describe('buildSalesTaxReport', () => {
     expect(summary.totals.total).toBe(1070 + 535 + 214);
     expect(summary.totals.vat).toBe(70 + 35 + 14);
   });
+
+  it('gives the day range in issue order when the bill number format changed (E21)', () => {
+    const before = sale(21, 'POS3-20261017-0001', at(17, 9), [line(107, 7)], { terminalId: 3 });
+    const after = sale(22, 'POS-BN-3-20261017-0001', at(17, 18), [line(107, 7)], { terminalId: 3 });
+    const report = buildSalesTaxReport('2026-10', [after, before], [], []);
+    expect(report.rows[0].docNo).toBe('POS3-20261017-0001 – POS-BN-3-20261017-0001');
+  });
 });

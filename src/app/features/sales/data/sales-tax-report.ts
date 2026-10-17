@@ -104,7 +104,10 @@ export function buildSalesTaxReport(
     groups.set(key, group);
   }
   for (const { day, terminal, bills } of groups.values()) {
-    const numbers = bills.map((b) => b.orderNo).sort();
+    // In issue order: the day bill numbers changed format (E21) plain string order would not be.
+    const numbers = [...bills]
+      .sort((a, b) => a.date.localeCompare(b.date) || a.orderNo.localeCompare(b.orderNo))
+      .map((b) => b.orderNo);
     const paid = bills.filter((b) => b.status === 'paid');
     const voided = bills.length - paid.length;
     const t = paid.map(invoiceTotals);
