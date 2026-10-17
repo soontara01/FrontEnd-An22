@@ -86,7 +86,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -235,7 +236,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": false
+        "vatRegistered": false,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -431,7 +433,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -530,6 +533,366 @@
     }
   },
   {
+    "name": "promotions limited to other branches do not apply (D2)",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 2,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 5,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 20,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "branchIds": [1],
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "branchIds": [2, 3],
+            "id": 2,
+            "code": "P2",
+            "name": "โปร 2",
+            "startDate": "2026-10-01"
+          },
+          {
+            "note": "",
+            "type": "bill_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 0,
+            "minAmount": 1000,
+            "discount": {
+              "kind": "amount",
+              "value": 100,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "branchIds": [1],
+            "id": 3,
+            "code": "P3",
+            "name": "โปร 3",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true,
+        "branchId": 2
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 2,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 200,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 1800,
+            "vat": 117.76,
+            "promotionIds": [2],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 2000,
+        "itemDiscount": 200,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 1800,
+        "vat": 117.76,
+        "billPromotionIds": [],
+        "itemCount": 2,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
+    "name": "a limited promotion never applies when the branch is unknown",
+    "input": {
+      "items": [
+        {
+          "productId": 1,
+          "factor": 1,
+          "qty": 1,
+          "serial": null,
+          "manualDiscount": null
+        }
+      ],
+      "context": {
+        "products": [
+          {
+            "shortName": "สินค้า 1",
+            "categoryId": 3,
+            "categoryPath": "",
+            "unit": "ชิ้น",
+            "barcode": "",
+            "packUnits": [],
+            "brand": "",
+            "model": "",
+            "itemType": "stock",
+            "imageUrl": "",
+            "vatType": "vat7",
+            "cost": 0,
+            "avgCost": 0,
+            "currentPrice": 1000,
+            "stock": 100,
+            "minStock": 0,
+            "maxStock": 0,
+            "suppliers": [],
+            "warrantyMonths": 0,
+            "serialControl": false,
+            "serialPrefix": "",
+            "serialLength": null,
+            "saleStatus": "active",
+            "id": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1"
+          }
+        ],
+        "promotions": [
+          {
+            "note": "",
+            "type": "item_discount",
+            "endDate": null,
+            "enabled": true,
+            "priority": 0,
+            "stackable": false,
+            "scope": {
+              "all": true,
+              "productIds": [],
+              "categoryIds": []
+            },
+            "minQty": 1,
+            "minAmount": 0,
+            "discount": {
+              "kind": "percent",
+              "value": 10,
+              "maxDiscount": null
+            },
+            "freeGoods": null,
+            "branchIds": [2],
+            "id": 1,
+            "code": "P1",
+            "name": "โปร 1",
+            "startDate": "2026-10-01"
+          }
+        ],
+        "categories": [
+          {
+            "id": 1,
+            "code": "IT",
+            "name": "ไอที",
+            "parentId": null,
+            "level": 1,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 2,
+            "code": "IT-A",
+            "name": "อุปกรณ์",
+            "parentId": 1,
+            "level": 2,
+            "active": true,
+            "productCount": 0
+          },
+          {
+            "id": 3,
+            "code": "IT-A-M",
+            "name": "เมาส์",
+            "parentId": 2,
+            "level": 3,
+            "active": true,
+            "productCount": 0
+          }
+        ],
+        "date": "2026-10-04",
+        "vatRegistered": true,
+        "branchId": null
+      },
+      "freeSerials": [],
+      "billManualDiscount": null,
+      "manualDiscountRule": {
+        "reason": "ลูกค้าประจำ",
+        "isAdmin": false,
+        "maxPercent": 5
+      }
+    },
+    "expected": {
+      "cart": {
+        "lines": [
+          {
+            "productId": 1,
+            "sku": "SKU-1",
+            "name": "สินค้า 1",
+            "shortName": "สินค้า 1",
+            "unit": "ชิ้น",
+            "factor": 1,
+            "vatType": "vat7",
+            "itemType": "stock",
+            "warrantyMonths": 0,
+            "qty": 1,
+            "unitPrice": 1000,
+            "listPrice": 1000,
+            "itemDiscount": 0,
+            "billDiscount": 0,
+            "manualDiscount": 0,
+            "amount": 1000,
+            "vat": 65.42,
+            "promotionIds": [],
+            "freeOfPromotionId": null,
+            "serial": null,
+            "cartIndex": 0
+          }
+        ],
+        "subtotal": 1000,
+        "itemDiscount": 0,
+        "billDiscount": 0,
+        "manualDiscount": 0,
+        "manualBillDiscount": 0,
+        "total": 1000,
+        "vat": 65.42,
+        "billPromotionIds": [],
+        "itemCount": 1,
+        "issues": []
+      },
+      "cartError": null,
+      "manualDiscountError": null
+    }
+  },
+  {
     "name": "item % discount capped per unit (maxDiscount), minQty reached",
     "input": {
       "items": [
@@ -593,6 +956,7 @@
               "maxDiscount": 50
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -629,7 +993,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -745,6 +1110,7 @@
               "maxDiscount": 50
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -781,7 +1147,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -897,6 +1264,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 3,
             "code": "P3",
             "name": "โปร 3",
@@ -922,6 +1290,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -947,6 +1316,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -983,7 +1353,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -1099,6 +1470,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -1124,6 +1496,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -1149,6 +1522,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 3,
             "code": "P3",
             "name": "โปร 3",
@@ -1185,7 +1559,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -1301,6 +1676,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -1326,6 +1702,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -1351,6 +1728,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 3,
             "code": "P3",
             "name": "โปร 3",
@@ -1376,6 +1754,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 4,
             "code": "P4",
             "name": "โปร 4",
@@ -1401,6 +1780,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 5,
             "code": "P5",
             "name": "โปร 5",
@@ -1437,7 +1817,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -1586,6 +1967,7 @@
               "repeat": true,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -1622,7 +2004,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -1794,6 +2177,7 @@
               "repeat": false,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -1830,7 +2214,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -2002,6 +2387,7 @@
               "repeat": true,
               "maxSets": 3
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -2038,7 +2424,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -2210,6 +2597,7 @@
               "repeat": true,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -2235,6 +2623,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -2271,7 +2660,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -2420,6 +2810,7 @@
               "repeat": true,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -2445,6 +2836,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -2481,7 +2873,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -2660,6 +3053,7 @@
               "repeat": true,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -2696,7 +3090,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -2898,6 +3293,7 @@
               "repeat": true,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -2934,7 +3330,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -3142,6 +3539,7 @@
               "repeat": true,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -3178,7 +3576,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [
         {
@@ -3351,6 +3750,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -3376,6 +3776,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -3412,7 +3813,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -3528,6 +3930,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -3553,6 +3956,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -3589,7 +3993,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -3705,6 +4110,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 3,
             "code": "P3",
             "name": "โปร 3",
@@ -3730,6 +4136,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -3755,6 +4162,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -3791,7 +4199,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -3977,6 +4386,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 9,
             "code": "P9",
             "name": "โปร 9",
@@ -4013,7 +4423,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -4353,7 +4764,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -4583,7 +4995,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -4716,6 +5129,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -4752,7 +5166,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -4929,6 +5344,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -4965,7 +5381,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": {
@@ -5120,7 +5537,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -5249,7 +5667,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -5382,7 +5801,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": {
@@ -5521,7 +5941,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -5647,6 +6068,7 @@
               "maxDiscount": null
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 5,
             "code": "P5",
             "name": "โปร 5",
@@ -5683,7 +6105,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -5812,7 +6235,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -5941,7 +6365,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -6070,7 +6495,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": null,
@@ -6293,6 +6719,7 @@
               "maxDiscount": 80
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 1,
             "code": "P1",
             "name": "โปร 1",
@@ -6323,6 +6750,7 @@
               "repeat": true,
               "maxSets": null
             },
+            "branchIds": [],
             "id": 2,
             "code": "P2",
             "name": "โปร 2",
@@ -6348,6 +6776,7 @@
               "maxDiscount": 150
             },
             "freeGoods": null,
+            "branchIds": [],
             "id": 3,
             "code": "P3",
             "name": "โปร 3",
@@ -6384,7 +6813,8 @@
           }
         ],
         "date": "2026-10-04",
-        "vatRegistered": true
+        "vatRegistered": true,
+        "branchId": 1
       },
       "freeSerials": [],
       "billManualDiscount": {

@@ -139,6 +139,8 @@ export class PosStore {
         date: todayIso(),
         // The server re-prices with the store's real status; until it loads assume registered.
         vatRegistered: this.storeInfo()?.vatRegistered ?? true,
+        // Same branch the server prices with (`X-Branch-Id`, D2).
+        branchId: this.auth.currentBranch()?.id ?? null,
       },
       this._freeSerials(),
       this._billManual(),

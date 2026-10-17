@@ -11,6 +11,7 @@ import {
   CartItem,
   Branch,
   CompanyInfo,
+  Promotion,
   LoginResponse,
   MeResponse,
   MenuAccess,
@@ -2268,6 +2269,54 @@ describe('mockBackendInterceptor – company / branch settings (E11)', () => {
       403,
       'ไม่มีสิทธิ์ทำงานในสาขานี้',
     ]);
+  });
+
+  it('lets only company admins limit promotions to branches (D2 / E6)', async () => {
+    const promotion = {
+      code: 'BN-ONLY',
+      name: 'ลดเฉพาะบางนา',
+      note: '',
+      type: 'item_discount',
+      startDate: '2999-01-01',
+      endDate: null,
+      enabled: true,
+      priority: 1,
+      stackable: false,
+      scope: { all: true, productIds: [], categoryIds: [] },
+      minQty: 1,
+      minAmount: 0,
+      discount: { kind: 'percent', value: 10, maxDiscount: null },
+      freeGoods: null,
+      branchIds: [2],
+    };
+    const boss = await call<User>('POST', 'users', {
+      username: 'boss',
+      name: 'ผู้จัดการบางนา',
+      email: '',
+      role: 'admin',
+      active: true,
+      branchIds: [2],
+      allBranches: false,
+      password: '5678',
+    });
+    const asBoss = (method: string, url: string, body?: unknown) =>
+      failure(call(method, url, body, { Authorization: `Bearer ${mockToken(1, boss.id)}` }));
+    const companyOnly = [403, 'โปรที่จำกัดสาขาสร้าง / แก้ได้เฉพาะผู้ดูแลระบบระดับบริษัท'];
+    expect(await asBoss('POST', 'promotions', promotion)).toEqual(companyOnly);
+    expect(await failure(call('POST', 'promotions', { ...promotion, branchIds: [9] }))).toEqual([
+      400,
+      'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว',
+    ]);
+    const created = await call<Promotion>('POST', 'promotions', promotion);
+    expect(created.branchIds).toEqual([2]);
+    expect(
+      await asBoss('PUT', `promotions/${created.id}`, { ...promotion, branchIds: [] }),
+    ).toEqual(companyOnly);
+    expect(await asBoss('DELETE', `promotions/${created.id}`)).toEqual(companyOnly);
+    // an all-branch promotion stays an admin's (E6 keeps the old admin rights)
+    expect(
+      await asBoss('POST', 'promotions', { ...promotion, code: 'ALL', branchIds: [] }),
+    ).toBeNull();
   });
 
   it('splits an older stored store into company settings + branch details once', async () => {

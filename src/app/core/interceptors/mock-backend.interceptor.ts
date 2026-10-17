@@ -96,6 +96,7 @@ import {
   isValidThaiTaxId,
   paymentMethodError,
   withPaymentTypeRules,
+  promotionBranchScopeError,
   promotionError,
   promotionStatus,
   hasStarted,
@@ -2007,8 +2008,12 @@ function handlePromotions(
     products: db.products,
     categories: db.categories,
     promotions,
+    branches: db.branches,
     today: todayIso(),
   });
+  // D2 / E6: promotions limited to branches belong to company admins (403).
+  const scope = (p: PromotionPayload | null, existing: Promotion | null) =>
+    promotionBranchScopeError(p, existing, isCompanyAdmin(actor));
   const normalize = (p: PromotionPayload): PromotionPayload => ({
     ...PROMOTION_DEFAULTS,
     ...p,
@@ -2027,6 +2032,8 @@ function handlePromotions(
   }
   if (path === 'promotions' && req.method === 'POST') {
     const payload = normalize(req.body as PromotionPayload);
+    const forbidden = scope(payload, null);
+    if (forbidden) return error(403, forbidden);
     const problem = promotionError(payload, ctx());
     if (problem) return error(400, problem);
     const created: Promotion = { ...payload, id: db.nextPromotionId++ };
@@ -2043,17 +2050,22 @@ function handlePromotions(
         return ok(promotions[index]);
       case 'PUT': {
         const payload = normalize(req.body as PromotionPayload);
+        const forbidden = scope(payload, promotions[index]);
+        if (forbidden) return error(403, forbidden);
         const problem = promotionError(payload, ctx(), promotions[index]);
         if (problem) return error(400, problem);
         promotions[index] = { ...payload, id };
         return ok(promotions[index]);
       }
-      case 'DELETE':
+      case 'DELETE': {
+        const forbidden = scope(null, promotions[index]);
+        if (forbidden) return error(403, forbidden);
         if (hasStarted(promotions[index], todayIso())) {
           return error(400, 'โปรที่เริ่มแล้วลบไม่ได้ (ปิดใช้งานแทน)');
         }
         promotions.splice(index, 1);
         return ok(null);
+      }
     }
   }
   return notFound(req, path);
@@ -2268,6 +2280,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
       categories: db.categories,
       date: today,
       vatRegistered: db.storeInfo.vatRegistered,
+      branchId: requestBranchId(),
     },
     body.freeSerials ?? [],
     body.billManualDiscount ?? null,

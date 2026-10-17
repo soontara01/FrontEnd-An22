@@ -116,6 +116,8 @@ interface CartCase {
   products: Product[];
   promotions?: Promotion[];
   vatRegistered?: boolean;
+  /** Branch of the sale (default 1) */
+  branchId?: number | null;
   freeSerials?: FreeSerial[];
   billManualDiscount?: ManualDiscount | null;
   manualDiscountRule?: PriceCartFixture['input']['manualDiscountRule'];
@@ -146,6 +148,24 @@ const CART_CASES: CartCase[] = [
       product(2, { currentPrice: 12.35, vatType: 'exempt' }),
       product(3, { currentPrice: 0.01 }),
     ],
+  },
+  {
+    name: 'promotions limited to other branches do not apply (D2)',
+    items: [item(1, 2)],
+    products: [product(1, { currentPrice: 1000 })],
+    branchId: 2,
+    promotions: [
+      promo(1, { priority: 5, discount: percent(20), branchIds: [1] }),
+      promo(2, { discount: percent(10), branchIds: [2, 3] }),
+      billPromo(3, { branchIds: [1] }),
+    ],
+  },
+  {
+    name: 'a limited promotion never applies when the branch is unknown',
+    items: [item(1, 1)],
+    products: [product(1, { currentPrice: 1000 })],
+    branchId: null,
+    promotions: [promo(1, { discount: percent(10), branchIds: [2] })],
   },
   {
     name: 'item % discount capped per unit (maxDiscount), minQty reached',
@@ -418,6 +438,7 @@ function priceCartFixture(c: CartCase): PriceCartFixture {
     categories,
     date: DATE,
     vatRegistered: c.vatRegistered ?? true,
+    branchId: c.branchId === undefined ? 1 : c.branchId,
   };
   const freeSerials = c.freeSerials ?? [];
   const billManualDiscount = c.billManualDiscount ?? null;

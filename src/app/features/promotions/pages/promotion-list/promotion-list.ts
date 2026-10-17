@@ -54,7 +54,16 @@ export default class PromotionList {
   /** Only admins add / edit / enable / delete promotions (server → 403). */
   protected readonly isAdmin = inject(AuthService).isAdmin;
 
-  protected readonly columns = ['code', 'name', 'type', 'condition', 'reward', 'period', 'status'];
+  protected readonly columns = [
+    'code',
+    'name',
+    'type',
+    'condition',
+    'reward',
+    'branches',
+    'period',
+    'status',
+  ];
   protected readonly types = Object.keys(PROMOTION_TYPE_LABEL) as PromotionType[];
   protected readonly typeLabel = PROMOTION_TYPE_LABEL;
   protected readonly statuses = Object.keys(PROMOTION_STATUS_LABEL) as PromotionStatus[];

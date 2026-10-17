@@ -35,10 +35,12 @@ import {
   allBarcodes,
   fromIsoDate,
   hasStarted,
+  promotionBranchScopeError,
   promotionError,
   promotionStatus,
   toIsoDate,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -91,6 +93,10 @@ export default class PromotionForm implements OnInit {
   private readonly notify = inject(NotificationService);
   private readonly fb = inject(NonNullableFormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  /** Only a company admin limits a promotion to branches (D2 / E6). */
+  protected readonly isCompanyAdmin = inject(AuthService).isCompanyAdmin;
+  /** Active branches a promotion may be limited to. */
+  protected readonly activeBranches = computed(() => this.store.branches().filter((b) => b.active));
 
   /** Bound from the `:id` route param (withComponentInputBinding). */
   readonly id = input<string>();
@@ -124,6 +130,7 @@ export default class PromotionForm implements OnInit {
       enabled: [true],
       priority: [0, [Validators.required, Validators.min(0), Validators.max(999)]],
       stackable: [false],
+      branchIds: this.fb.control<number[]>([]),
       scopeAll: [false],
       productIds: this.fb.control<number[]>([]),
       categoryIds: this.fb.control<number[]>([]),
@@ -163,15 +170,19 @@ export default class PromotionForm implements OnInit {
   /** Shared validation rule (the server checks the same); null until data is loaded. */
   protected readonly problem = computed(() => {
     if (!this.store.products().length) return null;
-    return promotionError(
-      this.payload(),
-      {
-        products: this.store.products(),
-        categories: this.store.categories(),
-        promotions: this.store.promotions(),
-        today: this.store.today,
-      },
-      this.existing(),
+    return (
+      promotionBranchScopeError(this.payload(), this.existing() ?? null, this.isCompanyAdmin()) ??
+      promotionError(
+        this.payload(),
+        {
+          products: this.store.products(),
+          categories: this.store.categories(),
+          promotions: this.store.promotions(),
+          branches: this.store.branches(),
+          today: this.store.today,
+        },
+        this.existing(),
+      )
     );
   });
 
@@ -229,6 +240,7 @@ export default class PromotionForm implements OnInit {
 
   ngOnInit(): void {
     this.store.load();
+    if (!this.isCompanyAdmin()) this.form.controls.branchIds.disable();
     const id = Number(this.id());
     if (!id) return;
     this.loading.set(true);
@@ -312,6 +324,7 @@ export default class PromotionForm implements OnInit {
         enabled: p.enabled,
         priority: p.priority,
         stackable: p.stackable,
+        branchIds: [...(p.branchIds ?? [])],
         scopeAll: p.scope.all,
         productIds: [...p.scope.productIds],
         categoryIds: [...p.scope.categoryIds],
@@ -357,6 +370,7 @@ export default class PromotionForm implements OnInit {
       enabled: raw.enabled,
       priority: Number(raw.priority),
       stackable: raw.stackable,
+      branchIds: [...raw.branchIds].sort((a, b) => a - b),
       scope:
         raw.type === 'bill_discount'
           ? { all: true, productIds: [], categoryIds: [] }

@@ -73,6 +73,22 @@
         </div>
 
         <mat-form-field appearance="outline" class="span-3">
+          <mat-label>ใช้ที่สาขา</mat-label>
+          <mat-select formControlName="branchIds" multiple placeholder="ทุกสาขา">
+            @for (b of activeBranches(); track b.id) {
+              <mat-option [value]="b.id">{{ b.code }} · {{ b.name }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint>
+            @if (isCompanyAdmin()) {
+              ไม่เลือก = ทุกสาขา (รวมสาขาที่เพิ่มภายหลัง) · ราคาขายยังเป็นราคาเดียวทั้งบริษัท
+            } @else {
+              จำกัดสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท
+            }
+          </mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="span-3">
           <mat-label>หมายเหตุ</mat-label>
           <input matInput formControlName="note" />
         </mat-form-field>
