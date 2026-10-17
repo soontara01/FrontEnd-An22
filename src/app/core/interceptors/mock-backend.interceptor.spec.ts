@@ -10,6 +10,7 @@ import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
   Branch,
+  BranchStockRow,
   CompanyInfo,
   Promotion,
   LoginResponse,
@@ -2499,6 +2500,38 @@ describe('mockBackendInterceptor – branch stock', () => {
       await errorOf(call('PUT', `products/${MOUSE}/stock`, noBranch, { delta: 1, unitCost: 1 })),
     ).toEqual([400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน']);
     expect((await product(MOUSE, noBranch)).stock).toBe(3);
+  });
+
+  it('lists every branch: quantities for all, average cost for admins only (E14)', async () => {
+    expect(await call<BranchStockRow[]>('GET', `products/${MOUSE}/branch-stock`)).toEqual([
+      { branchId: 1, stock: 3, avgCost: 350 },
+      { branchId: 2, stock: 8, avgCost: 380 },
+    ]);
+    expect(await call<BranchStockRow[]>('GET', `products/${NOTEBOOK}/branch-stock`, BN)).toEqual([
+      expect.objectContaining({ branchId: 1, stock: 12 }),
+      { branchId: 2, stock: 2, avgCost: 20500 },
+    ]);
+    const staff = await firstValueFrom(
+      http.get<BranchStockRow[]>(`/api/products/${MOUSE}/branch-stock`, {
+        headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': HQ },
+      }),
+    );
+    expect(staff).toEqual([
+      { branchId: 1, stock: 3, avgCost: null },
+      { branchId: 2, stock: 8, avgCost: null },
+    ]);
+  });
+
+  it('shows the stock card of another branch only to users of that branch (E15)', async () => {
+    const card = await call<StockCardResult>('GET', `products/${MOUSE}/movements?branchId=2`);
+    expect(card.closing).toEqual({ qty: 8, avgCost: 380, value: 3040 });
+    const asStaff = http.get(`/api/products/${MOUSE}/movements?branchId=2`, {
+      headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': HQ },
+    });
+    expect(await errorOf(firstValueFrom(asStaff))).toEqual([
+      403,
+      'ไม่มีสิทธิ์ดูบัตรสต็อกของสาขานี้',
+    ]);
   });
 
   it('checks the stock of every branch before deleting a SKU (E18)', async () => {

@@ -32,6 +32,7 @@ import {
   matchingPreset,
   presetRange,
 } from '@shared/utils/date-range';
+import { AuthService } from '@core/auth/auth.service';
 import { InventoryStore } from '../../data/inventory.store';
 
 const TYPE_BADGE: Record<MovementType, string> = {
@@ -72,8 +73,20 @@ export default class StockCard {
   readonly from = input<string>();
   readonly to = input<string>();
   readonly all = input<string>();
+  /** Query param: another branch the user works in (E15); none = the working branch */
+  readonly branch = input<string>();
 
   protected readonly presets = DATE_PRESETS;
+  private readonly auth = inject(AuthService);
+  /** Branches whose card the user may open; the picker shows when there is more than one. */
+  protected readonly branches = this.auth.branches;
+  /** The card is always one branch's (D1, E15). */
+  protected readonly branchId = computed(
+    () => Number(this.branch()) || this.auth.currentBranch()?.id || 0,
+  );
+  protected readonly branchCode = computed(
+    () => this.branches().find((b) => b.id === this.branchId())?.code ?? '',
+  );
 
   /** Effective range from the URL; no params → this month. */
   protected readonly range = computed<DateRange>(() => {
@@ -92,9 +105,14 @@ export default class StockCard {
   });
 
   protected readonly card = rxResource({
-    params: () => ({ id: Number(this.productId()), ...this.range() }),
+    params: () => ({ id: Number(this.productId()), branchId: this.branchId(), ...this.range() }),
     stream: ({ params }) =>
-      this.store.movements(params.id, params.from ?? undefined, params.to ?? undefined),
+      this.store.movements(
+        params.id,
+        params.from ?? undefined,
+        params.to ?? undefined,
+        params.branchId || undefined,
+      ),
   });
 
   protected readonly product = computed(() =>
@@ -137,6 +155,10 @@ export default class StockCard {
       from: start ? toIsoDate(start) : null,
       to: end ? toIsoDate(end) : null,
     });
+  }
+
+  protected selectBranch(id: number): void {
+    this.navigate({ branch: id === this.auth.currentBranch()?.id ? null : String(id) });
   }
 
   protected typeText(m: StockMovement): string {

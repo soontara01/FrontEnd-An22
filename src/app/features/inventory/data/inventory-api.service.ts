@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  Branch,
+  BranchStockRow,
   Product,
   SerialNumber,
   SerialReceiveResult,
@@ -32,12 +34,31 @@ export class InventoryApi {
     return this.api.put<Product>(`products/${id}/stock`, { delta, unitCost, note });
   }
 
-  /** Stock card of one SKU for a local-date range (both optional, inclusive). */
-  movements(productId: number, from?: string, to?: string): Observable<StockCardResult> {
+  /**
+   * Stock card of one SKU in one branch for a local-date range (both optional, inclusive);
+   * `branchId` = another branch the user works in (default: the working branch, E15).
+   */
+  movements(
+    productId: number,
+    from?: string,
+    to?: string,
+    branchId?: number,
+  ): Observable<StockCardResult> {
     const params: Record<string, string> = {};
     if (from) params['from'] = from;
     if (to) params['to'] = to;
+    if (branchId) params['branchId'] = String(branchId);
     return this.api.get<StockCardResult>(`products/${productId}/movements`, params);
+  }
+
+  /** Stock of one SKU in every active branch (average cost for admins only, E14). */
+  branchStock(productId: number): Observable<BranchStockRow[]> {
+    return this.api.get<BranchStockRow[]>(`products/${productId}/branch-stock`);
+  }
+
+  /** Every branch of the company (names for the all-branch stock page). */
+  branches(): Observable<Branch[]> {
+    return this.api.get<Branch[]>('branches');
   }
 
   /** All serials of a serial-controlled SKU (in stock + removed history). */

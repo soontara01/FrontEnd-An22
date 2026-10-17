@@ -1,6 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, forkJoin, map, tap } from 'rxjs';
 import {
+  Branch,
+  BranchStockRow,
   Product,
   SerialNumber,
   SerialRemoveStatus,
@@ -138,8 +140,21 @@ export class InventoryStore {
       .pipe(tap((product) => this.replace(product)));
   }
 
-  movements(productId: number, from?: string, to?: string): Observable<StockCardResult> {
-    return this.api.movements(productId, from, to);
+  movements(
+    productId: number,
+    from?: string,
+    to?: string,
+    branchId?: number,
+  ): Observable<StockCardResult> {
+    return this.api.movements(productId, from, to, branchId);
+  }
+
+  branchStock(productId: number): Observable<BranchStockRow[]> {
+    return this.api.branchStock(productId);
+  }
+
+  branches(): Observable<Branch[]> {
+    return this.api.branches();
   }
 
   serials(productId: number): Observable<SerialNumber[]> {

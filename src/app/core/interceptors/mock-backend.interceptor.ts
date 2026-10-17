@@ -16,6 +16,7 @@ import {
   Branch,
   BranchHere,
   BranchStock,
+  BranchStockRow,
   Company,
   HEAD_OFFICE_BRANCH_NO,
   withBranchStock,
@@ -1297,8 +1298,20 @@ function handleProducts(
     const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
-    const own = db.movements.filter((m) => m.productId === productId && m.branchId === stockBranch);
+    // One branch's card only (E15): another branch the user may work in via `?branchId=`.
+    const asked = req.params.get('branchId');
+    const branchId = asked ? Number(asked) : stockBranch;
+    if (asked && branchId !== stockBranch && !(actor && allowedBranch(db, actor, asked))) {
+      return error(403, 'ไม่มีสิทธิ์ดูบัตรสต็อกของสาขานี้');
+    }
+    const own = db.movements.filter((m) => m.productId === productId && m.branchId === branchId);
     return ok(buildStockCard(own, from, to));
+  }
+  const branchStockMatch = /^products\/(\d+)\/branch-stock$/.exec(path);
+  if (branchStockMatch && req.method === 'GET') {
+    const product = products.find((p) => p.id === Number(branchStockMatch[1]));
+    if (!product) return error(404, 'ไม่พบ SKU');
+    return ok(branchStockRows(db, product));
   }
   const serialMatch = /^products\/(\d+)\/serials(?:\/(\w+))?$/.exec(path);
   if (serialMatch) return handleSerials(req, Number(serialMatch[1]), serialMatch[2], db);
@@ -1394,9 +1407,10 @@ function handleProducts(
  * Serial SKU in the request's branch: stock = its in-stock serials, avgCost = mean of their own
  * costs (kept when none).
  */
-function withSerialStock(product: Product, db: MockDb): Product {
+function withSerialStock(product: Product, db: MockDb, branchId = stockBranch): Product {
+  if (!product.serialControl) return product;
   const inStock = db.serials.filter(
-    (s) => s.productId === product.id && s.branchId === stockBranch && s.status === 'in_stock',
+    (s) => s.productId === product.id && s.branchId === branchId && s.status === 'in_stock',
   );
   const avgCost = inStock.length
     ? Math.round((inStock.reduce((sum, s) => sum + s.cost, 0) / inStock.length) * 10000) / 10000
@@ -1479,7 +1493,7 @@ function migrateCosting(db: MockDb): boolean {
 function atBranch(db: MockDb, product: Product): Product {
   const row = db.branchStock.find((r) => r.productId === product.id && r.branchId === stockBranch);
   const here = withBranchStock(product, row);
-  return here.serialControl ? withSerialStock(here, db) : here;
+  return withSerialStock(here, db);
 }
 
 /**
@@ -1508,6 +1522,20 @@ function storeBranchStock(db: MockDb): Partial<Product>[] {
     delete stored.maxStock;
     return stored;
   });
+}
+
+/**
+ * `GET /products/:id/branch-stock`: every active branch (no row = 0). Everyone sees quantities;
+ * the average cost goes to admins only (E14).
+ */
+function branchStockRows(db: MockDb, product: Product): BranchStockRow[] {
+  return db.branches
+    .filter((b) => b.active)
+    .map((b) => {
+      const row = db.branchStock.find((r) => r.productId === product.id && r.branchId === b.id);
+      const here = withSerialStock(withBranchStock(product, row), db, b.id);
+      return { branchId: b.id, stock: here.stock, avgCost: actorIsAdmin() ? here.avgCost : null };
+    });
 }
 
 /** ' (สาขา HQ, BN)' when any branch still holds the SKU, else '' (E18). */
