@@ -48,13 +48,19 @@ import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backe
 const atTerminal1: HttpInterceptorFn = (req, next) =>
   next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
 
-/** What `authInterceptor` adds after an admin login; requests that name another user keep theirs. */
-const asAdminByDefault: HttpInterceptorFn = (req, next) =>
-  next(
-    req.headers.has('Authorization')
-      ? req
-      : req.clone({ setHeaders: { Authorization: `Bearer ${mockToken(1, 1)}` } }),
-  );
+/**
+ * What `authInterceptor` + `branchInterceptor` add after an admin login in branch 1 (HQ); requests
+ * that name another user / branch keep theirs, `X-Branch-Id: none` sends no branch (E2 / E17).
+ */
+const asAdminByDefault: HttpInterceptorFn = (req, next) => {
+  let headers = req.headers;
+  if (!headers.has('Authorization')) {
+    headers = headers.set('Authorization', `Bearer ${mockToken(1, 1)}`);
+  }
+  if (!headers.has('X-Branch-Id')) headers = headers.set('X-Branch-Id', '1');
+  else if (headers.get('X-Branch-Id') === 'none') headers = headers.delete('X-Branch-Id');
+  return next(req.clone({ headers }));
+};
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
 describe('mockBackendInterceptor – serials', () => {
@@ -2300,7 +2306,12 @@ describe('mockBackendInterceptor – company / branch settings (E11)', () => {
       password: '5678',
     });
     const asBoss = (method: string, url: string, body?: unknown) =>
-      failure(call(method, url, body, { Authorization: `Bearer ${mockToken(1, boss.id)}` }));
+      failure(
+        call(method, url, body, {
+          Authorization: `Bearer ${mockToken(1, boss.id)}`,
+          'X-Branch-Id': '2',
+        }),
+      );
     const companyOnly = [403, 'โปรที่จำกัดสาขาสร้าง / แก้ได้เฉพาะผู้ดูแลระบบระดับบริษัท'];
     expect(await asBoss('POST', 'promotions', promotion)).toEqual(companyOnly);
     expect(await failure(call('POST', 'promotions', { ...promotion, branchIds: [9] }))).toEqual([
@@ -2381,5 +2392,124 @@ describe('mockBackendInterceptor – menu access', () => {
     const saved = await call<MenuAccess>('PUT', { userMenus: ['inventory', 'pos'] });
     expect(saved.userMenus).toEqual(['pos', 'inventory']);
     expect(await call<MenuAccess>('GET', undefined, STAFF)).toEqual(saved);
+  });
+});
+
+/** SaaS step 3: stock, average cost and reorder levels per branch (D1, E13, E17, E18). */
+describe('mockBackendInterceptor – branch stock', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // seed: serial, HQ 12 units, BN 2 sample units at 20,500
+  const MOUSE = 2; // seed: HQ 3 at 350 (min 10 / max 40), BN 8 at 380 (min 5 / max 20)
+  const HQ = '1';
+  const BN = '2';
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  const call = <T>(method: string, url: string, branch = HQ, body?: unknown) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: new HttpHeaders({ 'X-Branch-Id': branch }),
+      }),
+    );
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const product = (id: number, branch = HQ) => call<Product>('GET', `products/${id}`, branch);
+
+  it('moves stored store-wide stock into the first branch, once', async () => {
+    // Stored before step 2: one branch (HQ) is made from the store details.
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        products: [
+          {
+            ...PRODUCT_DEFAULTS,
+            id: 50,
+            sku: 'OLD-1',
+            name: 'old',
+            stock: 7,
+            avgCost: 120,
+            minStock: 3,
+            maxStock: 9,
+          },
+        ],
+        movements: [],
+      }),
+    );
+    expect(await product(50)).toEqual(
+      expect.objectContaining({ stock: 7, avgCost: 120, minStock: 3, maxStock: 9 }),
+    );
+    const card = await call<StockCardResult>('GET', 'products/50/movements');
+    expect(card.closing).toEqual({ qty: 7, avgCost: 120, value: 840 });
+    // Stored products no longer carry stock fields; the branch rows do.
+    const stored = JSON.parse(localStorage.getItem('an22.mock.db')!);
+    expect(stored.products[0].stock).toBeUndefined();
+    expect(stored.branchStock).toEqual([
+      { branchId: 1, productId: 50, stock: 7, avgCost: 120, minStock: 3, maxStock: 9 },
+    ]);
+  });
+
+  it('keeps a moving average per branch: receiving at BN leaves HQ alone (D1)', async () => {
+    expect(await product(MOUSE)).toEqual(expect.objectContaining({ stock: 3, avgCost: 350 }));
+    expect(await product(MOUSE, BN)).toEqual(
+      expect.objectContaining({ stock: 8, avgCost: 380, minStock: 5, maxStock: 20 }),
+    );
+    const received = await call<Product>('PUT', `products/${MOUSE}/stock`, BN, {
+      delta: 2,
+      unitCost: 400,
+    });
+    expect(received).toEqual(expect.objectContaining({ stock: 10, avgCost: 384 }));
+    expect(await product(MOUSE)).toEqual(expect.objectContaining({ stock: 3, avgCost: 350 }));
+    const bnCard = await call<StockCardResult>('GET', `products/${MOUSE}/movements`, BN);
+    expect(bnCard.closing).toEqual({ qty: 10, avgCost: 384, value: 3840 });
+    expect(bnCard.movements.every((m) => m.branchId === 2)).toBe(true);
+    const hqCard = await call<StockCardResult>('GET', `products/${MOUSE}/movements`);
+    expect(hqCard.closing.qty).toBe(3);
+    // The notebook's BN units are its own serials.
+    expect(await product(NOTEBOOK, BN)).toEqual(
+      expect.objectContaining({ stock: 2, avgCost: 20500 }),
+    );
+    expect((await product(NOTEBOOK)).stock).toBe(12);
+  });
+
+  it('edits the reorder levels of the request branch only (E13)', async () => {
+    const atBn = await product(MOUSE, BN);
+    const saved = await call<Product>('PUT', `products/${MOUSE}`, BN, {
+      ...atBn,
+      minStock: 7,
+      maxStock: 30,
+    });
+    expect(saved).toEqual(expect.objectContaining({ minStock: 7, maxStock: 30, stock: 8 }));
+    expect(await product(MOUSE)).toEqual(expect.objectContaining({ minStock: 10, maxStock: 40 }));
+    expect(await product(MOUSE, BN)).toEqual(expect.objectContaining({ minStock: 7 }));
+  });
+
+  it('refuses stock writes without a branch, reads fall back to the first (E17)', async () => {
+    const noBranch = 'none';
+    expect(
+      await errorOf(call('PUT', `products/${MOUSE}/stock`, noBranch, { delta: 1, unitCost: 1 })),
+    ).toEqual([400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน']);
+    expect((await product(MOUSE, noBranch)).stock).toBe(3);
+  });
+
+  it('checks the stock of every branch before deleting a SKU (E18)', async () => {
+    expect(await errorOf(call('DELETE', `products/${MOUSE}`))).toEqual([
+      400,
+      'ยังมีสต็อกคงเหลือ (สาขา HQ, BN) ลบไม่ได้',
+    ]);
+    await call('PUT', `products/${MOUSE}/stock`, HQ, { delta: -3 });
+    expect(await errorOf(call('DELETE', `products/${MOUSE}`))).toEqual([
+      400,
+      'ยังมีสต็อกคงเหลือ (สาขา BN) ลบไม่ได้',
+    ]);
   });
 });

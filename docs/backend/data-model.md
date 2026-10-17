@@ -46,11 +46,11 @@ seed ของ mock (`seedDb()`) ใช้เป็น seed ของ dev DB ไ
 
 ## สต็อก
 
-| ตาราง (TS type)                     | ระดับ | key / unique                                                                                      | หมายเหตุ                                                                                                                                                                 |
-| ----------------------------------- | ----- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `serial_numbers` (`SerialNumber`)   | สาขา  | `serial` unique (ในบริษัท) — 1 serial = 1 แถว, รับคืนใช้แถวเดิม (mock ตั้ง `product_id` ใหม่ด้วย) | ไม่ลบ — `status` in_stock / sold / damaged / other (+ `in_transit` เมื่อมีใบโอน); รับคืน = ใช้แถวเดิม                                                                    |
-| `stock_movements` (`StockMovement`) | สาขา  | `id`                                                                                              | append-only; `type` opening / receive / issue (+ `transfer_out` / `transfer_in` SaaS ขั้น 5); เก็บยอดคงเหลือ `balance_qty` / `balance_avg_cost` / `balance_value` ต่อแถว |
-| `branch_stock` (SaaS ขั้น 3)        | สาขา  | (tenant, branch, product)                                                                         | `stock`, `avg_cost`, `min_stock`, `max_stock` — API ยังตอบ `Product` หน้าตาเดิม (D1)                                                                                     |
+| ตาราง (TS type)                     | ระดับ | key / unique                                                                                      | หมายเหตุ                                                                                                                                                                                                                                                               |
+| ----------------------------------- | ----- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serial_numbers` (`SerialNumber`)   | สาขา  | `serial` unique (ในบริษัท) — 1 serial = 1 แถว, รับคืนใช้แถวเดิม (mock ตั้ง `product_id` ใหม่ด้วย) | ไม่ลบ — `status` in_stock / sold / damaged / other (+ `in_transit` เมื่อมีใบโอน); รับคืน = ใช้แถวเดิม; `branch_id` = สาขาที่อยู่ / อยู่ล่าสุด (E16)                                                                                                                    |
+| `stock_movements` (`StockMovement`) | สาขา  | `id`; index (branch, product, date)                                                               | append-only; `branch_id` — ยอดคงเหลือ `balance_qty` / `balance_avg_cost` / `balance_value` เป็นของ (สาขา, product) นั้น (D1); `type` opening / receive / issue (+ `transfer_out` / `transfer_in` ขั้น 5)                                                               |
+| `branch_stock` (`BranchStock`)      | สาขา  | (tenant, branch, product)                                                                         | `stock`, `avg_cost`, `min_stock`, `max_stock` — ไม่มีแถว = 0 ทั้งหมด (E13); API ยังตอบ `Product` หน้าตาเดิม โดยเติม 4 ฟิลด์นี้ของสาขาใน `X-Branch-Id` (D1); `products` ไม่มี 4 คอลัมน์นี้แล้ว; serial: `stock` / `avg_cost` = นับ / เฉลี่ย serial ที่ in_stock ของสาขา |
 
 ## เอกสารขาย
 
@@ -90,5 +90,5 @@ seed ของ mock (`seedDb()`) ใช้เป็น seed ของ dev DB ไ
 ## ข้อมูลเก่าที่ mock ย้ายให้ตอนอ่าน
 
 `migrateLegacyPrices`, `migrateLegacySkuFields`, `migrateCosting` (สร้างบรรทัด `opening`), `syncSerials` (สร้าง serial ตัวอย่าง),
-`enableShifts`, `migrateTerminals` (`legacyPosId`) — เป็นของ mock / localStorage เท่านั้น DB จริงเริ่มใหม่ไม่ต้องทำ
+`enableShifts`, `migrateTerminals` (`legacyPosId`), `migrateBranchStock` (สต็อกร้านเดียว → `branch_stock` ของสาขาแรก, serial / movement / เอกสารที่ไม่มีสาขา → สาขาแรก, สต็อกตัวอย่างของ BN) — เป็นของ mock / localStorage เท่านั้น DB จริงเริ่มใหม่ไม่ต้องทำ
 ยกเว้นจะย้ายข้อมูลจริงจาก mock มาเข้า DB

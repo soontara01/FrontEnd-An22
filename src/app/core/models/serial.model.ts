@@ -9,6 +9,11 @@ export type SerialRemoveStatus = Exclude<SerialStatus, 'in_stock'>;
 export interface SerialNumber {
   id: number;
   productId: number;
+  /**
+   * Branch the unit is in (in stock) or was last in (removed); it is sold / issued only there (E16).
+   * A removed unit received at another branch moves with its record.
+   */
+  branchId: number;
   serial: string;
   status: SerialStatus;
   receivedAt: string;

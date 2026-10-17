@@ -14,8 +14,10 @@ import {
   CategoryLevel,
   CategoryPayload,
   Branch,
+  BranchStock,
   Company,
   HEAD_OFFICE_BRANCH_NO,
+  withBranchStock,
   BRANCH_DEFAULTS,
   BranchDetails,
   BranchPayload,
@@ -176,8 +178,16 @@ import { StorageService } from '../services/storage.service';
 interface MockDb {
   users: User[];
   nextId: number;
+  /** SKU master (company level); stock / avgCost / min / max live in `branchStock`. */
   products: Product[];
   nextProductId: number;
+  /**
+   * Stock of each SKU per branch (SaaS step 3, D1). `products` is filled in with the request's
+   * branch on read (`atBranch()`) and written back here before saving (`storeBranchStock()`).
+   */
+  branchStock: BranchStock[];
+  /** Set once the single store-wide stock moved into the first branch (`migrateBranchStock()`). */
+  branchStockMigrated?: boolean;
   sales: Sale[];
   /** Serial numbers of serial-controlled SKUs (history kept; removal changes status). */
   serials: SerialNumber[];
@@ -855,6 +865,7 @@ const seedDb = (): MockDb => ({
   nextId: SEED_USERS.length + 1,
   products: [...SEED_PRODUCTS],
   nextProductId: SEED_PRODUCTS.length + 1,
+  branchStock: [],
   sales: [...SEED_SALES],
   serials: [],
   nextSerialId: 1,
@@ -902,6 +913,11 @@ let terminalId: number | null = null;
  * the user's branches in `handle()` (403). Branch-level data uses it from step 3.
  */
 let branchHeader: string | null = null;
+/**
+ * Branch whose stock this request reads and moves: `X-Branch-Id`, else the first branch (reads
+ * only — stock writes without the header are refused, E17). Every write of step 3 happens there.
+ */
+let stockBranch = 1;
 
 /**
  * Fake backend for development without a real API.
@@ -951,9 +967,8 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   refreshCurrentPrices(db);
   refreshCategoryInfo(db);
   refreshSupplierInfo(db);
-  // Serial SKUs with stock but no serials (seed / older data) get sample serials.
-  const generated = syncSerials(db);
-  const costed = migrateCosting(db);
+  // Older stored data: one store-wide stock → the first branch (+ sample stock for BN), once.
+  const stockMoved = migrateBranchStock(db);
   const shiftsOn = enableShifts(db);
   const registered = migrateTerminals(db, stored);
   // Terminals registered before E8 stand in the first branch.
@@ -969,10 +984,12 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
   branchHeader = req.headers.get('X-Branch-Id');
   db.storeInfo = storeInfoOf(db.companyInfo, requestBranch(db));
+  stockBranch = requestBranch(db).id;
+  db.products = db.products.map((p) => atBranch(db, p));
   const response$ = handle(req, path, db);
-  if (generated || costed || shiftsOn || registered || branched || req.method !== 'GET') {
-    // `storeInfo` is derived per request (E11): never stored.
-    storage.set(DB_KEY, { ...db, storeInfo: undefined });
+  if (stockMoved || shiftsOn || registered || branched || req.method !== 'GET') {
+    // `storeInfo` is derived per request (E11) and the products' stock fields per branch: never stored.
+    storage.set(DB_KEY, { ...db, products: storeBranchStock(db), storeInfo: undefined });
   }
 
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
@@ -1005,6 +1022,9 @@ function handle(
   }
   const forbidden = adminOnlyError(req, path);
   if (forbidden) return error(403, forbidden);
+  if (branchHeader === null && movesBranchStock(req, path)) {
+    return error(400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน');
+  }
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
   if (path === 'products' || path.startsWith('products/')) return handleProducts(req, path, db);
   if (path === 'prices' || path.startsWith('prices/')) return handlePrices(req, path, db);
@@ -1050,6 +1070,18 @@ function handle(
     return ok(found?.buyer ?? null);
   }
   return notFound(req, path);
+}
+
+/**
+ * Writes that touch a branch's stock (E17, after E2): they need `X-Branch-Id` — the SKU form too,
+ * since its reorder levels belong to the branch (E13).
+ */
+function movesBranchStock(req: HttpRequest<unknown>, path: string): boolean {
+  if (req.method !== 'POST' && req.method !== 'PUT') return false;
+  return (
+    /^products(\/\d+(\/stock|\/serials(\/remove)?)?)?$/.test(path) ||
+    /^sales(\/\d+\/(void|credit-notes|exchanges))?$/.test(path)
+  );
 }
 
 /** Writes per master that only admins may make (`saas-plan.md` section 17); reads stay open. */
@@ -1264,7 +1296,7 @@ function handleProducts(
     const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
-    const own = db.movements.filter((m) => m.productId === productId);
+    const own = db.movements.filter((m) => m.productId === productId && m.branchId === stockBranch);
     return ok(buildStockCard(own, from, to));
   }
   const serialMatch = /^products\/(\d+)\/serials(?:\/(\w+))?$/.exec(path);
@@ -1282,11 +1314,13 @@ function handleProducts(
         const payload = withServiceRules(withoutDerived(req.body as ProductPayload));
         const problem = validateSku(payload, db, id);
         if (problem) return error(400, problem);
-        if (payload.serialControl !== products[index].serialControl && products[index].stock > 0) {
-          return error(400, 'ยังมีสต็อกคงเหลือ เปลี่ยนการคุม Serial ไม่ได้');
+        // Stock in any branch counts (E18).
+        const stocked = stockedBranches(db, id);
+        if (payload.serialControl !== products[index].serialControl && stocked) {
+          return error(400, `ยังมีสต็อกคงเหลือ${stocked} เปลี่ยนการคุม Serial ไม่ได้`);
         }
-        if (payload.itemType !== products[index].itemType && products[index].stock > 0) {
-          return error(400, 'ยังมีสต็อกคงเหลือ เปลี่ยนเป็นสินค้าบริการไม่ได้');
+        if (payload.itemType !== products[index].itemType && stocked) {
+          return error(400, `ยังมีสต็อกคงเหลือ${stocked} เปลี่ยนเป็นสินค้าบริการไม่ได้`);
         }
         // Stock is owned by the Inventory menu; never overwritten from the SKU form.
         products[index] = {
@@ -1299,7 +1333,8 @@ function handleProducts(
         return ok(products[index]);
       }
       case 'DELETE': {
-        if (products[index].stock > 0) return error(400, 'ยังมีสต็อกคงเหลือ ลบไม่ได้');
+        const stocked = stockedBranches(db, id);
+        if (stocked) return error(400, `ยังมีสต็อกคงเหลือ${stocked} ลบไม่ได้`);
         if (db.sales.some((s) => s.lines.some((l) => l.productId === id))) {
           return error(400, 'SKU นี้มีประวัติการขาย ลบไม่ได้ (เปลี่ยนสถานะเป็นเลิกจำหน่ายแทน)');
         }
@@ -1354,9 +1389,14 @@ function handleProducts(
   return notFound(req, path);
 }
 
-/** Serial SKU: stock = in-stock serials, avgCost = mean of their own costs (kept when none). */
+/**
+ * Serial SKU in the request's branch: stock = its in-stock serials, avgCost = mean of their own
+ * costs (kept when none).
+ */
 function withSerialStock(product: Product, db: MockDb): Product {
-  const inStock = db.serials.filter((s) => s.productId === product.id && s.status === 'in_stock');
+  const inStock = db.serials.filter(
+    (s) => s.productId === product.id && s.branchId === stockBranch && s.status === 'in_stock',
+  );
   const avgCost = inStock.length
     ? Math.round((inStock.reduce((sum, s) => sum + s.cost, 0) / inStock.length) * 10000) / 10000
     : product.avgCost;
@@ -1377,6 +1417,7 @@ function recordMovement(
   db.movements.push({
     id: db.nextMovementId++,
     productId: product.id,
+    branchId: stockBranch,
     date: new Date().toISOString(),
     type,
     qty,
@@ -1410,11 +1451,11 @@ function migrateCosting(db: MockDb): boolean {
       product = { ...p, avgCost: p.cost };
     }
     if (product.avgCost !== p.avgCost) changed = true;
-    if (product.stock > 0 && !db.movements.some((m) => m.productId === product.id)) {
+    const own = (x: { productId: number; branchId: number }) =>
+      x.productId === product.id && x.branchId === stockBranch;
+    if (product.stock > 0 && !db.movements.some(own)) {
       const serials = product.serialControl
-        ? db.serials
-            .filter((s) => s.productId === product.id && s.status === 'in_stock')
-            .map((s) => s.serial)
+        ? db.serials.filter((s) => own(s) && s.status === 'in_stock').map((s) => s.serial)
         : [];
       recordMovement(
         db,
@@ -1433,6 +1474,141 @@ function migrateCosting(db: MockDb): boolean {
   return changed;
 }
 
+/** The SKU as the request's branch sees it: that branch's stock fields (serial: its serials). */
+function atBranch(db: MockDb, product: Product): Product {
+  const row = db.branchStock.find((r) => r.productId === product.id && r.branchId === stockBranch);
+  const here = withBranchStock(product, row);
+  return here.serialControl ? withSerialStock(here, db) : here;
+}
+
+/**
+ * Writes the products' stock fields back into the request branch's rows (a row is made only when
+ * something is set) and returns the products to store without them.
+ */
+function storeBranchStock(db: MockDb): Partial<Product>[] {
+  for (const p of db.products) {
+    const row = db.branchStock.find((r) => r.productId === p.id && r.branchId === stockBranch);
+    const fields = {
+      stock: p.stock,
+      avgCost: p.avgCost,
+      minStock: p.minStock,
+      maxStock: p.maxStock,
+    };
+    if (row) Object.assign(row, fields);
+    else if (Object.values(fields).some((v) => v !== 0)) {
+      db.branchStock.push({ branchId: stockBranch, productId: p.id, ...fields });
+    }
+  }
+  return db.products.map((p) => {
+    const stored: Partial<Product> = { ...p };
+    delete stored.stock;
+    delete stored.avgCost;
+    delete stored.minStock;
+    delete stored.maxStock;
+    return stored;
+  });
+}
+
+/** ' (สาขา HQ, BN)' when any branch still holds the SKU, else '' (E18). */
+function stockedBranches(db: MockDb, productId: number): string {
+  const codes = db.branches
+    .filter(
+      (b) =>
+        db.serials.some(
+          (s) => s.productId === productId && s.branchId === b.id && s.status === 'in_stock',
+        ) ||
+        db.branchStock.some((r) => r.productId === productId && r.branchId === b.id && r.stock > 0),
+    )
+    .map((b) => b.code);
+  return codes.length ? ` (สาขา ${codes.join(', ')})` : '';
+}
+
+/**
+ * Once per stored db (SaaS step 3): the single store-wide stock of older data becomes the first
+ * branch's — sample serials / costing as before, then stock / avgCost / min / max into
+ * `branchStock`, and serials, movements and documents without a branch get the first one. BN (seed
+ * branch 2) gets sample stock of its own.
+ */
+function migrateBranchStock(db: MockDb): boolean {
+  if (db.branchStockMigrated) return false;
+  const first = db.branches[0].id;
+  stockBranch = first;
+  for (const list of [db.serials, db.movements, db.sales, db.creditNotes, db.exchanges]) {
+    for (const x of list as { branchId?: number | null }[]) x.branchId ??= first;
+  }
+  // Serial SKUs with stock but no serials (seed / older data) get sample serials.
+  syncSerials(db);
+  migrateCosting(db);
+  for (const p of db.products) {
+    if (isService(p)) continue;
+    const fields = {
+      stock: p.stock,
+      avgCost: p.avgCost,
+      minStock: p.minStock,
+      maxStock: p.maxStock,
+    };
+    if (
+      Object.values(fields).some((v) => v !== 0) &&
+      !db.branchStock.some((r) => r.productId === p.id)
+    ) {
+      db.branchStock.push({ branchId: first, productId: p.id, ...fields });
+    }
+  }
+  seedBranchSample(db);
+  db.branchStockMigrated = true;
+  return true;
+}
+
+/** Sample stock for the seed branch BN: other costs than HQ (D1), a serial SKU, an opening line each. */
+function seedBranchSample(db: MockDb): void {
+  const bn = db.branches.find((b) => b.code === 'BN');
+  if (!bn || db.branchStock.some((r) => r.branchId === bn.id)) return;
+  stockBranch = bn.id;
+  const sample: [
+    sku: string,
+    stock: number,
+    avgCost: number,
+    minStock: number,
+    maxStock: number,
+  ][] = [
+    ['NB-001', 2, 20500, 1, 4],
+    ['MS-010', 8, 380, 5, 20],
+    ['KB-020', 4, 1600, 2, 8],
+  ];
+  for (const [sku, stock, avgCost, minStock, maxStock] of sample) {
+    const product = db.products.find((p) => p.sku === sku && !isService(p));
+    if (!product) continue;
+    db.branchStock.push({
+      branchId: bn.id,
+      productId: product.id,
+      stock,
+      avgCost,
+      minStock,
+      maxStock,
+    });
+    const here = atBranch(db, { ...product, avgCost });
+    // Serial SKU: the sample units (own cost each), like `syncSerials()` makes for HQ.
+    if (here.serialControl) syncSerials(db, [{ ...here, stock }]);
+    const view = atBranch(db, product);
+    const serials = view.serialControl
+      ? db.serials
+          .filter((s) => s.productId === product.id && s.branchId === bn.id)
+          .map((s) => s.serial)
+      : [];
+    recordMovement(
+      db,
+      view,
+      'opening',
+      view.stock,
+      view.avgCost,
+      costValue(view),
+      serials,
+      'ยอดยกมา',
+    );
+  }
+  stockBranch = db.branches[0].id;
+}
+
 /**
  * Receipt cost per base unit: required and not negative. It may have more than 2 decimals (a pack
  * cost ÷ its factor), so only those two `moneyProblem()` cases apply here.
@@ -1442,13 +1618,16 @@ function receiptCostError(cost: unknown): string | null {
   return problem && problem !== 'decimals' ? moneyProblemText(problem, 'ต้นทุน') : null;
 }
 
-/** Generates deterministic sample serials so serial SKUs always have stock = in-stock serials. */
-function syncSerials(db: MockDb): boolean {
+/**
+ * Generates deterministic sample serials (in the request's branch) so serial SKUs always have
+ * stock = in-stock serials.
+ */
+function syncSerials(db: MockDb, products: readonly Product[] = db.products): boolean {
   let changed = false;
-  for (const product of db.products) {
+  for (const product of products) {
     if (!product.serialControl) continue;
     const owned = db.serials.filter((s) => s.productId === product.id);
-    let inStock = owned.filter((s) => s.status === 'in_stock').length;
+    let inStock = owned.filter((s) => s.branchId === stockBranch && s.status === 'in_stock').length;
     let seq = owned.length;
     while (inStock < product.stock) {
       const serial = sampleSerial(product, ++seq);
@@ -1456,6 +1635,7 @@ function syncSerials(db: MockDb): boolean {
       db.serials.push({
         id: db.nextSerialId++,
         productId: product.id,
+        branchId: stockBranch,
         serial,
         status: 'in_stock',
         receivedAt: new Date().toISOString(),
@@ -1503,7 +1683,8 @@ function handleSerials(
   };
 
   if (!action && req.method === 'GET') {
-    return ok(db.serials.filter((s) => s.productId === productId));
+    // This branch's units: in stock here + removed here (history, E16).
+    return ok(db.serials.filter((s) => s.productId === productId && s.branchId === stockBranch));
   }
 
   if (!action && req.method === 'POST') {
@@ -1546,6 +1727,7 @@ function handleSerials(
         // its removal shows only in the stock movements (`serialMovements()`).
         Object.assign(existing, {
           productId,
+          branchId: stockBranch,
           status: 'in_stock',
           receivedAt: now,
           removedAt: null,
@@ -1557,6 +1739,7 @@ function handleSerials(
       const created: SerialNumber = {
         id: db.nextSerialId++,
         productId,
+        branchId: stockBranch,
         serial,
         status: 'in_stock',
         receivedAt: now,
@@ -1590,7 +1773,13 @@ function handleSerials(
     };
     if (!ids.length) return error(400, 'ไม่ได้เลือก Serial');
     const targets = ids.map((id) =>
-      db.serials.find((s) => s.id === id && s.productId === productId && s.status === 'in_stock'),
+      db.serials.find(
+        (s) =>
+          s.id === id &&
+          s.productId === productId &&
+          s.branchId === stockBranch &&
+          s.status === 'in_stock',
+      ),
     );
     if (targets.some((t) => !t)) return error(400, 'มี Serial ที่ไม่อยู่ในคลังแล้ว กรุณาโหลดใหม่');
     const now = new Date().toISOString();

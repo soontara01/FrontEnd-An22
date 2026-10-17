@@ -61,6 +61,7 @@ describe('inventory Excel', () => {
     const serial = (id: number, sn: string, status: SerialNumber['status'], cost: number) => ({
       id,
       productId: 1,
+      branchId: 1,
       serial: sn,
       status,
       receivedAt: '2026-10-01T03:00:00.000Z',

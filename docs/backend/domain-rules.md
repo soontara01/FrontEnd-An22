@@ -57,7 +57,8 @@
 - **ตัดสต็อกพร้อม COGS** (`issueStock()` ใน mock): serial → ทุนของเครื่องนั้น, status `sold`; non-serial → `avgCost` × qty ฐาน (avg ไม่เปลี่ยน);
   บริการ → `cost` × qty ไม่มี movement
 - **รับเข้า**: non-serial → `movingAverage()`; serial → `avgCost` = ค่าเฉลี่ยทุนของ serial ที่อยู่ในคลัง
-- **ทุกการเปลี่ยนสต็อกเขียน `StockMovement`** พร้อมยอดคงเหลือ (qty / avg / value) — บัตรสต็อกอ่านจากตารางนี้
+- **ทุกอย่างข้างบนคิดต่อสาขา** (D1, SaaS ขั้น 3): stock / avg ของแถว `branch_stock` (สาขาใน `X-Branch-Id`, ไม่มีแถว = 0), `suggestReorderQty()` ใช้ min / max ของสาขา — สูตรเดิมทั้งหมด ไม่มีการรวมข้ามสาขา
+- **ทุกการเปลี่ยนสต็อกเขียน `StockMovement`** (+ `branch_id`) พร้อมยอดคงเหลือ (qty / avg / value) ของสาขานั้น — บัตรสต็อกอ่านจากตารางนี้
 - **ค่าที่คำนวณตอนอ่าน (ไม่เก็บ)**: `Product.currentPrice`, `categoryPath`, `Category.productCount`, `Supplier.productCount`,
   `Sale.returnStatus` / `creditedTotal` / `creditNoteNos` / `exchangeNos`, `Shift.adjustmentTotal` (ดู `data-model.md`)
 - **snapshot ตอนสร้างเอกสาร**: `terminalId`, `posId`, `vatRegistered`, `shiftId`, ชื่อผู้ขาย / ผู้อนุมัติ, ชื่อสินค้าและราคาในบรรทัด

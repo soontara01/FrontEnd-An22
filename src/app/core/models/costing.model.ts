@@ -19,6 +19,8 @@ export const MOVEMENT_TYPE_LABEL: Record<MovementType, string> = {
 export interface StockMovement {
   id: number;
   productId: number;
+  /** Branch (warehouse) whose stock moved — each branch has its own stock card (SaaS step 3, D1) */
+  branchId: number;
   /** ISO timestamp */
   date: string;
   type: MovementType;

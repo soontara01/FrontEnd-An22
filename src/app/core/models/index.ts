@@ -1,6 +1,7 @@
 export * from './auth.model';
 export * from './category.model';
 export * from './company.model';
+export * from './branch-stock.model';
 export * from './costing.model';
 export * from './money.model';
 export * from './menu-access.model';
