@@ -16,6 +16,7 @@ import {
   Branch,
   BranchHere,
   BranchStock,
+  branchDocPrefix,
   BranchStockRow,
   Company,
   HEAD_OFFICE_BRANCH_NO,
@@ -2593,12 +2594,12 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
 
 /** 'POS<terminal>-YYYYMMDD-NNNN', numbered continuously per terminal and day (T4). */
 function nextOrderNo(db: MockDb, today: string, terminal: number): string {
-  const prefix = terminalOrderPrefix(terminal, today);
-  const last = db.sales
-    .filter((s) => s.orderNo.startsWith(prefix))
-    .map((s) => Number(s.orderNo.slice(prefix.length)))
-    .reduce((max, n) => Math.max(max, n), 0);
-  return prefix + String(last + 1).padStart(4, '0');
+  const prefix = terminalOrderPrefix(branchCode(db, stockBranch), terminal, today);
+  return nextNumber(
+    db.sales.map((s) => s.orderNo),
+    prefix,
+    4,
+  );
 }
 
 /**
@@ -2729,11 +2730,11 @@ function createCreditNote(
   }
 
   const now = new Date();
-  const prefix = `CN-${today.replaceAll('-', '')}-`;
-  const last = db.creditNotes
-    .filter((n) => n.cnNo.startsWith(prefix))
-    .reduce((max, n) => Math.max(max, Number(n.cnNo.slice(prefix.length))), 0);
-  const cnNo = prefix + String(last + 1).padStart(4, '0');
+  const cnNo = nextNumber(
+    db.creditNotes.map((n) => n.cnNo),
+    branchDocPrefix('CN', branchCode(db, stockBranch), today),
+    4,
+  );
   const note = `ลดหนี้ ${cnNo} (บิล ${sale.orderNo})`;
 
   for (const line of draft.lines) {
@@ -2865,11 +2866,11 @@ function createExchange(
   }
 
   const now = new Date();
-  const prefix = `EX-${today.replaceAll('-', '')}-`;
-  const last = db.exchanges
-    .filter((x) => x.exNo.startsWith(prefix))
-    .reduce((max, x) => Math.max(max, Number(x.exNo.slice(prefix.length))), 0);
-  const exNo = prefix + String(last + 1).padStart(4, '0');
+  const exNo = nextNumber(
+    db.exchanges.map((x) => x.exNo),
+    branchDocPrefix('EX', branchCode(db, stockBranch), today),
+    4,
+  );
   const note = `เปลี่ยนสินค้า ${exNo} (บิล ${sale.orderNo})`;
 
   const lines: ExchangeLine[] = payload.lines.map((input) => {
@@ -2985,13 +2986,16 @@ function createTaxInvoice(
 ): TaxInvoice {
   // Dated and numbered on the day of sale, even when issued later (accountant's decision).
   const date = new Date(sale.date);
-  const prefix = `INV-${toIsoDate(date).replaceAll('-', '')}-`;
-  const last = db.taxInvoices
-    .filter((t) => t.invoiceNo.startsWith(prefix))
-    .reduce((max, t) => Math.max(max, Number(t.invoiceNo.slice(prefix.length))), 0);
+  // The bill's branch numbers it, even when issued at another one later (E21, E25).
+  const branchId = sale.branchId ?? stockBranch;
+  const invoiceNo = nextNumber(
+    db.taxInvoices.map((t) => t.invoiceNo),
+    branchDocPrefix('INV', branchCode(db, branchId), toIsoDate(date)),
+    4,
+  );
   const invoice: TaxInvoice = {
     id: Math.max(0, ...db.taxInvoices.map((t) => t.id)) + 1,
-    invoiceNo: prefix + String(last + 1).padStart(4, '0'),
+    invoiceNo,
     saleId: sale.id,
     orderNo: sale.orderNo,
     saleDate: sale.date,
@@ -3005,7 +3009,7 @@ function createTaxInvoice(
     replacedByNo: null,
     atSale,
     // The bill's branch is the seller's business place (E25).
-    branchId: sale.branchId ?? stockBranch,
+    branchId,
   };
   db.taxInvoices.push(invoice);
   sale.taxInvoiceNo = invoice.invoiceNo;
@@ -3265,13 +3269,21 @@ function moneyShift(
   return { problem, shiftId: shift?.id ?? null };
 }
 
-/** 'SH-YYYYMMDD-NN', numbered per opening day. */
+/** 'SH-<branch>-YYYYMMDD-NN', numbered per branch and opening day (E21). */
 function nextShiftNo(db: MockDb, day: string): string {
-  const prefix = `SH-${day.replaceAll('-', '')}-`;
-  const last = db.shifts
-    .filter((s) => s.shiftNo.startsWith(prefix))
-    .reduce((max, s) => Math.max(max, Number(s.shiftNo.slice(prefix.length))), 0);
-  return `${prefix}${String(last + 1).padStart(2, '0')}`;
+  return nextNumber(
+    db.shifts.map((s) => s.shiftNo),
+    branchDocPrefix('SH', branchCode(db, stockBranch), day),
+    2,
+  );
+}
+
+/** `prefix` + the next running number after the highest one already issued with it. */
+function nextNumber(issued: readonly string[], prefix: string, width: number): string {
+  const last = issued
+    .filter((no) => no.startsWith(prefix))
+    .reduce((max, no) => Math.max(max, Number(no.slice(prefix.length))), 0);
+  return prefix + String(last + 1).padStart(width, '0');
 }
 
 /**

@@ -208,3 +208,13 @@ export function branchError(
   if (!b.active && !others.some((x) => x.active)) return 'ต้องมีสาขาที่ใช้งานอยู่อย่างน้อย 1 สาขา';
   return branchDetailsError(b);
 }
+
+/** Documents numbered per branch and day (E21); POS bills run per terminal (`terminalOrderPrefix()`). */
+export type BranchDocKind = 'INV' | 'CN' | 'EX' | 'SH';
+
+/**
+ * Number prefix of a branch document, e.g. `CN-BN-20261018-` (E21). Older documents keep their
+ * numbers without a branch (`CN-20261017-0001`).
+ */
+export const branchDocPrefix = (kind: BranchDocKind, branchCode: string, day: string): string =>
+  `${kind}-${branchCode}-${day.replaceAll('-', '')}-`;

@@ -96,6 +96,6 @@ describe('pos terminal model', () => {
   });
 
   it('numbers bills per terminal and day', () => {
-    expect(terminalOrderPrefix(2, '2026-10-12')).toBe('POS2-20261012-');
+    expect(terminalOrderPrefix('HQ', 2, '2026-10-12')).toBe('POS-HQ-2-20261012-');
   });
 });

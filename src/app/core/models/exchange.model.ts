@@ -38,7 +38,7 @@ export interface ExchangeLine {
 
 export interface Exchange {
   id: number;
-  /** 'EX-YYYYMMDD-NNNN', issued by the server on the exchange day */
+  /** 'EX-<branch>-YYYYMMDD-NNNN' (E21; older without branch), issued by the server on the exchange day */
   exNo: string;
   saleId: number;
   orderNo: string;

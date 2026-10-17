@@ -597,7 +597,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     ]);
 
     expect(sale).toMatchObject({
-      orderNo: 'POS1-20261004-0001',
+      orderNo: 'POS-HQ-1-20261004-0001',
       status: 'paid',
       cashier: 'Admin',
       subtotal: 24900,
@@ -626,11 +626,11 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(card.movements.at(-1)).toMatchObject({
       type: 'issue',
       qty: -1,
-      note: 'ของแถม POS1-20261004-0001',
+      note: 'ของแถม POS-HQ-1-20261004-0001',
     });
 
     const next = await sell([item(ESIM)], 199, [pay(QR, 199)]);
-    expect(next.orderNo).toBe('POS1-20261004-0002');
+    expect(next.orderNo).toBe('POS-HQ-1-20261004-0002');
     expect(next.lines[0].cogs).toBe((await product(ESIM)).cost);
     expect(await get<Sale>(`sales/${next.id}`)).toEqual(next);
   });
@@ -765,7 +765,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     // and setup (500) stay with the customer
     const cn = await post<CreditNote>(`sales/${sale.id}/credit-notes`, notebookOnly);
     expect(cn).toMatchObject({
-      cnNo: 'CN-20261005-0001',
+      cnNo: 'CN-HQ-20261005-0001',
       subtotal: 24606.26,
       deduction: 1090,
       total: 23516.26,
@@ -790,7 +790,7 @@ describe('mockBackendInterceptor – POS sales', () => {
       ...damaged,
       refunds: [pay(CASH, 524.74)],
     });
-    expect(second.cnNo).toBe('CN-20261005-0002');
+    expect(second.cnNo).toBe('CN-HQ-20261005-0002');
     expect((await product(MOUSE)).stock).toBe(mouseBefore);
     expect(await errorOf(post(`sales/${sale.id}/credit-notes`, damaged))).toBe(
       'MS-010 คืนได้ไม่เกิน 0 ชิ้น',
@@ -804,7 +804,7 @@ describe('mockBackendInterceptor – POS sales', () => {
       status: 'paid',
       returnStatus: 'partial',
       creditedTotal: 24041,
-      creditNoteNos: ['CN-20261005-0001', 'CN-20261005-0002'],
+      creditNoteNos: ['CN-HQ-20261005-0001', 'CN-HQ-20261005-0002'],
     });
     expect((await get<Sale>(`sales/${sale.id}`)).returnStatus).toBe('partial');
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
@@ -825,10 +825,14 @@ describe('mockBackendInterceptor – POS sales', () => {
       await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer: { ...buyer, name: '' } })),
     ).toBe('กรุณากรอกชื่อผู้ซื้อ');
     const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
-    expect(invoice).toMatchObject({ invoiceNo: 'INV-20261004-0001', orderNo: sale.orderNo, buyer });
-    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0001');
+    expect(invoice).toMatchObject({
+      invoiceNo: 'INV-HQ-20261004-0001',
+      orderNo: sale.orderNo,
+      buyer,
+    });
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-HQ-20261004-0001');
     expect(await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer }))).toBe(
-      'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-20261004-0001)',
+      'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-HQ-20261004-0001)',
     );
     expect(await get('tax-invoices/buyer?taxId=0105550123451')).toEqual({
       ...buyer,
@@ -875,29 +879,29 @@ describe('mockBackendInterceptor – POS sales', () => {
       reason: 'ชื่อผู้ซื้อผิด',
     });
     expect(next).toMatchObject({
-      invoiceNo: 'INV-20261004-0002',
+      invoiceNo: 'INV-HQ-20261004-0002',
       date: sale.date,
       atSale: true,
-      replacesInvoiceNo: 'INV-20261004-0001',
+      replacesInvoiceNo: 'INV-HQ-20261004-0001',
       buyer: fixed,
     });
     expect(next.issuedAt).toBe(new Date(2026, 9, 6, 9, 0).toISOString());
     const all = await get<TaxInvoice[]>(`sales/${sale.id}/tax-invoices`);
     expect(all[0]).toMatchObject({
-      invoiceNo: 'INV-20261004-0001',
+      invoiceNo: 'INV-HQ-20261004-0001',
       cancelReason: 'ชื่อผู้ซื้อผิด',
-      replacedByNo: 'INV-20261004-0002',
+      replacedByNo: 'INV-HQ-20261004-0002',
     });
     expect(all[0].cancelledAt).not.toBeNull();
     expect((await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`)).invoiceNo).toBe(
-      'INV-20261004-0002',
+      'INV-HQ-20261004-0002',
     );
-    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0002');
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-HQ-20261004-0002');
     // the cancelled one cannot be reissued again; the valid one can
     expect(
       (await post<TaxInvoice>(`sales/${sale.id}/tax-invoice/reissue`, { buyer, reason: 'กลับ' }))
         .replacesInvoiceNo,
-    ).toBe('INV-20261004-0002');
+    ).toBe('INV-HQ-20261004-0002');
   });
 
   it('dates a full tax invoice requested later on the day of sale', async () => {
@@ -912,7 +916,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     };
     const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
     expect(invoice).toMatchObject({
-      invoiceNo: 'INV-20261004-0001',
+      invoiceNo: 'INV-HQ-20261004-0001',
       date: sale.date,
       atSale: false,
     });
@@ -943,7 +947,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await product(MOUSE)).stock).toBe(3); // nothing sold
 
     const sale = await post<Sale>('sales', body(buyer));
-    expect(sale.taxInvoiceNo).toBe('INV-20261004-0001');
+    expect(sale.taxInvoiceNo).toBe('INV-HQ-20261004-0001');
     const invoice = await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`);
     expect(invoice).toMatchObject({
       atSale: true,
@@ -998,7 +1002,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
 
     const ex = await post<Exchange>(`sales/${sale.id}/exchanges`, swap(other.serial));
-    expect(ex).toMatchObject({ exNo: 'EX-20261004-0001', orderNo: sale.orderNo });
+    expect(ex).toMatchObject({ exNo: 'EX-HQ-20261004-0001', orderNo: sale.orderNo });
     expect(ex.lines[0]).toMatchObject({
       oldSerial: unit.serial,
       newSerial: other.serial,
@@ -1011,7 +1015,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(serials.find((s) => s.id === other.id)?.status).toBe('sold');
     // the bill itself is unchanged apart from the derived exchange numbers
     const read = await get<Sale>(`sales/${sale.id}`);
-    expect(read).toMatchObject({ total: 24600, exchangeNos: ['EX-20261004-0001'] });
+    expect(read).toMatchObject({ total: 24600, exchangeNos: ['EX-HQ-20261004-0001'] });
     expect(read.lines[0].serial).toBe(unit.serial);
 
     vi.setSystemTime(new Date(2026, 9, 5, 11, 0));
@@ -1036,8 +1040,8 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await product(MOUSE)).stock).toBe(2); // out 1 from the shelf, the old one back
     const card = (await get<StockCardResult>(`products/${MOUSE}/movements`)).movements;
     expect(card.slice(-2).map((m) => [m.type, m.qty, m.balanceQty, m.note])).toEqual([
-      ['issue', -1, 1, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS1-20261004-0001)'],
-      ['receive', 1, 2, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS1-20261004-0001)'],
+      ['issue', -1, 1, 'เปลี่ยนสินค้า EX-HQ-20261004-0001 (บิล POS-HQ-1-20261004-0001)'],
+      ['receive', 1, 2, 'เปลี่ยนสินค้า EX-HQ-20261004-0001 (บิล POS-HQ-1-20261004-0001)'],
     ]);
 
     // the last 2 sold too: nothing on the shelf to hand out, even if the old one is fine
@@ -1245,7 +1249,7 @@ describe('mockBackendInterceptor – shifts', () => {
   it('blocks money actions without an open shift and records the shift', async () => {
     expect(await errorOf(sellMouse())).toBe('ยังไม่ได้เปิดกะที่เครื่องนี้');
     const shift = await open(1000);
-    expect(shift).toMatchObject({ shiftNo: 'SH-20261004-01', cashier: 'Admin', terminalId: 1 });
+    expect(shift).toMatchObject({ shiftNo: 'SH-HQ-20261004-01', cashier: 'Admin', terminalId: 1 });
     expect(await call<Shift>('GET', 'shifts/current')).toEqual(shift);
     const sale = await sellMouse();
     expect(sale.shiftId).toBe(shift.id);
@@ -1586,9 +1590,9 @@ describe('mockBackendInterceptor – POS terminals', () => {
     const b = await sellMouse(2);
     const c = await sellMouse(1);
     expect([a, b, c].map((s) => [s.orderNo, s.terminalId, s.posId])).toEqual([
-      ['POS1-20261004-0001', 1, 'E051234567890'],
-      ['POS2-20261004-0001', 2, 'E052'],
-      ['POS1-20261004-0002', 1, 'E051234567890'],
+      ['POS-HQ-1-20261004-0001', 1, 'E051234567890'],
+      ['POS-HQ-2-20261004-0001', 2, 'E052'],
+      ['POS-HQ-1-20261004-0002', 1, 'E051234567890'],
     ]);
   });
 
@@ -2631,7 +2635,7 @@ describe('mockBackendInterceptor – selling per branch', () => {
 
   it('sells and voids at BN out of / back into BN stock only; HQ cannot void it (E12, D3)', async () => {
     const sale = await sell(BN, MOUSE);
-    expect(sale).toMatchObject({ branchId: 2, orderNo: 'POS3-20261017-0001' });
+    expect(sale).toMatchObject({ branchId: 2, orderNo: 'POS-BN-3-20261017-0001' });
     expect(sale.lines[0].cogs).toBe(380);
     expect((await product(MOUSE, BN)).stock).toBe(7);
     expect((await product(MOUSE, HQ)).stock).toBe(3);
@@ -2648,6 +2652,24 @@ describe('mockBackendInterceptor – selling per branch', () => {
     expect((await call<StockCardResult>('GET', `products/${MOUSE}/movements`)).movements).toEqual(
       [],
     );
+  });
+
+  it('numbers documents per branch; a later invoice takes the branch of its bill (E21)', async () => {
+    const atBn = await sell(BN, MOUSE);
+    const atHq = await sell(HQ, NOTEBOOK, (await serials(HQ))[0].serial);
+    expect([atBn.orderNo, atHq.orderNo]).toEqual([
+      'POS-BN-3-20261017-0001',
+      'POS-HQ-1-20261017-0001',
+    ]);
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const invoice = await call<TaxInvoice>('POST', `sales/${atBn.id}/tax-invoice`, HQ, { buyer });
+    expect(invoice).toMatchObject({ invoiceNo: 'INV-BN-20261017-0001', branchId: 2 });
   });
 
   it('returns a serial sold at BN into BN stock on void', async () => {

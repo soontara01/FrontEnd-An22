@@ -96,8 +96,9 @@ export const missingPosId = (t: PosTerminal, vatRegistered: boolean): boolean =>
   vatRegistered && t.active && !t.posId.trim();
 
 /**
- * Bill number prefix, numbered per terminal and day (T4): `POS<terminal>-YYYYMMDD-`.
- * Bills from before the registry keep their old `POS-YYYYMMDD-NNNN` numbers.
+ * Bill number prefix, numbered per terminal and day (T4) with the branch code (E21):
+ * `POS-<branch>-<terminal>-YYYYMMDD-`. Older bills keep their numbers (`POS<terminal>-YYYYMMDD-NNNN`
+ * from before step 4, `POS-YYYYMMDD-NNNN` from before the registry).
  */
-export const terminalOrderPrefix = (terminalId: number, day: string): string =>
-  `POS${terminalId}-${day.replaceAll('-', '')}-`;
+export const terminalOrderPrefix = (branchCode: string, terminalId: number, day: string): string =>
+  `POS-${branchCode}-${terminalId}-${day.replaceAll('-', '')}-`;

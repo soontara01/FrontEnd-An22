@@ -92,7 +92,7 @@ export interface ShiftCount {
 
 export interface Shift {
   id: number;
-  /** 'SH-<open day YYYYMMDD>-NN', issued by the server */
+  /** 'SH-<branch>-<open day YYYYMMDD>-NN' (E21; older without branch), issued by the server */
   shiftNo: string;
   terminalId: number;
   /** Branch of the terminal when the shift was opened (server-set, E24; older data = by terminal) */

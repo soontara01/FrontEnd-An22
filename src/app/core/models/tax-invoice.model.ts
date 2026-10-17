@@ -37,7 +37,7 @@ export interface TaxInvoiceBuyer {
 
 export interface TaxInvoice {
   id: number;
-  /** 'INV-YYYYMMDD-NNNN', issued by the server */
+  /** 'INV-<bill branch>-<sale day>-NNNN', issued by the server (E21; older without branch) */
   invoiceNo: string;
   saleId: number;
   /** Abbreviated receipt it replaces */

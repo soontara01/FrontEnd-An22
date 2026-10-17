@@ -68,7 +68,7 @@ export interface CreditNoteDeduction {
 
 export interface CreditNote {
   id: number;
-  /** 'CN-YYYYMMDD-NNNN', issued by the server */
+  /** 'CN-<branch>-YYYYMMDD-NNNN' (E21; older 'CN-YYYYMMDD-NNNN'), issued by the server */
   cnNo: string;
   saleId: number;
   orderNo: string;

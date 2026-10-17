@@ -97,7 +97,7 @@ export interface SalePayment {
 
 export interface Sale {
   id: number;
-  /** Receipt number issued by the server: 'POS<terminal>-YYYYMMDD-NNNN' (older bills 'POS-YYYYMMDD-NNNN') */
+  /** Receipt number issued by the server: 'POS-<branch>-<terminal>-YYYYMMDD-NNNN' (E21; older bills 'POS<terminal>-…' / 'POS-YYYYMMDD-NNNN') */
   orderNo: string;
   /** ISO timestamp */
   date: string;
