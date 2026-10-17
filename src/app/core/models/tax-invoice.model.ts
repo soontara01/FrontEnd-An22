@@ -59,6 +59,11 @@ export interface TaxInvoice {
   replacedByNo: string | null;
   /** Issued together with the sale (true) or later in place of the abbreviated invoice (false) */
   atSale: boolean;
+  /**
+   * Branch of the bill = the seller's business place on the invoice and the sales tax report it
+   * belongs to (server-set, E25)
+   */
+  branchId?: number | null;
 }
 
 export interface InvoiceTotals {

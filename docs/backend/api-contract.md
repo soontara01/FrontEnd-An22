@@ -105,7 +105,7 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 
 รับเข้าไม่ได้เมื่อ `canPurchase()` เป็นเท็จ (`no_sale` ขายไม่ได้, `no_purchase` / `discontinued` รับไม่ได้)
 
-ต้องมี `X-Branch-Id` (ไม่มี → 400, E17): `POST /products`, `PUT /products/:id`, `PUT /products/:id/stock`, `POST /products/:id/serials(/remove)`, `POST /sales`, `POST /sales/:id/void | credit-notes | exchanges` — ทุกการเดินสต็อกเกิดที่สาขานั้น
+ต้องมี `X-Branch-Id` (ไม่มี → 400, E17 / E24): `POST /products`, `PUT /products/:id`, `PUT /products/:id/stock`, `POST /products/:id/serials(/remove)`, `POST /sales`, `POST /sales/:id/void | credit-notes | exchanges | tax-invoice | tax-invoice/reissue`, ทุก `POST/PUT /shifts/…` — ทุกการเดินสต็อก / เอกสาร / กะเกิดที่สาขานั้น (กะได้ `branchId` ของเครื่อง, ใบกำกับได้ `branchId` ของบิล)
 
 ### ข้อมูลหลัก
 

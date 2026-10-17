@@ -190,6 +190,8 @@ interface MockDb {
   branchStock: BranchStock[];
   /** Set once the single store-wide stock moved into the first branch (`migrateBranchStock()`). */
   branchStockMigrated?: boolean;
+  /** Set once older documents got their terminal's branch (`fixDocumentBranches()`, E20). */
+  docBranchFixed?: boolean;
   sales: Sale[];
   /** Serial numbers of serial-controlled SKUs (history kept; removal changes status). */
   serials: SerialNumber[];
@@ -979,6 +981,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
     branchId: t.branchId ?? db.branches[0].id,
   }));
   fillTerminalSnapshots(db);
+  const docsFixed = fixDocumentBranches(db);
   const path = req.url.slice(base.length + 1);
   // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
   actor = requestUser(req, db);
@@ -989,7 +992,7 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   stockBranch = requestBranch(db).id;
   db.products = db.products.map((p) => atBranch(db, p));
   const response$ = handle(req, path, db);
-  if (stockMoved || shiftsOn || registered || branched || req.method !== 'GET') {
+  if (stockMoved || docsFixed || shiftsOn || registered || branched || req.method !== 'GET') {
     // `storeInfo` is derived per request (E11) and the products' stock fields per branch: never stored.
     storage.set(DB_KEY, { ...db, products: storeBranchStock(db), storeInfo: undefined });
   }
@@ -1024,7 +1027,7 @@ function handle(
   }
   const forbidden = adminOnlyError(req, path);
   if (forbidden) return error(403, forbidden);
-  if (branchHeader === null && movesBranchStock(req, path)) {
+  if (branchHeader === null && needsBranch(req, path)) {
     return error(400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน');
   }
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
@@ -1075,14 +1078,15 @@ function handle(
 }
 
 /**
- * Writes that touch a branch's stock (E17, after E2): they need `X-Branch-Id` — the SKU form too,
- * since its reorder levels belong to the branch (E13).
+ * Writes that belong to a branch need `X-Branch-Id` (E2 → E17 stock / sales, E24 shifts and
+ * documents): the SKU form too, since its reorder levels belong to the branch (E13).
  */
-function movesBranchStock(req: HttpRequest<unknown>, path: string): boolean {
-  if (req.method !== 'POST' && req.method !== 'PUT') return false;
+function needsBranch(req: HttpRequest<unknown>, path: string): boolean {
+  if (req.method === 'GET') return false;
   return (
     /^products(\/\d+(\/stock|\/serials(\/remove)?)?)?$/.test(path) ||
-    /^sales(\/\d+\/(void|credit-notes|exchanges))?$/.test(path)
+    /^sales(\/\d+\/(void|credit-notes|exchanges|tax-invoice|tax-invoice\/reissue))?$/.test(path) ||
+    /^shifts(\/.*)?$/.test(path)
   );
 }
 
@@ -2597,6 +2601,28 @@ function nextOrderNo(db: MockDb, today: string, terminal: number): string {
   return prefix + String(last + 1).padStart(4, '0');
 }
 
+/**
+ * Once (E20): documents from before step 3 all went to the first branch, but a bill / credit note /
+ * exchange / shift made at a terminal belongs to that terminal's branch; tax invoices follow their
+ * bill. Stock movements are left alone (that stock was taken from the single store-wide stock).
+ */
+function fixDocumentBranches(db: MockDb): boolean {
+  if (db.docBranchFixed) return false;
+  const first = db.branches[0].id;
+  const terminalBranch = (t: number | null | undefined) =>
+    db.posTerminals.find((x) => x.id === t)?.branchId;
+  for (const list of [db.sales, db.creditNotes, db.exchanges, db.shifts]) {
+    for (const doc of list as { terminalId?: number | null; branchId?: number | null }[]) {
+      doc.branchId = terminalBranch(doc.terminalId) ?? doc.branchId ?? first;
+    }
+  }
+  for (const invoice of db.taxInvoices) {
+    invoice.branchId = db.sales.find((s) => s.id === invoice.saleId)?.branchId ?? first;
+  }
+  db.docBranchFixed = true;
+  return true;
+}
+
 /** The request's branch for the D3 rules (void / credit note / exchange only where sold, E12). */
 function branchHere(db: MockDb): BranchHere {
   return { branchId: stockBranch, branches: db.branches };
@@ -2978,6 +3004,8 @@ function createTaxInvoice(
     replacesInvoiceNo: replaces?.invoiceNo ?? null,
     replacedByNo: null,
     atSale,
+    // The bill's branch is the seller's business place (E25).
+    branchId: sale.branchId ?? stockBranch,
   };
   db.taxInvoices.push(invoice);
   sale.taxInvoiceNo = invoice.invoiceNo;
@@ -3288,6 +3316,8 @@ function handleShifts(
       id: Math.max(0, ...db.shifts.map((s) => s.id)) + 1,
       shiftNo: nextShiftNo(db, toIsoDate(now)),
       terminalId: payload.terminalId,
+      // The terminal stands in the request's branch (`terminalError()`, E8).
+      branchId: stockBranch,
       posId: terminalSnapshot(db).posId,
       cashier: user,
       status: 'open',

@@ -2682,3 +2682,80 @@ describe('mockBackendInterceptor – selling per branch', () => {
     expect((await serials(HQ)).some((s) => s.id === unit.id)).toBe(false);
   });
 });
+
+/** SaaS step 4: every document belongs to a branch (E20, E24, E25). */
+describe('mockBackendInterceptor – documents per branch', () => {
+  let http: HttpClient;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 18, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const call = <T>(method: string, url: string, branch = '1', terminal = '1', body?: unknown) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: new HttpHeaders({ 'X-Branch-Id': branch, 'X-Terminal-Id': terminal }),
+      }),
+    );
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+
+  it('gives older documents the branch of their terminal, once (E20)', async () => {
+    await call('GET', 'me');
+    const db = JSON.parse(localStorage.getItem('an22.mock.db')!);
+    delete db.docBranchFixed;
+    // Stored by step 3: every older document went to the first branch.
+    db.sales.push({
+      id: 90,
+      orderNo: 'POS3-20261016-0001',
+      date: new Date(2026, 9, 16).toISOString(),
+      total: 100,
+      status: 'paid',
+      terminalId: 3,
+      branchId: 1,
+    });
+    db.taxInvoices.push({
+      id: 90,
+      invoiceNo: 'INV-20261016-0001',
+      saleId: 90,
+      orderNo: 'POS3-20261016-0001',
+      date: new Date(2026, 9, 16).toISOString(),
+      buyer: {},
+    });
+    db.shifts.push({
+      id: 90,
+      shiftNo: 'SH-20261016-01',
+      terminalId: 3,
+      cashier: 'x',
+      openedAt: new Date(2026, 9, 16).toISOString(),
+      branchId: 1,
+    });
+    localStorage.setItem('an22.mock.db', JSON.stringify(db));
+    expect((await call<Sale>('GET', 'sales/90')).branchId).toBe(2);
+    const stored = JSON.parse(localStorage.getItem('an22.mock.db')!);
+    expect(stored.taxInvoices.find((t: TaxInvoice) => t.id === 90).branchId).toBe(2);
+    expect(stored.shifts.find((s: Shift) => s.id === 90).branchId).toBe(2);
+    expect(stored.docBranchFixed).toBe(true);
+  });
+
+  it('opens a shift in the terminal branch and refuses shift writes without a branch (E24)', async () => {
+    const open = { terminalId: 3, openingFloat: 0, openingDenominations: [] };
+    expect(await errorOf(call('POST', 'shifts/open', 'none', '3', open))).toEqual([
+      400,
+      'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน',
+    ]);
+    const shift = await call<Shift>('POST', 'shifts/open', '2', '3', open);
+    expect(shift.branchId).toBe(2);
+  });
+});
