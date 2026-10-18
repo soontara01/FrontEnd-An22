@@ -1,17 +1,22 @@
-# เอกสารส่งต่อหลังบ้าน (สำหรับ repo web / api / db)
+# เอกสารส่งต่อหลังบ้าน (สำหรับ repo web / api)
 
-สถานะ: เริ่ม 2026-10-16 — SaaS ขั้น 1–5 เสร็จ, ขั้น 6 (ส่วน SaaS: owner, แพ็กเกจ, billing mock, platform admin, สมัครใช้, export / ลบ, audit log) เสร็จฝั่งหน้าบ้าน + mock 2026-10-18 — mock เก็บ db ละบริษัท; ทุกขั้นของ `docs/saas-plan.md` อัปเดตไฟล์ในโฟลเดอร์นี้ใน commit เดียวกับโค้ด
+สถานะ: เริ่ม 2026-10-16 — SaaS ขั้น 1–5 เสร็จ, ขั้น 6 (ส่วน SaaS: owner, แพ็กเกจ, billing mock, platform admin, สมัครใช้, export / ลบ, audit log) เสร็จฝั่งหน้าบ้าน + mock 2026-10-18 — mock เก็บ db ละบริษัท; ซ่อนทุนจาก role user (P5, E43–E46) เสร็จ 2026-10-18; ทุกขั้นของ `docs/saas-plan.md` อัปเดตไฟล์ในโฟลเดอร์นี้ใน commit เดียวกับโค้ด
 
-## ระบบมี 4 repo
+## ระบบมี 3 repo (E47, 2026-10-18 — เดิมแยก db เป็น repo ของตัวเอง)
 
-| repo                         | หน้าที่                                                | อ่านอะไรจากที่นี่                                         |
-| ---------------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
-| **FrontEnd-An22** (repo นี้) | Angular SPA + mock backend — **แหล่งความจริงของ spec** | —                                                         |
-| **db**                       | สคริปต์ PostgreSQL ทั้งหมด (migration, RLS, seed)      | `data-model.md`, `docs/saas-plan.md` หัวข้อ 2, 3, 16 (D7) |
-| **api**                      | Java Spring Boot ต่อ PostgreSQL — ทำ API จริงแทน mock  | `api-contract.md`, `domain-rules.md`, `data-model.md`     |
-| **web**                      | Node.js serve ไฟล์ static ของหน้าบ้าน + proxy `/api`   | หัวข้อ "web" ด้านล่าง, `deploy/nginx.conf` (ตัวอย่าง)     |
+| repo                         | หน้าที่                                                                                  | อ่านอะไรจากที่นี่                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **FrontEnd-An22** (repo นี้) | Angular SPA + mock backend — **แหล่งความจริงของ spec**                                   | —                                                                                               |
+| **web**                      | Node.js serve ไฟล์ static ของหน้าบ้าน + proxy `/api`                                     | หัวข้อ "web" ด้านล่าง, `deploy/nginx.conf` / `deploy/web.config` (ตัวอย่าง)                     |
+| **api**                      | Java Spring Boot ต่อ PostgreSQL — ทำ API จริงแทน mock **และเป็นเจ้าของ schema** (Flyway) | `api-contract.md`, `domain-rules.md`, `data-model.md`, `docs/saas-plan.md` หัวข้อ 2, 3, 16 (D7) |
 
-ลำดับทำ: **db → api → web** (api ต้องมี schema ก่อน, web ต้องมี api ให้ proxy) — หน้าบ้านทำ SaaS ขั้น 1–6 ด้วย mock ไปก่อนได้
+ลำดับทำ: **web → api** (E47)
+
+- **web ก่อน**: งานเล็กและไม่ขึ้นกับใคร — build ของ repo นี้ใช้ `useMock: true` (`src/environments/environment.ts`) mock รันในเบราว์เซอร์ทั้งหมด
+  จึงทดสอบ web กับแอปจริงได้ทันที; proxy `/api` ตั้งไว้ชี้ api ได้เลย แต่ยังไม่มีใครเรียกจนกว่าจะ build ด้วย `useMock: false`
+- **api** มี migration ของ PostgreSQL อยู่ในตัว (`src/main/resources/db/migration`, Flyway) — schema กับโค้ดที่ใช้มันเปลี่ยนใน commit เดียวกัน,
+  test ด้วย Testcontainers ได้ตั้งแต่วันแรก; กติกาของ schema (tenant_id + RLS — D7, ตาราง platform ไม่อยู่ใต้ RLS, audit_log insert-only, seed) เหมือนเดิมทุกข้อ
+- สลับหน้าบ้านไปใช้ api จริง: `useMock: false` เมื่อ api ตอบครบตาม `api-contract.md` (ดู "Switching to a real backend" ใน `CLAUDE.md`)
 
 ## ไฟล์ในโฟลเดอร์นี้
 
@@ -35,7 +40,7 @@
 
 ## ให้ Claude ใน repo อื่นอ่าน repo นี้ได้
 
-clone ทุก repo ไว้ในโฟลเดอร์แม่เดียวกัน (เช่น `~/vscode/FrontEnd-An22`, `~/vscode/an22-api`, …) แล้วในแต่ละ repo:
+clone ทุก repo ไว้ในโฟลเดอร์แม่เดียวกัน (เช่น `~/vscode/FrontEnd-An22`, `~/vscode/an22-web`, `~/vscode/an22-api`) แล้วในแต่ละ repo:
 
 ```jsonc
 // .claude/settings.json
@@ -47,24 +52,23 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
 
 ## สิ่งที่ `CLAUDE.md` ของแต่ละ repo ควรมี
 
-**db**
-
-- เครื่องมือ migration (แนะนำ Flyway: `V<n>__<desc>.sql`, ไม่แก้ไฟล์ที่ apply แล้ว) และคำสั่งรัน / รีเซ็ต DB local
-- ทุกตารางข้อมูลมี `tenant_id` (+ `branch_id` ตามระดับใน `data-model.md`), เปิด RLS, policy อ่านจาก `current_setting('app.tenant_id')` (D7)
-- ทุก unique key รวม `tenant_id`; เงินเป็น `numeric(14,2)`; เวลาเป็น `timestamptz`; วันที่ธุรกิจเป็น `date`
-- seed สำหรับ dev ตรงกับ seed ของ mock (บริษัท `DEMO`, สาขา `HQ`, login `admin` / `admin`, พนักงาน `somchai` / `1234`)
-
-**api**
-
-- เวอร์ชัน Java / Spring Boot, โครง package, คำสั่ง build / test
-- **ห้ามใช้ Hibernate `ddl-auto`** — schema มาจาก repo db เท่านั้น (`validate` ได้)
-- tenant มาจาก JWT เท่านั้น; ทุก transaction `SET LOCAL app.tenant_id`; ตรวจ `X-Branch-Id` / `X-Terminal-Id` ทุก request
-- กฎใน `domain-rules.md` port เป็น class แยก (ไม่ผูก Spring) + test ด้วย `fixtures/` ของ repo นี้
-- ตอบ JSON ตาม `api-contract.md`: ไม่ละ field ที่เป็น `null` (`spring.jackson.default-property-inclusion=always`), วันที่เป็น ISO-8601
-
 **web**
 
 - serve `dist/frontend-an22/browser` (build ของ repo นี้: `npm run build`)
 - SPA fallback: path ที่ไม่ใช่ไฟล์ → `index.html` (ทุกเมนูเป็น full page reload — ดู "SPA per menu" ใน `CLAUDE.md`)
 - `index.html` → `Cache-Control: no-cache`; ไฟล์ที่มี hash (`*-<hash>.js|css`) → cache ยาว `immutable`
 - proxy `/api` → api (dev ของหน้าบ้านใช้ `proxy.conf.json` แบบเดียวกัน); ตัวอย่าง config ใน `deploy/nginx.conf`, `deploy/web.config`
+- ทดสอบได้ก่อนมี api: build ของ repo นี้ใช้ mock ในเบราว์เซอร์ (`useMock: true`) — ตรวจ fallback / cache header / ไม่มี request `/api` ออกไป
+
+**api** (รวมงาน db เดิม — E47)
+
+- เวอร์ชัน Java / Spring Boot, โครง package, คำสั่ง build / test
+- **schema = migration ของ Flyway ใน repo นี้เท่านั้น** (`src/main/resources/db/migration/V<n>__<desc>.sql`, ไม่แก้ไฟล์ที่ apply แล้ว) —
+  ห้ามใช้ Hibernate `ddl-auto` (`validate` ได้); คำสั่งรัน / รีเซ็ต PostgreSQL local และ test ด้วย Testcontainers
+- ทุกตารางข้อมูลมี `tenant_id` (+ `branch_id` ตามระดับใน `data-model.md`), เปิด RLS, policy อ่านจาก `current_setting('app.tenant_id')` (D7)
+- ทุก unique key รวม `tenant_id`; เงินเป็น `numeric(14,2)`; เวลาเป็น `timestamptz`; วันที่ธุรกิจเป็น `date`
+- ตาราง platform (`companies`, ใบแจ้งหนี้, `platform_admins`, `password_reset_tokens`) ไม่อยู่ใต้ RLS และใช้ DB role แยก; `audit_log` insert-only
+- seed สำหรับ dev ตรงกับ seed ของ mock (บริษัท `DEMO`, สาขา `HQ` + `BN`, login `admin` / `admin`, พนักงาน `somchai` / `1234`, platform `platform` / `platform`)
+- tenant มาจาก JWT เท่านั้น; ทุก transaction `SET LOCAL app.tenant_id`; ตรวจ `X-Branch-Id` / `X-Terminal-Id` ทุก request
+- กฎใน `domain-rules.md` port เป็น class แยก (ไม่ผูก Spring) + test ด้วย `fixtures/` ของ repo นี้
+- ตอบ JSON ตาม `api-contract.md`: ไม่ละ field ที่เป็น `null` (`spring.jackson.default-property-inclusion=always`), วันที่เป็น ISO-8601
