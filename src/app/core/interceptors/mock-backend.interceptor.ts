@@ -1216,12 +1216,22 @@ function loadTenantDb(
   return { db, changed: stockMoved || docsFixed || shiftsOn || registered || branched || owned };
 }
 
-/** Saves one company's data; derived fields (`storeInfo`, the products' branch stock) never are. */
-function saveTenantDb(storage: StorageService, companyId: number, db: MockDb): void {
+/**
+ * Saves one company's data; derived fields (`storeInfo`, the products' branch stock) never are.
+ * `branch` = the branch `db.products` were projected for (`atBranch()`), whose stock fields go back
+ * into `branchStock`; null = not projected (platform writes, reset link, signup) — `branchStock`
+ * is left as it is, never overwritten with the unprojected zeros.
+ */
+function saveTenantDb(
+  storage: StorageService,
+  companyId: number,
+  db: MockDb,
+  branch: number | null,
+): void {
   // `companies` moved to the platform registry (step 6); older stored dbs still carry it.
   storage.set(tenantKey(companyId), {
     ...db,
-    products: storeBranchStock(db),
+    products: storeBranchStock(db, branch),
     storeInfo: undefined,
     companies: undefined,
   });
@@ -1415,7 +1425,7 @@ function signup(
     ref: { kind: 'company', id: company.id, label: code },
     detail: `สมัครใช้งาน แพ็กเกจ ${planOf(p.planId).name} ทดลองใช้ถึง ${trialEndsOn}`,
   });
-  saveTenantDb(storage, company.id, db);
+  saveTenantDb(storage, company.id, db, null);
   return ok({ token: mockToken(company.id, owner.id), ...companySession(db, owner) });
 }
 
@@ -1481,7 +1491,7 @@ function resetPassword(body: unknown, storage: StorageService): Observable<HttpR
     },
     user,
   );
-  saveTenantDb(storage, company.id, db);
+  saveTenantDb(storage, company.id, db, null);
   return ok(null);
 }
 
@@ -1649,7 +1659,8 @@ function withTenantDb(
   const before = tenant;
   tenant = company;
   change(db);
-  saveTenantDb(storage, company.id, db);
+  // No request branch here: the stock of every branch stays as stored.
+  saveTenantDb(storage, company.id, db, null);
   tenant = before;
 }
 
@@ -1722,7 +1733,7 @@ function tenantResponse(
     if (done) recordAudit(req, path, db, done.body, deleted);
   }
   if (changed || req.method !== 'GET' || path === 'company/export') {
-    saveTenantDb(storage, company.id, db);
+    saveTenantDb(storage, company.id, db, stockBranch);
   }
   // Cost / profit only for those who may see them (E43): one place, after the handler and audit.
   if (actor && !canSeeCost(actor, db.companyInfo)) {
@@ -2379,7 +2390,7 @@ function handleCompany(
 
 /** Every collection of the company as stored, never a password (E38). */
 function companyExport(db: MockDb): CompanyExport {
-  const stored: Record<string, unknown> = { ...db, products: storeBranchStock(db) };
+  const stored: Record<string, unknown> = { ...db, products: storeBranchStock(db, stockBranch) };
   for (const key of ['passwords', 'storeInfo', 'legacyPosId'] as const) delete stored[key];
   for (const key of Object.keys(stored)) {
     // Counters and one-time migration flags are the mock's own bookkeeping.
@@ -2706,12 +2717,13 @@ function atBranch(db: MockDb, product: Product): Product {
 }
 
 /**
- * Writes the products' stock fields back into the request branch's rows (a row is made only when
- * something is set) and returns the products to store without them.
+ * Writes the products' stock fields back into `branch`'s rows (a row is made only when something
+ * is set; null = the products were not projected for a branch → nothing written) and returns the
+ * products to store without them.
  */
-function storeBranchStock(db: MockDb): Partial<Product>[] {
-  for (const p of db.products) {
-    const row = db.branchStock.find((r) => r.productId === p.id && r.branchId === stockBranch);
+function storeBranchStock(db: MockDb, branch: number | null): Partial<Product>[] {
+  for (const p of branch === null ? [] : db.products) {
+    const row = db.branchStock.find((r) => r.productId === p.id && r.branchId === branch);
     const fields = {
       stock: p.stock,
       avgCost: p.avgCost,
@@ -2720,7 +2732,7 @@ function storeBranchStock(db: MockDb): Partial<Product>[] {
     };
     if (row) Object.assign(row, fields);
     else if (Object.values(fields).some((v) => v !== 0)) {
-      db.branchStock.push({ branchId: stockBranch, productId: p.id, ...fields });
+      db.branchStock.push({ branchId: branch as number, productId: p.id, ...fields });
     }
   }
   return db.products.map((p) => {
