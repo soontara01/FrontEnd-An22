@@ -51,5 +51,6 @@ export default class MasterDataShell {
     { label: 'ผู้จำหน่าย', icon: 'local_shipping', path: 'suppliers' },
     { label: 'ช่องทางชำระเงิน', icon: 'payments', path: 'payment-methods' },
     { label: 'เครื่อง POS', icon: 'point_of_sale', path: 'terminals' },
+    { label: 'สาขา', icon: 'store', path: 'branches' },
   ];
 }

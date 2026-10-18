@@ -1,0 +1,77 @@
+<app-page-header
+  title="สต็อกทุกสาขา"
+  [subtitle]="product() ? product()!.sku + ' — ' + product()!.name : ''"
+>
+  <a mat-button routerLink="/inventory">
+    <mat-icon>arrow_back</mat-icon>
+    คลังสินค้า
+  </a>
+</app-page-header>
+
+@if (data.hasValue()) {
+  @let unit = product()?.unit ?? '';
+  <div class="table-wrap">
+    <table class="branches">
+      <thead>
+        <tr>
+          <th>สาขา</th>
+          <th class="num">คงเหลือ</th>
+          @if (showCost()) {
+            <th class="num">ทุนเฉลี่ย</th>
+            <th class="num">มูลค่าทุน</th>
+          }
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (l of lines(); track l.branchId) {
+          <tr [class.current]="l.current">
+            <td>
+              <strong>{{ l.branch.code }}</strong>
+              <span class="text-muted"> {{ l.branch.name }}</span>
+              @if (l.current) {
+                <span class="badge badge-success">สาขานี้</span>
+              }
+            </td>
+            <td class="num">{{ l.stock | number }} {{ unit }}</td>
+            @if (showCost()) {
+              <td class="num">{{ l.avgCost | number: '1.2-2' }}</td>
+              <td class="num">{{ l.value | number: '1.2-2' }}</td>
+            }
+            <td class="actions">
+              @if (l.canOpen) {
+                <a
+                  mat-icon-button
+                  matTooltip="บัตรสต็อกของสาขานี้"
+                  [routerLink]="['/inventory/stock-card', productId()]"
+                  [queryParams]="{ branch: l.branchId }"
+                >
+                  <mat-icon>receipt_long</mat-icon>
+                </a>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>รวมทุกสาขา</td>
+          <td class="num">{{ totalStock() | number }} {{ unit }}</td>
+          @if (showCost()) {
+            <td></td>
+            <td class="num">{{ totalValue() | number: '1.2-2' }}</td>
+          }
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <p class="text-muted small">
+    ทุนเฉลี่ยคิดแยกต่อสาขา — สินค้าเดียวกันทุนต่างกันได้ตามที่แต่ละสาขารับเข้า
+    @if (!showCost()) {
+      · ทุนแสดงเฉพาะผู้ดูแลระบบ
+    }
+  </p>
+} @else if (data.isLoading()) {
+  <app-loading-spinner />
+}

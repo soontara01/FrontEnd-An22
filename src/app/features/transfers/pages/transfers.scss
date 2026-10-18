@@ -1,0 +1,66 @@
+// Shared by the transfer pages.
+.table-wrap {
+  overflow-x: auto;
+}
+
+table.list {
+  width: 100%;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 8px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  th {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-medium);
+  }
+
+  .num {
+    text-align: right;
+    white-space: nowrap;
+  }
+}
+
+.serials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 24px;
+  margin-bottom: 16px;
+
+  .label {
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-label-medium);
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.problem {
+  color: var(--mat-sys-error);
+}
+
+.qty {
+  width: 96px;
+}
+
+.reason {
+  min-width: 280px;
+  flex: 1;
+}

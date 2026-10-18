@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { AuthService } from '@core/auth/auth.service';
 import { PosTerminal, normalizePosTerminal, posTerminalError } from '@core/models';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
@@ -26,6 +27,9 @@ export class PosTerminalFormDialog {
   private readonly dialogRef =
     inject<MatDialogRef<PosTerminalFormDialog, PosTerminal>>(MatDialogRef);
 
+  private readonly auth = inject(AuthService);
+  /** Branches this admin may put a terminal in (a company admin: every active branch, E6). */
+  protected readonly branches = this.auth.branches;
   protected readonly saving = signal(false);
   protected readonly editing = !!this.data.terminal;
 
@@ -33,6 +37,7 @@ export class PosTerminalFormDialog {
     id: [{ value: this.data.terminal?.id ?? this.store.nextId(), disabled: this.editing }],
     name: [this.data.terminal?.name ?? ''],
     posId: [this.data.terminal?.posId ?? ''],
+    branchId: [this.data.terminal?.branchId ?? this.auth.currentBranch()?.id ?? 0],
     active: [this.data.terminal?.active ?? true],
   });
 
@@ -49,6 +54,7 @@ export class PosTerminalFormDialog {
     posTerminalError(
       this.terminal(),
       this.store.terminals().filter((t) => t.id !== this.data.terminal?.id),
+      this.store.branches(),
     ),
   );
   protected readonly posIdMissing = computed(

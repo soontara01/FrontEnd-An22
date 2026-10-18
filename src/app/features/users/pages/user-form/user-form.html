@@ -12,33 +12,81 @@
     <form [formGroup]="form" (ngSubmit)="save()">
       <mat-card-content class="fields">
         <mat-form-field appearance="outline">
+          <mat-label>ชื่อผู้ใช้ (ใช้ login)</mat-label>
+          <input
+            matInput
+            appAutofocus
+            formControlName="username"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+          />
+          <mat-hint>a-z, 0-9, . _ - ยาว 3–30 ตัว ไม่ซ้ำกับผู้ใช้อื่น</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
           <mat-label>ชื่อ</mat-label>
-          <input matInput appAutofocus formControlName="name" />
+          <input matInput formControlName="name" />
           @if (form.controls.name.hasError('required')) {
             <mat-error>กรุณากรอกชื่อ</mat-error>
           }
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>อีเมล</mat-label>
+          <mat-label>{{
+            isOwnerAccount() ? 'อีเมล (จำเป็นสำหรับเจ้าของบริษัท)' : 'อีเมล (ไม่บังคับ)'
+          }}</mat-label>
           <input matInput type="email" formControlName="email" />
-          @if (form.controls.email.hasError('required')) {
-            <mat-error>กรุณากรอกอีเมล</mat-error>
-          } @else if (form.controls.email.hasError('email')) {
-            <mat-error>รูปแบบอีเมลไม่ถูกต้อง</mat-error>
-          }
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>สิทธิ์</mat-label>
           <mat-select formControlName="role">
-            @for (role of roles; track role) {
-              <mat-option [value]="role">{{ role }}</mat-option>
+            @for (role of roles(); track role) {
+              <mat-option [value]="role">{{ roleLabel[role] }}</mat-option>
             }
           </mat-select>
+          @if (isOwnerAccount()) {
+            <mat-hint>เปลี่ยนเจ้าของบริษัทได้ด้วยปุ่ม "โอนความเป็นเจ้าของ" ในรายการผู้ใช้</mat-hint>
+          }
         </mat-form-field>
 
+        @if (auth.isCompanyAdmin()) {
+          <mat-slide-toggle formControlName="allBranches"
+            >ทุกสาขา (รวมสาขาที่เพิ่มภายหลัง)</mat-slide-toggle
+          >
+        }
+        @if (!form.controls.allBranches.value) {
+          <mat-form-field appearance="outline">
+            <mat-label>สาขาที่เข้าได้</mat-label>
+            <mat-select formControlName="branchIds" multiple>
+              @for (branch of branches(); track branch.id) {
+                <mat-option [value]="branch.id">{{ branch.code }} · {{ branch.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+
+        @if (!isEdit()) {
+          <mat-form-field appearance="outline">
+            <mat-label>รหัสผ่าน</mat-label>
+            <input
+              matInput
+              type="password"
+              formControlName="password"
+              autocomplete="new-password"
+            />
+            <mat-hint>อย่างน้อย 4 ตัว</mat-hint>
+          </mat-form-field>
+        }
+
         <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
+        @if (accessProblem(); as p) {
+          <p class="problem">{{ p }}</p>
+        }
+        @if (identityProblem(); as p) {
+          <p class="problem">{{ p }}</p>
+        }
         @if (problem(); as p) {
           <p class="problem">{{ p }}</p>
         }
@@ -46,7 +94,11 @@
 
       <mat-card-actions align="end">
         <a mat-button routerLink="/users">ยกเลิก</a>
-        <button mat-flat-button type="submit" [disabled]="saving() || !!problem()">
+        <button
+          mat-flat-button
+          type="submit"
+          [disabled]="saving() || !!problem() || !!identityProblem() || !!accessProblem()"
+        >
           <mat-icon>save</mat-icon>
           บันทึก
         </button>

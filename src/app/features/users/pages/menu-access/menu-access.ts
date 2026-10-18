@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { RouterLink } from '@angular/router';
-import { ADMIN_ONLY_MENU, DEFAULT_USER_MENUS, MenuAccess, menuAccessError } from '@core/models';
+import { ADMIN_ONLY_MENUS, DEFAULT_USER_MENUS, MenuAccess, menuAccessError } from '@core/models';
 import { MENU, MenuItem } from '@core/navigation/menu.config';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
@@ -62,7 +62,7 @@ export default class MenuAccessPage {
   private readonly notify = inject(NotificationService);
 
   protected readonly menus = MENU;
-  protected readonly adminOnly = ADMIN_ONLY_MENU;
+  protected readonly adminOnly = ADMIN_ONLY_MENUS;
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   /** Paths ticked for the `user` role */

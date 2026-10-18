@@ -107,7 +107,7 @@
       </mat-card-content>
     </mat-card>
 
-    @if (store.storeInfo(); as info) {
+    @if (docInfo(); as info) {
       @if (preview(); as inv) {
         <!-- Same paper as the bill page prints on (Settings → taxInvoicePaper) -->
         @if (info.taxInvoicePaper === '80mm') {

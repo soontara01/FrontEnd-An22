@@ -1,4 +1,5 @@
 import type { Category } from './category.model';
+import type { Branch } from './company.model';
 import { priceStatus } from './price.model';
 import { Product, canSell, isDiscontinued } from './product.model';
 
@@ -68,6 +69,8 @@ export interface Promotion {
   discount: PromotionDiscount | null;
   /** free_goods only */
   freeGoods: PromotionFreeGoods | null;
+  /** Branches it applies in; [] = every branch (D2). Only company admins limit it (E6). */
+  branchIds: number[];
 }
 
 export type PromotionPayload = Omit<Promotion, 'id'>;
@@ -113,7 +116,15 @@ export const PROMOTION_DEFAULTS: Omit<Promotion, 'id' | 'code' | 'name' | 'start
   minAmount: 0,
   discount: { kind: 'percent', value: 10, maxDiscount: null },
   freeGoods: null,
+  branchIds: [],
 };
+
+/**
+ * Whether a promotion applies in this branch (D2): no branches = everywhere; a limited one only in
+ * its branches, never when the branch is unknown (`null`).
+ */
+export const inBranch = (p: Pick<Promotion, 'branchIds'>, branchId: number | null): boolean =>
+  !p.branchIds?.length || (branchId !== null && p.branchIds.includes(branchId));
 
 type Period = Pick<Promotion, 'enabled' | 'startDate' | 'endDate'>;
 
@@ -170,15 +181,20 @@ export function inScope(
   );
 }
 
-/** Item-level promotions (discount / free goods) in effect for a SKU on `date`, priority first. */
+/**
+ * Item-level promotions (discount / free goods) in effect for a SKU on `date` in the branch
+ * (`inBranch()`), priority first.
+ */
 export function promotionsForProduct<T extends Promotion>(
   product: Pick<Product, 'id' | 'categoryId'>,
   promotions: readonly T[],
   categories: readonly Category[],
   date: string,
+  branchId: number | null = null,
 ): T[] {
   return promotions
     .filter((p) => p.type !== 'bill_discount' && promotionStatus(p, date) === 'active')
+    .filter((p) => inBranch(p, branchId))
     .filter((p) => inScope(p, product, categories))
     .sort((a, b) => b.priority - a.priority);
 }
@@ -202,7 +218,25 @@ export interface PromotionContext {
   categories: readonly Category[];
   /** Every stored promotion (for the unique code check) */
   promotions: readonly Promotion[];
+  /** Branches of the company (a limited promotion names active ones) */
+  branches: readonly Pick<Branch, 'id' | 'active'>[];
   today: string;
+}
+
+/**
+ * D2 / E6: only a company admin creates, edits or deletes a promotion limited to branches (before
+ * or after the change). The server answers 403; null = allowed.
+ */
+export function promotionBranchScopeError(
+  p: Pick<Promotion, 'branchIds'> | null,
+  existing: Pick<Promotion, 'branchIds'> | null,
+  isCompanyAdmin: boolean,
+): string | null {
+  if (isCompanyAdmin) return null;
+  const limited = (x: Pick<Promotion, 'branchIds'> | null) => !!x?.branchIds?.length;
+  return limited(p) || limited(existing)
+    ? 'โปรที่จำกัดสาขาสร้าง / แก้ได้เฉพาะผู้ดูแลระบบระดับบริษัท'
+    : null;
 }
 
 const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
@@ -243,6 +277,12 @@ export function promotionError(
         return 'วันสิ้นสุดใหม่ต้องไม่ก่อนวันนี้ (ต้องการหยุดทันทีให้ปิดใช้งาน)';
     }
     return null;
+  }
+
+  const branchIds = p.branchIds ?? [];
+  if (new Set(branchIds).size !== branchIds.length) return 'เลือกสาขาซ้ำกัน';
+  if (branchIds.some((id) => !ctx.branches.some((b) => b.id === id && b.active))) {
+    return 'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว';
   }
 
   if (p.type !== 'bill_discount') {

@@ -1,0 +1,110 @@
+@if (!isCompanyAdmin()) {
+  <app-admin-only-note
+    message="แสดงเฉพาะเหตุการณ์ของสาขาที่คุณดูแล — เหตุการณ์ระดับบริษัทดูได้เฉพาะเจ้าของ / ผู้ดูแลระบบทุกสาขา"
+  />
+}
+
+<div class="filter-row">
+  <div class="presets">
+    @for (p of presets; track p.id) {
+      <button
+        mat-stroked-button
+        type="button"
+        [class.selected]="activePreset() === p.id"
+        (click)="applyPreset(p.id)"
+      >
+        {{ p.label }}
+      </button>
+    }
+  </div>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>เหตุการณ์</mat-label>
+    <mat-select
+      [value]="selectedAction()"
+      (selectionChange)="setParams({ action: $event.value || null })"
+    >
+      <mat-option value="">ทั้งหมด</mat-option>
+      @for (a of actions; track a.id) {
+        <mat-option [value]="a.id">{{ a.label }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>ผู้ใช้</mat-label>
+    <mat-select
+      [value]="selectedUser()"
+      (selectionChange)="setParams({ user: $event.value || null })"
+    >
+      <mat-option [value]="0">ทั้งหมด</mat-option>
+      @for (u of users(); track u.id) {
+        <mat-option [value]="u.id">{{ u.name }} ({{ u.username }})</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>สาขา</mat-label>
+    <mat-select
+      [value]="selectedBranch()"
+      (selectionChange)="setParams({ branch: $event.value || null })"
+    >
+      <mat-option [value]="0">ทั้งหมด</mat-option>
+      @for (b of branches(); track b.id) {
+        <mat-option [value]="b.id">{{ b.code }} · {{ b.name }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+  <button mat-icon-button matTooltip="โหลดใหม่" (click)="data.reload()">
+    <mat-icon>refresh</mat-icon>
+  </button>
+</div>
+
+<p class="text-muted small">ช่วงวันที่: {{ rangeText() }} · {{ events().length }} รายการ</p>
+
+<mat-card appearance="outlined">
+  @if (data.isLoading() && !data.hasValue()) {
+    <app-loading-spinner />
+  } @else if (!events().length) {
+    <app-empty-state icon="history" message="ไม่มีเหตุการณ์ในช่วงนี้" />
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="events()">
+        <ng-container matColumnDef="at">
+          <th mat-header-cell *matHeaderCellDef>เวลา</th>
+          <td mat-cell *matCellDef="let e" class="nowrap">{{ e.at | thaiDate: 'datetime' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="action">
+          <th mat-header-cell *matHeaderCellDef>เหตุการณ์</th>
+          <td mat-cell *matCellDef="let e">
+            <span class="badge" [class.badge-error]="e.action === 'login_failed'">
+              {{ actionText(e) }}
+            </span>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="who">
+          <th mat-header-cell *matHeaderCellDef>โดย</th>
+          <td mat-cell *matCellDef="let e">
+            {{ whoText(e) }}
+            @if (e.terminalId) {
+              <div class="text-muted small">เครื่อง {{ e.terminalId }}</div>
+            }
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="branch">
+          <th mat-header-cell *matHeaderCellDef>สาขา</th>
+          <td mat-cell *matCellDef="let e">{{ branchText(e) }}</td>
+        </ng-container>
+        <ng-container matColumnDef="ref">
+          <th mat-header-cell *matHeaderCellDef>รายการ</th>
+          <td mat-cell *matCellDef="let e" class="mono">{{ e.ref?.label || '-' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="detail">
+          <th mat-header-cell *matHeaderCellDef>รายละเอียด</th>
+          <td mat-cell *matCellDef="let e">{{ e.detail || '-' }}</td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+    </div>
+  }
+</mat-card>

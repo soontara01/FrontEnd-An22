@@ -27,6 +27,7 @@ import {
   denominationTotal,
   round2,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -65,6 +66,7 @@ type Step = 'count' | 'review' | 'done';
 })
 export default class ShiftClose {
   protected readonly store = inject(PosStore);
+  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly document = inject(DOCUMENT);
   private readonly notify = inject(NotificationService);
@@ -82,6 +84,17 @@ export default class ShiftClose {
     if (!this.remoteId()) return this.store.shift();
     return this.remote.hasValue() ? this.remote.value() : null;
   });
+  /** Seller details on the Z report: the shift's own branch (E22). */
+  private readonly otherBranchInfo = rxResource({
+    params: () => {
+      const branchId = this.target()?.branchId;
+      return branchId && branchId !== this.auth.currentBranch()?.id ? branchId : undefined;
+    },
+    stream: ({ params }) => this.store.fetchStoreInfo(params),
+  });
+  protected readonly slipInfo = computed(() =>
+    this.otherBranchInfo.hasValue() ? this.otherBranchInfo.value() : this.store.storeInfo(),
+  );
   protected readonly targetLoaded = computed(() =>
     this.remoteId() ? !this.remote.isLoading() : this.store.shiftLoaded(),
   );

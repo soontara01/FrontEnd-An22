@@ -17,9 +17,13 @@ describe('lazyMockBackendInterceptor', () => {
 
   it('loads the mock on demand and answers like the real interceptor', async () => {
     const login = await firstValueFrom(
-      http.post<LoginResponse>('/api/auth/login', { username: 'admin', password: 'admin' }),
+      http.post<LoginResponse>('/api/auth/login', {
+        companyCode: 'DEMO',
+        username: 'admin',
+        password: 'admin',
+      }),
     );
-    expect(login.token).toBe('mock-jwt-token');
+    expect(login.token).toBe('mock-jwt-token.t1.u1');
     // Second request reuses the loaded module (and its injected services).
     const methods = await firstValueFrom(
       http.get<PaymentMethod[]>('/api/payment-methods', {

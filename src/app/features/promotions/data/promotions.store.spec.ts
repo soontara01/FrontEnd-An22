@@ -42,6 +42,7 @@ describe('PromotionsStore', () => {
   const api = {
     list: vi.fn(() => of(promotions)),
     products: vi.fn(() => of([product(1, 'NB-1'), product(2, 'MS-1')])),
+    branches: vi.fn(() => of([])),
     categories: vi.fn(() =>
       of([
         {

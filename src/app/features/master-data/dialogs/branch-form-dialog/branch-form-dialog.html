@@ -1,0 +1,58 @@
+<h2 mat-dialog-title>{{ editing ? 'แก้ไขสาขา' : 'เพิ่มสาขา' }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="grid">
+      <mat-form-field appearance="outline">
+        <mat-label>รหัสสาขา</mat-label>
+        <input matInput appAutofocus formControlName="code" maxlength="10" class="mono" />
+        <mat-hint>A-Z / 0-9 เช่น BKK01 · ใช้ในเลขเอกสาร</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>เลขที่สาขา (สรรพากร)</mat-label>
+        <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" class="mono" />
+        <mat-hint>5 หลัก · สำนักงานใหญ่ = {{ headOffice }}</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>ชื่อสถานประกอบการ (ชื่อสาขา)</mat-label>
+        <input matInput formControlName="name" maxlength="100" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>ที่อยู่</mat-label>
+        <textarea matInput formControlName="address" rows="2"></textarea>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>โทรศัพท์</mat-label>
+        <input matInput formControlName="phone" />
+      </mat-form-field>
+
+      <div class="toggle">
+        <mat-slide-toggle formControlName="active">เปิดใช้งาน</mat-slide-toggle>
+      </div>
+
+      <mat-form-field appearance="outline" class="span-2">
+        <mat-label>ข้อความท้ายใบเสร็จ</mat-label>
+        <textarea matInput formControlName="receiptFooter" rows="2"></textarea>
+      </mat-form-field>
+    </div>
+
+    @if (problem(); as message) {
+      <p class="problem">
+        <mat-icon inline>error</mat-icon>
+        {{ message }}
+      </p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" mat-dialog-close>ยกเลิก</button>
+    <button mat-flat-button type="submit" [disabled]="saving() || !!problem()">
+      <mat-icon>save</mat-icon>
+      บันทึก
+    </button>
+  </mat-dialog-actions>
+</form>

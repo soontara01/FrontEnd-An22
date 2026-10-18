@@ -24,6 +24,7 @@ import {
   StoreInfo,
   User,
   normalizeSale,
+  normalizeShift,
   TaxInvoice,
   TaxInvoiceBuyer,
 } from '@core/models';
@@ -53,8 +54,12 @@ export class PosApi {
     return this.api.get<SerialNumber[]>(`products/${productId}/serials`);
   }
 
-  storeInfo(): Observable<StoreInfo> {
-    return this.api.get<StoreInfo>('settings/store');
+  /** Seller details: the working branch's, or `branchId`'s (another branch's shift, E22). */
+  storeInfo(branchId?: number): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>(
+      'settings/store',
+      branchId ? { branchId: String(branchId) } : {},
+    );
   }
 
   posTerminals(): Observable<PosTerminal[]> {
@@ -84,12 +89,14 @@ export class PosApi {
 
   /** Any shift by id (an admin closing another terminal's shift). */
   shift(id: number): Observable<Shift> {
-    return this.api.get<Shift>(`shifts/${id}`);
+    return this.api.get<Shift>(`shifts/${id}`).pipe(map(normalizeShift));
   }
 
   /** Open shift of this terminal (`X-Terminal-Id`), null = none. */
   currentShift(): Observable<Shift | null> {
-    return this.api.get<Shift | null>('shifts/current');
+    return this.api
+      .get<Shift | null>('shifts/current')
+      .pipe(map((s) => (s ? normalizeShift(s) : null)));
   }
 
   /** Float the last closed shift of this terminal (`X-Terminal-Id`) left in the drawer. */
@@ -98,7 +105,7 @@ export class PosApi {
   }
 
   openShift(payload: ShiftOpenPayload): Observable<Shift> {
-    return this.api.post<Shift>('shifts/open', payload);
+    return this.api.post<Shift>('shifts/open', payload).pipe(map(normalizeShift));
   }
 
   /** X report; per-method lines only for admins while the shift is open. */
@@ -120,7 +127,7 @@ export class PosApi {
   }
 
   closeShift(shiftId: number, payload: ShiftClosePayload): Observable<Shift> {
-    return this.api.post<Shift>(`shifts/${shiftId}/close`, payload);
+    return this.api.post<Shift>(`shifts/${shiftId}/close`, payload).pipe(map(normalizeShift));
   }
 
   /** Checks a login without starting a session (wrong → 400, never a 401 logout). */

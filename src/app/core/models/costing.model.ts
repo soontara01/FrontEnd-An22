@@ -7,18 +7,22 @@ import { toIsoDate } from './price.model';
  * - other SKUs → moving weighted average, recalculated on every receipt
  * `Product.cost` is only the standard/default cost (prefill when receiving, estimate when no stock).
  */
-export type MovementType = 'opening' | 'receive' | 'issue';
+export type MovementType = 'opening' | 'receive' | 'issue' | 'transfer_out' | 'transfer_in';
 
 export const MOVEMENT_TYPE_LABEL: Record<MovementType, string> = {
   opening: 'ยอดยกมา',
   receive: 'รับเข้า',
   issue: 'ตัดออก',
+  transfer_out: 'โอนออก',
+  transfer_in: 'โอนเข้า',
 };
 
 /** One line of the stock card (inventory ledger) of a SKU. Costs exclude VAT. */
 export interface StockMovement {
   id: number;
   productId: number;
+  /** Branch (warehouse) whose stock moved — each branch has its own stock card (SaaS step 3, D1) */
+  branchId: number;
   /** ISO timestamp */
   date: string;
   type: MovementType;

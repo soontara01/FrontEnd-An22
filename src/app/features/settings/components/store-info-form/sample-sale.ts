@@ -4,7 +4,7 @@ import { SALE_DEFAULTS, Sale, TaxInvoice } from '@core/models';
 export const SAMPLE_SALE: Sale = {
   ...SALE_DEFAULTS,
   id: 0,
-  orderNo: 'POS1-20261004-0001',
+  orderNo: 'POS-HQ-1-20261004-0001',
   terminalId: 1,
   posId: 'E051234567890',
   date: new Date(2026, 9, 4, 14, 5).toISOString(),
@@ -82,7 +82,7 @@ export const SAMPLE_SALE: Sale = {
 /** Full tax invoice of `SAMPLE_SALE`, shown when previewing the selected invoice paper. */
 export const SAMPLE_INVOICE: TaxInvoice = {
   id: 0,
-  invoiceNo: 'INV-20261004-0001',
+  invoiceNo: 'INV-HQ-20261004-0001',
   saleId: SAMPLE_SALE.id,
   orderNo: SAMPLE_SALE.orderNo,
   saleDate: SAMPLE_SALE.date,

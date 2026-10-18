@@ -42,6 +42,12 @@ export const MENU: MenuItem[] = [
     loadChildren: () => import('@features/inventory/inventory.routes'),
   },
   {
+    label: 'โอนสินค้า',
+    icon: 'local_shipping',
+    path: 'transfers',
+    loadChildren: () => import('@features/transfers/transfers.routes'),
+  },
+  {
     label: 'จัดการ SKU',
     icon: 'barcode',
     path: 'sku',
@@ -70,6 +76,13 @@ export const MENU: MenuItem[] = [
     icon: 'group',
     path: 'users',
     loadChildren: () => import('@features/users/users.routes'),
+    adminOnly: true,
+  },
+  {
+    label: 'บัญชีบริษัท',
+    icon: 'domain',
+    path: 'account',
+    loadChildren: () => import('@features/account/account.routes'),
     adminOnly: true,
   },
   {

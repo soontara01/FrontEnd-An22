@@ -41,7 +41,7 @@
           #slip
           [shift]="d.shift"
           [summary]="d.summary"
-          [store]="store.storeInfo()"
+          [store]="store.storeInfoFor(d.shift.branchId)"
           [copy]="true"
           [adjustments]="d.adjustments"
         />

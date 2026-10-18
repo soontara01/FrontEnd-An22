@@ -1,6 +1,8 @@
 import { Category } from './category.model';
 import { PRODUCT_DEFAULTS, Product } from './product.model';
 import {
+  inBranch,
+  promotionBranchScopeError,
   PROMOTION_DEFAULTS,
   Promotion,
   PromotionContext,
@@ -61,6 +63,10 @@ describe('promotion model', () => {
     products,
     categories,
     promotions,
+    branches: [
+      { id: 1, active: true },
+      { id: 2, active: false },
+    ],
     today,
   });
   const payload = (p: Promotion) => {
@@ -182,5 +188,26 @@ describe('promotion model', () => {
     expect(
       promotionError(payload({ ...stored, name: 'ใหม่' }), ctx('2026-09-01', [stored]), stored),
     ).toBeNull();
+  });
+
+  it('limits a promotion to branches (D2)', () => {
+    expect(inBranch({ branchIds: [] }, null)).toBe(true);
+    expect(inBranch({ branchIds: [2] }, 2)).toBe(true);
+    expect(inBranch({ branchIds: [2] }, 1)).toBe(false);
+    expect(inBranch({ branchIds: [2] }, null)).toBe(false);
+    expect(promotionError({ ...payload(promo()), branchIds: [1, 1] }, ctx())).toBe(
+      'เลือกสาขาซ้ำกัน',
+    );
+    expect(promotionError({ ...payload(promo()), branchIds: [2] }, ctx())).toBe(
+      'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว',
+    );
+    expect(promotionError({ ...payload(promo()), branchIds: [1] }, ctx())).toBeNull();
+    const companyOnly = 'โปรที่จำกัดสาขาสร้าง / แก้ได้เฉพาะผู้ดูแลระบบระดับบริษัท';
+    expect(promotionBranchScopeError({ branchIds: [1] }, null, false)).toBe(companyOnly);
+    expect(promotionBranchScopeError({ branchIds: [] }, { branchIds: [1] }, false)).toBe(
+      companyOnly,
+    );
+    expect(promotionBranchScopeError({ branchIds: [] }, { branchIds: [] }, false)).toBeNull();
+    expect(promotionBranchScopeError({ branchIds: [1] }, null, true)).toBeNull();
   });
 });

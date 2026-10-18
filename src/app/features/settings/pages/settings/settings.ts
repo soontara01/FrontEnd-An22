@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { MatListModule } from '@angular/material/list';
 import { AuthService } from '@core/auth/auth.service';
+import { ROLE_LABEL } from '@core/models';
 import { ThemeService } from '@core/services/theme.service';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
@@ -30,16 +31,22 @@ import { ThisTerminal } from '../../components/this-terminal/this-terminal';
         <mat-card-title>เครื่องนี้ (เครื่อง POS)</mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <app-this-terminal [editable]="auth.user()?.role === 'admin'" />
+        <app-this-terminal [editable]="auth.isAdmin()" />
       </mat-card-content>
     </mat-card>
 
     <mat-card appearance="outlined" class="section">
       <mat-card-header>
         <mat-card-title>ข้อมูลร้าน (หัว/ท้ายใบเสร็จ)</mat-card-title>
+        <mat-card-subtitle
+          >{{ auth.company()?.name }} · {{ auth.currentBranch()?.name }}</mat-card-subtitle
+        >
       </mat-card-header>
       <mat-card-content>
-        <app-store-info-form [editable]="auth.user()?.role === 'admin'" />
+        <app-store-info-form
+          [companyEditable]="auth.isCompanyAdmin()"
+          [branchEditable]="auth.isAdmin()"
+        />
       </mat-card-content>
     </mat-card>
 
@@ -53,11 +60,17 @@ import { ThisTerminal } from '../../components/this-terminal/this-terminal';
               <span matListItemLine>ชื่อ</span>
             </mat-list-item>
             <mat-list-item>
-              <span matListItemTitle>{{ user.email }}</span>
-              <span matListItemLine>อีเมล</span>
+              <span matListItemTitle>{{ user.username }}</span>
+              <span matListItemLine>ชื่อผู้ใช้</span>
             </mat-list-item>
+            @if (user.email) {
+              <mat-list-item>
+                <span matListItemTitle>{{ user.email }}</span>
+                <span matListItemLine>อีเมล</span>
+              </mat-list-item>
+            }
             <mat-list-item>
-              <span matListItemTitle>{{ user.role }}</span>
+              <span matListItemTitle>{{ roleLabel[user.role] }}</span>
               <span matListItemLine>สิทธิ์</span>
             </mat-list-item>
           </mat-list>
@@ -84,4 +97,5 @@ import { ThisTerminal } from '../../components/this-terminal/this-terminal';
 export default class Settings {
   protected readonly auth = inject(AuthService);
   protected readonly theme = inject(ThemeService);
+  protected readonly roleLabel = ROLE_LABEL;
 }

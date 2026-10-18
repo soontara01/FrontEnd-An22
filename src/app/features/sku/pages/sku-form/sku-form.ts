@@ -38,6 +38,7 @@ import {
   VatType,
   withServiceRules,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { PageHeader } from '@shared/components/page-header/page-header';
@@ -85,6 +86,8 @@ type SupplierGroup = FormGroup<{
 export default class SkuForm implements OnInit {
   protected readonly moneyErrorText = moneyErrorText;
   protected readonly store = inject(SkuStore);
+  /** Reorder levels belong to the working branch (E13). */
+  protected readonly branch = inject(AuthService).currentBranch;
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
   private readonly fb = inject(NonNullableFormBuilder);

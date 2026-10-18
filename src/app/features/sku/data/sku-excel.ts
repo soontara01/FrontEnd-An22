@@ -114,8 +114,18 @@ export const SKU_COLUMNS: Column[] = [
     width: 10,
     help: 'ต่อหน่วยฐาน ไม่รวม VAT (ค่าตั้งต้นตอนรับเข้า — ต้นทุนจริงคำนวณจากการรับเข้า)',
   },
-  { key: 'minStock', header: 'จุดสั่งซื้อ', width: 10, help: 'สต็อกขั้นต่ำ' },
-  { key: 'maxStock', header: 'สต็อกสูงสุด', width: 10, help: '0 = 2 เท่าจุดสั่งซื้อ' },
+  {
+    key: 'minStock',
+    header: 'จุดสั่งซื้อ',
+    width: 10,
+    help: 'สต็อกขั้นต่ำ ของสาขาที่ทำงานอยู่ (แต่ละสาขาตั้งเอง)',
+  },
+  {
+    key: 'maxStock',
+    header: 'สต็อกสูงสุด',
+    width: 10,
+    help: 'ของสาขาที่ทำงานอยู่ · 0 = 2 เท่าจุดสั่งซื้อ',
+  },
   { key: 'warrantyMonths', header: 'รับประกัน (เดือน)', width: 10, help: '0 = ไม่มี' },
   {
     key: 'serialControl',

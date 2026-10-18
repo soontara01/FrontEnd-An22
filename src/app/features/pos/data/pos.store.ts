@@ -35,6 +35,7 @@ import {
   terminalError,
   terminalLabel,
   todayIso,
+  hasAdminRights,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
 import { StorageService } from '@core/services/storage.service';
@@ -59,7 +60,8 @@ export interface HeldBill {
   total: number;
 }
 
-const HOLDS_KEY = 'pos.holds';
+/** Bills parked before SaaS step 2 (one store): moved once into the branch that opens the POS. */
+const LEGACY_HOLDS_KEY = 'pos.holds';
 /** Id of the shift whose screen is locked (survives reloads / menu switches). */
 const LOCK_KEY = 'pos.locked';
 
@@ -88,7 +90,9 @@ export class PosStore {
   private readonly _buyer = signal<TaxInvoiceBuyer | null>(null);
   private readonly _billManual = signal<ManualDiscount | null>(null);
   private readonly _manualReason = signal('');
-  private readonly _holds = signal<HeldBill[]>(this.storage.get<HeldBill[]>(HOLDS_KEY) ?? []);
+  /** Parked bills belong to this device's company + branch (saas-plan section 3). */
+  private readonly holdsKey = `pos.held.${this.auth.company()?.id ?? 0}.${this.auth.currentBranch()?.id ?? 0}`;
+  private readonly _holds = signal<HeldBill[]>(this.loadHolds());
   private readonly _lastSale = signal<Sale | null>(null);
   private readonly _lastInvoice = signal<TaxInvoice | null>(null);
   private readonly _shift = signal<Shift | null>(null);
@@ -136,6 +140,8 @@ export class PosStore {
         date: todayIso(),
         // The server re-prices with the store's real status; until it loads assume registered.
         vatRegistered: this.storeInfo()?.vatRegistered ?? true,
+        // Same branch the server prices with (`X-Branch-Id`, D2).
+        branchId: this.auth.currentBranch()?.id ?? null,
       },
       this._freeSerials(),
       this._billManual(),
@@ -163,11 +169,18 @@ export class PosStore {
     return id === null ? 'ยังไม่ได้ตั้งเลขเครื่อง' : terminalLabel(id, this._terminals());
   });
   /**
-   * Why this device cannot sell or open a shift: it must be an active terminal of the registry —
-   * same rule as the server (`terminalError()`). Null until the data has loaded.
+   * Why this device cannot sell or open a shift: it must be an active terminal of the registry in
+   * the working branch — same rule as the server (`terminalError()`). Null until the data has loaded.
    */
   readonly terminalProblem = computed(() =>
-    this._shiftLoaded() ? terminalError(this.terminalId(), this._terminals()) : null,
+    this._shiftLoaded()
+      ? terminalError(
+          this.terminalId(),
+          this._terminals(),
+          this.auth.currentBranch()?.id ?? null,
+          this.auth.branches(),
+        )
+      : null,
   );
   /** Shifts in use (`StoreInfo.requireShift`); unknown until the store info has loaded */
   readonly requireShift = computed(() => this._storeInfo()?.requireShift ?? false);
@@ -185,7 +198,7 @@ export class PosStore {
   /** Name of the logged-in user (= `Shift.cashier` of the shifts they open) */
   readonly userName = computed(() => this.auth.user()?.name ?? '');
   /** Username to prefill on the lock screen (the part of the e-mail before @) */
-  readonly loginHint = computed(() => this.auth.user()?.email.split('@')[0] ?? '');
+  readonly loginHint = computed(() => this.auth.user()?.username ?? '');
   /** The screen is locked for the open shift (a lock of another / closed shift is ignored). */
   readonly locked = computed(() => {
     const id = this._lockedShiftId();
@@ -284,6 +297,11 @@ export class PosStore {
     return this.api.shift(id);
   }
 
+  /** Seller details of another branch (Z report of a shift closed on its behalf, E22). */
+  fetchStoreInfo(branchId: number): Observable<StoreInfo> {
+    return this.api.storeInfo(branchId);
+  }
+
   /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน' for any terminal number. */
   terminalLabelOf(id: number): string {
     return terminalLabel(id, this._terminals());
@@ -328,7 +346,7 @@ export class PosStore {
     return this.api.verify(credentials).pipe(
       map(({ user }) => {
         const shift = this._shift();
-        if (shift && user.name !== shift.cashier && user.role !== 'admin') {
+        if (shift && user.name !== shift.cashier && !hasAdminRights(user)) {
           return `ปลดล็อกได้เฉพาะ ${shift.cashier} หรือผู้ดูแลระบบ`;
         }
         this.setLock(null);
@@ -501,6 +519,15 @@ export class PosStore {
 
   private saveHolds(holds: HeldBill[]): void {
     this._holds.set(holds);
-    this.storage.set(HOLDS_KEY, holds);
+    this.storage.set(this.holdsKey, holds);
+  }
+
+  private loadHolds(): HeldBill[] {
+    const holds = this.storage.get<HeldBill[]>(this.holdsKey) ?? [];
+    const legacy = this.storage.get<HeldBill[]>(LEGACY_HOLDS_KEY);
+    if (!legacy) return holds;
+    this.storage.remove(LEGACY_HOLDS_KEY);
+    this.storage.set(this.holdsKey, [...holds, ...legacy]);
+    return [...holds, ...legacy];
   }
 }

@@ -20,6 +20,7 @@ import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { Router, RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import {
+  BranchScope,
   PAYMENT_TYPE_ICON,
   RETURN_STATUS_BADGE,
   RETURN_STATUS_LABEL,
@@ -51,6 +52,7 @@ import { httpErrorShown } from '@core/http/http-error-shown';
 import { MenuAccessService } from '@core/navigation/menu-access.service';
 import { summarizeSales } from '../../data/sale-summary';
 import { SalesStore } from '../../data/sales.store';
+import { BranchScopeSelect } from '../../components/branch-scope-select';
 
 /**
  * Bills of a local-date range (`/sales?from=&to=`, `?all=1`; default = today) with totals,
@@ -60,6 +62,7 @@ import { SalesStore } from '../../data/sales.store';
 @Component({
   selector: 'app-sale-list',
   imports: [
+    BranchScopeSelect,
     CurrencyPipe,
     DecimalPipe,
     ReactiveFormsModule,
@@ -86,8 +89,9 @@ export default class SaleList {
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
+  private readonly auth = inject(AuthService);
   /** The sales tax report is admin only (P4). */
-  protected readonly isAdmin = inject(AuthService).isAdmin;
+  protected readonly isAdmin = this.auth.isAdmin;
 
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();
@@ -95,6 +99,11 @@ export default class SaleList {
   readonly all = input<string>();
   /** `?shift=<id>`: bills sold or voided in that shift (the date range is ignored) */
   readonly shift = input<string>();
+  /** `?branch=<id>|all` (E23); none = the working branch */
+  readonly branch = input<string>();
+  protected readonly scope = computed<BranchScope>(() =>
+    this.branch() === 'all' ? 'all' : Number(this.branch()) || this.auth.currentBranch()?.id || 0,
+  );
   protected readonly shiftId = computed(() => Number(this.shift()) || null);
   protected readonly shiftInfo = rxResource({
     params: () => this.shiftId() ?? undefined,
@@ -106,7 +115,7 @@ export default class SaleList {
 
   protected readonly presets = DATE_PRESETS;
   protected readonly methodIcon = PAYMENT_TYPE_ICON;
-  protected readonly columns = [
+  private readonly baseColumns = [
     'orderNo',
     'date',
     'customer',
@@ -117,6 +126,10 @@ export default class SaleList {
     'status',
     'actions',
   ];
+  /** + the branch when every branch is shown */
+  protected readonly columns = computed(() =>
+    this.scope() === 'all' ? ['orderNo', 'branch', ...this.baseColumns.slice(1)] : this.baseColumns,
+  );
   protected readonly statuses: SaleStatus[] = ['paid', 'cancelled', 'pending'];
   protected readonly statusLabel = SALE_STATUS_LABEL;
 
@@ -142,18 +155,18 @@ export default class SaleList {
   });
 
   protected readonly sales = rxResource({
-    params: () => ({ ...this.range(), shiftId: this.shiftId() }),
+    params: () => ({ ...this.range(), shiftId: this.shiftId(), scope: this.scope() }),
     stream: ({ params }) =>
       params.shiftId
         ? this.store.salesOfShift(params.shiftId)
-        : this.store.list(params.from, params.to),
+        : this.store.list(params.from, params.to, params.scope),
   });
   protected readonly creditNotes = rxResource({
-    params: () => ({ ...this.range(), shiftId: this.shiftId() }),
+    params: () => ({ ...this.range(), shiftId: this.shiftId(), scope: this.scope() }),
     stream: ({ params }) =>
       params.shiftId
         ? this.store.creditNotesOfShift(params.shiftId)
-        : this.store.creditNotes(params.from, params.to),
+        : this.store.creditNotes(params.from, params.to, params.scope),
   });
   private readonly rows = computed(() => (this.sales.hasValue() ? this.sales.value() : []));
   protected readonly summary = computed(() =>
@@ -237,6 +250,16 @@ export default class SaleList {
 
   protected methodNames(sale: Sale): string {
     return sale.payments.map((p) => p.name).join(', ');
+  }
+
+  protected selectBranch(scope: BranchScope): void {
+    const working = scope === this.auth.currentBranch()?.id;
+    this.navigate({ branch: working ? null : String(scope), shift: null });
+  }
+
+  /** Branch code of a bill (shown when every branch is listed). */
+  protected branchCode(sale: Sale): string {
+    return this.auth.branches().find((b) => b.id === sale.branchId)?.code ?? '-';
   }
 
   protected applyPreset(preset: DatePreset): void {

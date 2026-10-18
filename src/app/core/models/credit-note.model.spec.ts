@@ -319,6 +319,10 @@ describe('credit note model', () => {
       expect(creditNoteError(sale, [], payload({}), { ...ctx, today: '2026-10-01' })).toBe(
         'บิลของวันนี้ให้ยกเลิกบิลแทนการออกใบลดหนี้',
       );
+      const here = { branchId: 2, branches: [{ id: 1, code: 'HQ' }] };
+      expect(creditNoteError({ ...sale, branchId: 1 }, [], payload({}), { ...ctx, here })).toBe(
+        'บิลนี้ขายที่สาขา HQ — ออกใบลดหนี้ได้ที่สาขานั้น',
+      );
       expect(creditNoteError({ ...sale, status: 'cancelled' }, [], payload({}), ctx)).toBe(
         'ออกใบลดหนี้ได้เฉพาะบิลขายหน้าร้านที่ชำระแล้ว',
       );

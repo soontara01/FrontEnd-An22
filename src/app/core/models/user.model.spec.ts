@@ -1,4 +1,21 @@
-import { User, userChangeError } from './user.model';
+import {
+  branchScopeError,
+  parseBranchScope,
+  User,
+  canWorkIn,
+  hasAdminRights,
+  isCompanyAdmin,
+  isOwner,
+  ownerRoleError,
+  ownerTransferError,
+  normalizeUsername,
+  passwordError,
+  userBranchError,
+  userScopeError,
+  userChangeError,
+  userIdentityError,
+  usernameError,
+} from './user.model';
 
 describe('userChangeError', () => {
   const user = (id: number, role: User['role'], active = true) => ({ id, role, active });
@@ -38,5 +55,195 @@ describe('userChangeError', () => {
         1,
       ),
     ).toBeNull();
+  });
+});
+
+describe('userIdentityError', () => {
+  const users = [
+    { id: 1, username: 'admin', email: 'admin@example.com' },
+    { id: 2, username: 'somchai', email: '' },
+  ];
+
+  it('checks the username format', () => {
+    expect(usernameError('')).toBe('กรุณากรอกชื่อผู้ใช้');
+    expect(usernameError('ab')).toBe('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z, 0-9, . _ - ยาว 3–30 ตัว');
+    expect(usernameError('สมชาย')).toBe('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z, 0-9, . _ - ยาว 3–30 ตัว');
+    expect(usernameError(' Som.Chai_2-x ')).toBeNull();
+    expect(normalizeUsername(' SomChai ')).toBe('somchai');
+  });
+
+  it('keeps usernames and e-mails unique within the company, e-mail optional (B5)', () => {
+    const check = (username: string, email: string, exceptId: number | null = null) =>
+      userIdentityError(users, { username, email }, exceptId);
+    expect(check('SOMCHAI', '')).toBe('ชื่อผู้ใช้นี้มีอยู่แล้ว');
+    expect(check('somchai', '', 2)).toBeNull();
+    expect(check('somying', '')).toBeNull();
+    expect(check('somying', 'x@')).toBe('รูปแบบอีเมลไม่ถูกต้อง');
+    expect(check('somying', ' Admin@Example.com')).toBe('อีเมลนี้มีผู้ใช้อื่นใช้แล้ว');
+    expect(check('admin', 'admin@example.com', 1)).toBeNull();
+  });
+});
+
+describe('user branch rights and passwords', () => {
+  const branches = [
+    { id: 1, active: true },
+    { id: 2, active: true },
+    { id: 3, active: false },
+  ];
+  const admin = (allBranches: boolean, branchIds: number[] = []) => ({
+    role: 'admin' as const,
+    allBranches,
+    branchIds,
+  });
+
+  it('knows the company admin (E5) and who may work in a branch', () => {
+    expect(isCompanyAdmin(admin(true))).toBe(true);
+    expect(isCompanyAdmin(admin(false, [1]))).toBe(false);
+    expect(isCompanyAdmin({ role: 'user', allBranches: true })).toBe(false);
+    expect(canWorkIn({ allBranches: false, branchIds: [1] }, branches[0])).toBe(true);
+    expect(canWorkIn({ allBranches: false, branchIds: [1] }, branches[1])).toBe(false);
+    expect(canWorkIn({ allBranches: true, branchIds: [] }, branches[2])).toBe(false);
+  });
+
+  it('needs all branches or at least one active branch', () => {
+    expect(userBranchError({ allBranches: true, branchIds: [] }, branches)).toBeNull();
+    expect(userBranchError({ allBranches: false, branchIds: [] }, branches)).toBe(
+      'กรุณาเลือกสาขาอย่างน้อย 1 สาขา',
+    );
+    expect(userBranchError({ allBranches: false, branchIds: [1, 3] }, branches)).toBe(
+      'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว',
+    );
+    expect(userBranchError({ allBranches: false, branchIds: [2] }, branches)).toBeNull();
+  });
+
+  it('keeps a branch admin to users of their own branches (E6)', () => {
+    const branchAdmin = admin(false, [1, 2]);
+    const user = (branchIds: number[], allBranches = false) => ({ allBranches, branchIds });
+    expect(userScopeError(admin(true), user([], true), null)).toBeNull();
+    expect(userScopeError(branchAdmin, null, user([2]))).toBeNull();
+    expect(userScopeError(branchAdmin, user([1]), user([1, 2]))).toBeNull();
+    expect(userScopeError(branchAdmin, user([3]), user([1]))).toBe(
+      'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(userScopeError(branchAdmin, user([], true), null)).toBe(
+      'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(userScopeError(branchAdmin, null, user([], true))).toBe(
+      'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(userScopeError(branchAdmin, user([1]), user([1, 3]))).toBe(
+      'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+  });
+
+  it('checks a password (E10)', () => {
+    expect(passwordError('')).toBe('กรุณากรอกรหัสผ่าน');
+    expect(passwordError(' 1234')).toBe('รหัสผ่านต้องไม่ขึ้นต้นหรือลงท้ายด้วยช่องว่าง');
+    expect(passwordError('123')).toBe('รหัสผ่านต้องมีอย่างน้อย 4 ตัว');
+    expect(passwordError('x'.repeat(65))).toBe('รหัสผ่านต้องไม่เกิน 64 ตัว');
+    expect(passwordError('1234')).toBeNull();
+  });
+});
+
+describe('branch scope of lists (E23)', () => {
+  const branches = [
+    { id: 1, active: true },
+    { id: 2, active: true },
+    { id: 3, active: false },
+  ];
+  const companyAdmin = { role: 'admin' as const, allBranches: true, branchIds: [] };
+  const branchAdmin = { role: 'admin' as const, allBranches: false, branchIds: [2] };
+  const staff = { role: 'user' as const, allBranches: false, branchIds: [1] };
+
+  it('reads ?branchId= (missing = the working branch)', () => {
+    expect(parseBranchScope(null, 2)).toBe(2);
+    expect(parseBranchScope('all', 2)).toBe('all');
+    expect(parseBranchScope('1', 2)).toBe(1);
+    expect(parseBranchScope('x', 2)).toBeNull();
+  });
+
+  it('lets company admins see any branch or all, others only their own', () => {
+    expect(branchScopeError('all', companyAdmin, branches)).toBeNull();
+    expect(branchScopeError(3, companyAdmin, branches)).toBeNull();
+    expect(branchScopeError('all', branchAdmin, branches)).toBe(
+      'ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    );
+    expect(branchScopeError(2, branchAdmin, branches)).toBeNull();
+    expect(branchScopeError(1, branchAdmin, branches)).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
+    expect(branchScopeError(1, staff, branches)).toBeNull();
+    expect(branchScopeError(9, companyAdmin, branches)).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
+  });
+});
+
+describe('owner (E33)', () => {
+  const user = (id: number, role: User['role'], active = true, email = `u${id}@x.test`) => ({
+    id,
+    role,
+    active,
+    email,
+  });
+
+  it('gives the owner every admin right and company-level work', () => {
+    expect(hasAdminRights({ role: 'owner' })).toBe(true);
+    expect(hasAdminRights({ role: 'admin' })).toBe(true);
+    expect(hasAdminRights({ role: 'user' })).toBe(false);
+    expect(isCompanyAdmin({ role: 'owner', allBranches: false })).toBe(true);
+    expect(isCompanyAdmin({ role: 'admin', allBranches: false })).toBe(false);
+    expect(isOwner({ role: 'admin' })).toBe(false);
+  });
+
+  it('never deletes, deactivates or demotes the owner, nor makes one through the form', () => {
+    const users = [user(1, 'owner'), user(2, 'admin'), user(3, 'user')];
+    const update = (id: number, role: User['role'], active = true) =>
+      userChangeError(users, { kind: 'update', id, payload: { role, active } }, 2);
+    expect(userChangeError(users, { kind: 'delete', id: 1 }, 2)).toBe(
+      'ลบเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    );
+    expect(update(1, 'owner', false)).toBe(
+      'ปิดใช้งานเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    );
+    expect(update(1, 'admin')).toBe(
+      'เปลี่ยนสิทธิ์ของเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    );
+    expect(update(3, 'owner')).toBe('ตั้งเจ้าของบริษัทได้ด้วยการโอนความเป็นเจ้าของเท่านั้น');
+    expect(update(1, 'owner')).toBeNull();
+    // the owner counts as an admin: the only admin may step down while an owner stays
+    expect(update(2, 'user')).toBe('ลดสิทธิ์ผู้ดูแลระบบของตัวเองไม่ได้');
+    expect(
+      userChangeError(users, { kind: 'update', id: 2, payload: { role: 'user', active: true } }, 1),
+    ).toBeNull();
+    expect(ownerRoleError(null, 'owner')).not.toBeNull();
+    expect(ownerRoleError(null, 'admin')).toBeNull();
+  });
+
+  it('needs an e-mail for the owner', () => {
+    const payload = { username: 'boss', email: '', role: 'owner' as const };
+    expect(userIdentityError([], payload, null)).toBe(
+      'เจ้าของบริษัทต้องมีอีเมล (ใช้กู้รหัสผ่านและแจ้งเรื่องการเก็บเงิน)',
+    );
+    expect(userIdentityError([], { ...payload, role: 'admin' }, null)).toBeNull();
+  });
+
+  it('hands ownership over only from the owner to another active user with an e-mail', () => {
+    const users = [
+      user(1, 'owner'),
+      user(2, 'admin'),
+      user(3, 'user', false),
+      user(4, 'user', true, ''),
+    ];
+    expect(ownerTransferError(users, { id: 2, role: 'admin' }, 1)).toBe(
+      'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 1)).toBe(
+      'เลือกผู้ใช้อื่นที่จะรับโอน',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 3)).toBe(
+      'ผู้รับโอนต้องเป็นผู้ใช้ที่ใช้งานอยู่',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 4)).toBe(
+      'ผู้รับโอนต้องมีอีเมล — แก้ข้อมูลผู้ใช้ให้มีอีเมลก่อน',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 9)).toBe('ไม่พบผู้ใช้ที่จะรับโอน');
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 2)).toBeNull();
   });
 });

@@ -9,7 +9,12 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import {
   CartItem,
+  Branch,
+  BranchStockRow,
+  CompanyInfo,
+  Promotion,
   LoginResponse,
+  MeResponse,
   MenuAccess,
   PosTerminal,
   CountCheckResult,
@@ -21,6 +26,7 @@ import {
   Category,
   PRODUCT_DEFAULTS,
   PaymentInput,
+  PaymentMethod,
   Product,
   Sale,
   SaleLine,
@@ -29,27 +35,50 @@ import {
   VarianceReportRow,
   StoreInfo,
   TaxInvoice,
+  Transfer,
+  AuditEvent,
+  CompanyDeletion,
+  CompanyExport,
+  DeletionRequest,
+  PlatformCompanyDetail,
+  PlatformCompanyRow,
+  PlatformLoginResponse,
+  SubscriptionInfo,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
   SkuPrice,
   StockCardResult,
   Supplier,
+  User,
 } from '../models';
-import { addDaysIso, serialMovements, storeInfoError, todayIso } from '../models';
-import { SEED_STORE_INFO, mockBackendInterceptor } from './mock-backend.interceptor';
+import {
+  COMPANY_INFO_DEFAULTS,
+  addDaysIso,
+  priceCart,
+  serialMovements,
+  storeInfoError,
+  todayIso,
+} from '../models';
+import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backend.interceptor';
 
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
 const atTerminal1: HttpInterceptorFn = (req, next) =>
   next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
 
-/** What `authInterceptor` adds after an admin login; requests that name another user keep theirs. */
-const asAdminByDefault: HttpInterceptorFn = (req, next) =>
-  next(
-    req.headers.has('Authorization')
-      ? req
-      : req.clone({ setHeaders: { Authorization: 'Bearer mock-jwt-token' } }),
-  );
+/**
+ * What `authInterceptor` + `branchInterceptor` add after an admin login in branch 1 (HQ); requests
+ * that name another user / branch keep theirs, `X-Branch-Id: none` sends no branch (E2 / E17).
+ */
+const asAdminByDefault: HttpInterceptorFn = (req, next) => {
+  let headers = req.headers;
+  if (!headers.has('Authorization')) {
+    headers = headers.set('Authorization', `Bearer ${mockToken(1, 1)}`);
+  }
+  if (!headers.has('X-Branch-Id')) headers = headers.set('X-Branch-Id', '1');
+  else if (headers.get('X-Branch-Id') === 'none') headers = headers.delete('X-Branch-Id');
+  return next(req.clone({ headers }));
+};
 
 /** Exercises the mock backend's serial-number rules end to end through HttpClient. */
 describe('mockBackendInterceptor – serials', () => {
@@ -585,7 +614,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     ]);
 
     expect(sale).toMatchObject({
-      orderNo: 'POS1-20261004-0001',
+      orderNo: 'POS-HQ-1-20261004-0001',
       status: 'paid',
       cashier: 'Admin',
       subtotal: 24900,
@@ -614,11 +643,11 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(card.movements.at(-1)).toMatchObject({
       type: 'issue',
       qty: -1,
-      note: 'ของแถม POS1-20261004-0001',
+      note: 'ของแถม POS-HQ-1-20261004-0001',
     });
 
     const next = await sell([item(ESIM)], 199, [pay(QR, 199)]);
-    expect(next.orderNo).toBe('POS1-20261004-0002');
+    expect(next.orderNo).toBe('POS-HQ-1-20261004-0002');
     expect(next.lines[0].cogs).toBe((await product(ESIM)).cost);
     expect(await get<Sale>(`sales/${next.id}`)).toEqual(next);
   });
@@ -753,7 +782,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     // and setup (500) stay with the customer
     const cn = await post<CreditNote>(`sales/${sale.id}/credit-notes`, notebookOnly);
     expect(cn).toMatchObject({
-      cnNo: 'CN-20261005-0001',
+      cnNo: 'CN-HQ-20261005-0001',
       subtotal: 24606.26,
       deduction: 1090,
       total: 23516.26,
@@ -778,7 +807,7 @@ describe('mockBackendInterceptor – POS sales', () => {
       ...damaged,
       refunds: [pay(CASH, 524.74)],
     });
-    expect(second.cnNo).toBe('CN-20261005-0002');
+    expect(second.cnNo).toBe('CN-HQ-20261005-0002');
     expect((await product(MOUSE)).stock).toBe(mouseBefore);
     expect(await errorOf(post(`sales/${sale.id}/credit-notes`, damaged))).toBe(
       'MS-010 คืนได้ไม่เกิน 0 ชิ้น',
@@ -792,7 +821,7 @@ describe('mockBackendInterceptor – POS sales', () => {
       status: 'paid',
       returnStatus: 'partial',
       creditedTotal: 24041,
-      creditNoteNos: ['CN-20261005-0001', 'CN-20261005-0002'],
+      creditNoteNos: ['CN-HQ-20261005-0001', 'CN-HQ-20261005-0002'],
     });
     expect((await get<Sale>(`sales/${sale.id}`)).returnStatus).toBe('partial');
     expect(await get<CreditNote[]>('credit-notes?from=2026-10-05&to=2026-10-05')).toHaveLength(2);
@@ -813,10 +842,14 @@ describe('mockBackendInterceptor – POS sales', () => {
       await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer: { ...buyer, name: '' } })),
     ).toBe('กรุณากรอกชื่อผู้ซื้อ');
     const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
-    expect(invoice).toMatchObject({ invoiceNo: 'INV-20261004-0001', orderNo: sale.orderNo, buyer });
-    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0001');
+    expect(invoice).toMatchObject({
+      invoiceNo: 'INV-HQ-20261004-0001',
+      orderNo: sale.orderNo,
+      buyer,
+    });
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-HQ-20261004-0001');
     expect(await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer }))).toBe(
-      'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-20261004-0001)',
+      'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-HQ-20261004-0001)',
     );
     expect(await get('tax-invoices/buyer?taxId=0105550123451')).toEqual({
       ...buyer,
@@ -863,29 +896,29 @@ describe('mockBackendInterceptor – POS sales', () => {
       reason: 'ชื่อผู้ซื้อผิด',
     });
     expect(next).toMatchObject({
-      invoiceNo: 'INV-20261004-0002',
+      invoiceNo: 'INV-HQ-20261004-0002',
       date: sale.date,
       atSale: true,
-      replacesInvoiceNo: 'INV-20261004-0001',
+      replacesInvoiceNo: 'INV-HQ-20261004-0001',
       buyer: fixed,
     });
     expect(next.issuedAt).toBe(new Date(2026, 9, 6, 9, 0).toISOString());
     const all = await get<TaxInvoice[]>(`sales/${sale.id}/tax-invoices`);
     expect(all[0]).toMatchObject({
-      invoiceNo: 'INV-20261004-0001',
+      invoiceNo: 'INV-HQ-20261004-0001',
       cancelReason: 'ชื่อผู้ซื้อผิด',
-      replacedByNo: 'INV-20261004-0002',
+      replacedByNo: 'INV-HQ-20261004-0002',
     });
     expect(all[0].cancelledAt).not.toBeNull();
     expect((await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`)).invoiceNo).toBe(
-      'INV-20261004-0002',
+      'INV-HQ-20261004-0002',
     );
-    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-20261004-0002');
+    expect((await get<Sale>(`sales/${sale.id}`)).taxInvoiceNo).toBe('INV-HQ-20261004-0002');
     // the cancelled one cannot be reissued again; the valid one can
     expect(
       (await post<TaxInvoice>(`sales/${sale.id}/tax-invoice/reissue`, { buyer, reason: 'กลับ' }))
         .replacesInvoiceNo,
-    ).toBe('INV-20261004-0002');
+    ).toBe('INV-HQ-20261004-0002');
   });
 
   it('dates a full tax invoice requested later on the day of sale', async () => {
@@ -900,7 +933,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     };
     const invoice = await post<TaxInvoice>(`sales/${sale.id}/tax-invoice`, { buyer });
     expect(invoice).toMatchObject({
-      invoiceNo: 'INV-20261004-0001',
+      invoiceNo: 'INV-HQ-20261004-0001',
       date: sale.date,
       atSale: false,
     });
@@ -931,7 +964,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await product(MOUSE)).stock).toBe(3); // nothing sold
 
     const sale = await post<Sale>('sales', body(buyer));
-    expect(sale.taxInvoiceNo).toBe('INV-20261004-0001');
+    expect(sale.taxInvoiceNo).toBe('INV-HQ-20261004-0001');
     const invoice = await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`);
     expect(invoice).toMatchObject({
       atSale: true,
@@ -986,7 +1019,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     );
 
     const ex = await post<Exchange>(`sales/${sale.id}/exchanges`, swap(other.serial));
-    expect(ex).toMatchObject({ exNo: 'EX-20261004-0001', orderNo: sale.orderNo });
+    expect(ex).toMatchObject({ exNo: 'EX-HQ-20261004-0001', orderNo: sale.orderNo });
     expect(ex.lines[0]).toMatchObject({
       oldSerial: unit.serial,
       newSerial: other.serial,
@@ -999,7 +1032,7 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(serials.find((s) => s.id === other.id)?.status).toBe('sold');
     // the bill itself is unchanged apart from the derived exchange numbers
     const read = await get<Sale>(`sales/${sale.id}`);
-    expect(read).toMatchObject({ total: 24600, exchangeNos: ['EX-20261004-0001'] });
+    expect(read).toMatchObject({ total: 24600, exchangeNos: ['EX-HQ-20261004-0001'] });
     expect(read.lines[0].serial).toBe(unit.serial);
 
     vi.setSystemTime(new Date(2026, 9, 5, 11, 0));
@@ -1024,8 +1057,8 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect((await product(MOUSE)).stock).toBe(2); // out 1 from the shelf, the old one back
     const card = (await get<StockCardResult>(`products/${MOUSE}/movements`)).movements;
     expect(card.slice(-2).map((m) => [m.type, m.qty, m.balanceQty, m.note])).toEqual([
-      ['issue', -1, 1, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS1-20261004-0001)'],
-      ['receive', 1, 2, 'เปลี่ยนสินค้า EX-20261004-0001 (บิล POS1-20261004-0001)'],
+      ['issue', -1, 1, 'เปลี่ยนสินค้า EX-HQ-20261004-0001 (บิล POS-HQ-1-20261004-0001)'],
+      ['receive', 1, 2, 'เปลี่ยนสินค้า EX-HQ-20261004-0001 (บิล POS-HQ-1-20261004-0001)'],
     ]);
 
     // the last 2 sold too: nothing on the shelf to hand out, even if the old one is fine
@@ -1079,12 +1112,18 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(sale.lines[0]).toMatchObject({ itemDiscount: 59, manualDiscount: 81, amount: 450 });
   });
 
-  it('logs staff in by e-mail and applies their name and role to the sale', async () => {
+  it('logs staff in by username and applies their name and role to the sale', async () => {
     const login = (username: string, password: string) =>
-      post<{ token: string; user: { name: string } }>('auth/login', { username, password });
-    expect(await errorOf(login('somchai', 'wrong'))).toBe('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-    expect(await errorOf(login('somying@example.com', '1234'))).toBe('บัญชีนี้ถูกปิดใช้งาน');
-    const { token, user } = await login('Somchai@example.com', '1234');
+      post<{ token: string; user: { name: string } }>('auth/login', {
+        companyCode: 'DEMO',
+        username,
+        password,
+      });
+    const wrong = 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
+    expect(await errorOf(login('somchai', 'wrong'))).toBe(wrong);
+    expect(await errorOf(login('somchai@example.com', '1234'))).toBe(wrong);
+    expect(await errorOf(login('somying', '1234'))).toBe(wrong);
+    const { token, user } = await login(' Somchai ', '1234');
     expect(user.name).toBe('สมชาย ใจดี');
 
     const round = (n: number) => Math.round(n * 100) / 100;
@@ -1152,7 +1191,7 @@ describe('mockBackendInterceptor – shifts', () => {
   let http: HttpClient;
   const MOUSE = 2; // 531 after promo 1, stock 3
   const CASH = 1;
-  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
   interface As {
     token?: string;
     /** Terminal header, default 1; null = a device not set to any terminal */
@@ -1227,7 +1266,7 @@ describe('mockBackendInterceptor – shifts', () => {
   it('blocks money actions without an open shift and records the shift', async () => {
     expect(await errorOf(sellMouse())).toBe('ยังไม่ได้เปิดกะที่เครื่องนี้');
     const shift = await open(1000);
-    expect(shift).toMatchObject({ shiftNo: 'SH-20261004-01', cashier: 'Admin', terminalId: 1 });
+    expect(shift).toMatchObject({ shiftNo: 'SH-HQ-20261004-01', cashier: 'Admin', terminalId: 1 });
     expect(await call<Shift>('GET', 'shifts/current')).toEqual(shift);
     const sale = await sellMouse();
     expect(sale.shiftId).toBe(shift.id);
@@ -1368,7 +1407,7 @@ describe('mockBackendInterceptor – shifts', () => {
     const openDrawer = (reason: string, as: As) =>
       call('POST', `shifts/${shift.id}/drawer-opens`, { reason }, as);
     expect(await errorOf(openDrawer(' ', staff))).toBe('กรุณาระบุเหตุผลที่เปิดลิ้นชัก');
-    expect(await errorOf(openDrawer('แลกเหรียญ', { token: 'mock-jwt-token.u4' }))).toBe(
+    expect(await errorOf(openDrawer('แลกเหรียญ', { token: mockToken(1, 4) }))).toBe(
       'กะนี้เป็นของ สมชาย ใจดี — ทำรายการนี้ได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ',
     );
     expect(await errorOf(openDrawer('แลกเหรียญ', { ...staff, terminal: 2 }))).toBe(
@@ -1484,7 +1523,7 @@ describe('mockBackendInterceptor – shifts', () => {
     await sellMouse({ token: STAFF, terminal: 2 });
     const counts = await countsFor(shift);
     const body = { counts, cashDenominations: [], depositAmount: 0, note: '' };
-    const OTHER = 'mock-jwt-token.u4';
+    const OTHER = mockToken(1, 4);
     expect(
       await errorOf(call('POST', `shifts/${shift.id}/close`, body, { token: OTHER, terminal: 2 })),
     ).toBe('ปิดกะได้เฉพาะเจ้าของกะหรือผู้ดูแลระบบ');
@@ -1505,7 +1544,7 @@ describe('mockBackendInterceptor – POS terminals', () => {
   let http: HttpClient;
   const MOUSE = 2; // 531 after promo 1
   const CASH = 1;
-  const STAFF = 'mock-jwt-token.u2';
+  const STAFF = mockToken(1, 2);
 
   const call = <T>(
     method: string,
@@ -1568,31 +1607,55 @@ describe('mockBackendInterceptor – POS terminals', () => {
     const b = await sellMouse(2);
     const c = await sellMouse(1);
     expect([a, b, c].map((s) => [s.orderNo, s.terminalId, s.posId])).toEqual([
-      ['POS1-20261004-0001', 1, 'E051234567890'],
-      ['POS2-20261004-0001', 2, 'E052'],
-      ['POS1-20261004-0002', 1, 'E051234567890'],
+      ['POS-HQ-1-20261004-0001', 1, 'E051234567890'],
+      ['POS-HQ-2-20261004-0001', 2, 'E052'],
+      ['POS-HQ-1-20261004-0002', 1, 'E051234567890'],
     ]);
   });
 
   it('keeps the registry for admins and protects terminals in use', async () => {
     start();
     const terminals = await call<PosTerminal[]>('GET', 'pos-terminals');
-    expect(terminals.map((t) => t.id)).toEqual([1, 2]);
-    const add = { id: 3, name: ' ชั้น 3 ', posId: '', active: true };
+    expect(terminals.map((t) => [t.id, t.branchId])).toEqual([
+      [1, 1],
+      [2, 1],
+      [3, 2],
+    ]);
+    const add = { id: 4, name: ' ชั้น 4 ', posId: '', branchId: 1, active: true };
     expect(await errorOf(call('POST', 'pos-terminals', add, undefined, STAFF))).toBe(
       'แก้ทะเบียนเครื่อง POS ได้เฉพาะผู้ดูแลระบบ',
     );
-    expect(await call<PosTerminal>('POST', 'pos-terminals', add)).toMatchObject({ name: 'ชั้น 3' });
-    expect(await errorOf(call('POST', 'pos-terminals', add))).toBe('มีเครื่อง 3 อยู่แล้ว');
+    expect(await call<PosTerminal>('POST', 'pos-terminals', add)).toMatchObject({ name: 'ชั้น 4' });
+    expect(await errorOf(call('POST', 'pos-terminals', add))).toBe('มีเครื่อง 4 อยู่แล้ว');
 
-    await call('POST', 'shifts/open', { openingFloat: 0, openingDenominations: [] }, 3);
-    expect(await errorOf(call('PUT', 'pos-terminals/3', { ...add, id: 99, active: false }))).toBe(
-      'เครื่อง 3 มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้',
+    await call('POST', 'shifts/open', { openingFloat: 0, openingDenominations: [] }, 4);
+    expect(await errorOf(call('PUT', 'pos-terminals/4', { ...add, id: 99, active: false }))).toBe(
+      'เครื่อง 4 มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้',
     );
-    expect(await errorOf(call('DELETE', 'pos-terminals/3'))).toBe(
-      'เครื่อง 3 มีกะหรือเอกสารแล้ว ลบไม่ได้ (ปิดใช้งานแทน)',
+    expect(await errorOf(call('DELETE', 'pos-terminals/4'))).toBe(
+      'เครื่อง 4 มีกะหรือเอกสารแล้ว ลบไม่ได้ (ปิดใช้งานแทน)',
     );
     expect(await call('DELETE', 'pos-terminals/2')).toBeNull();
+  });
+
+  it('opens a shift / sells only in the own branch of the terminal (E8)', async () => {
+    start();
+    const openAt = (terminal: number, branch: string) =>
+      firstValueFrom(
+        http.post<Shift>(
+          '/api/shifts/open',
+          { openingFloat: 0, openingDenominations: [] },
+          { headers: { 'X-Terminal-Id': String(terminal), 'X-Branch-Id': branch } },
+        ),
+      );
+    expect(await errorOf(openAt(3, '1'))).toBe(
+      'เครื่อง 3 เป็นเครื่องของสาขา BN · ร้านไอทีดี คอมพิวเตอร์ สาขาบางนา — สลับไปสาขานั้น หรือให้ผู้ดูแลตั้งเครื่องนี้ใหม่',
+    );
+    expect(await openAt(3, '2')).toMatchObject({ terminalId: 3, posId: 'E051234567892' });
+    // the branch cannot be closed while its shift is open
+    expect(await errorOf(call('PUT', 'branches/2', { active: false }))).toBe(
+      'สาขา BN มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้',
+    );
   });
 
   it('opens a shift only at the registered terminal it names', async () => {
@@ -1656,7 +1719,7 @@ describe('mockBackendInterceptor – permissions', () => {
   let http: HttpClient;
   const MOUSE = 2; // 531 after promo 1, stock 3
   const CASH = 1;
-  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
 
   const call = <T>(method: string, url: string, body?: unknown, token?: string, terminal = 1) => {
     let headers = new HttpHeaders().set('X-Terminal-Id', String(terminal));
@@ -1684,7 +1747,7 @@ describe('mockBackendInterceptor – permissions', () => {
 
   it.each([
     ['GET', 'users'],
-    ['POST', 'users', { name: 'x', email: 'x@x.co', role: 'user', active: true }],
+    ['POST', 'users', { username: 'xx1', name: 'x', email: '', role: 'user', active: true }],
     ['PUT', 'users/2', { role: 'admin' }],
     ['DELETE', 'users/4'],
     ['POST', 'categories', {}],
@@ -1870,8 +1933,8 @@ describe('mockBackendInterceptor – permissions', () => {
 
 describe('mockBackendInterceptor – auth (B3)', () => {
   let http: HttpClient;
-  const ADMIN = 'mock-jwt-token';
-  const STAFF = 'mock-jwt-token.u2'; // สมชาย ใจดี (role user)
+  const ADMIN = mockToken(1, 1);
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
 
   // No `asAdminByDefault`: a request without a token must not be served as the admin.
   const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
@@ -1895,8 +1958,12 @@ describe('mockBackendInterceptor – auth (B3)', () => {
   it('answers 401 to a missing, unknown or malformed token', async () => {
     expect(await statusOf(call('GET', 'products'))).toBe(401);
     expect(await statusOf(call('GET', 'products', undefined, 'garbage'))).toBe(401);
-    expect(await statusOf(call('GET', 'products', undefined, 'mock-jwt-token.u999'))).toBe(401);
-    expect(await statusOf(call('GET', 'products', undefined, 'xmock-jwt-token.u2'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, mockToken(1, 999)))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'x' + mockToken(1, 2)))).toBe(401);
+    // another company / pre-SaaS tokens without a tenant (E1)
+    expect(await statusOf(call('GET', 'products', undefined, mockToken(2, 1)))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'mock-jwt-token'))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, 'mock-jwt-token.u2'))).toBe(401);
     expect(await statusOf(call('GET', 'products', undefined, ADMIN))).toBe(200);
     expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(200);
   });
@@ -1907,29 +1974,413 @@ describe('mockBackendInterceptor – auth (B3)', () => {
     expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(401);
   });
 
-  it('keeps login open and auth/verify at 400 without a token', async () => {
+  it("keeps login open and auth/verify at 400, checked in the token's company", async () => {
     const login = await call<LoginResponse>('POST', 'auth/login', {
+      companyCode: 'demo',
       username: 'somchai',
       password: '1234',
     });
     expect(login.token).toBe(STAFF);
-    expect(await statusOf(call('POST', 'auth/login', { username: 'admin', password: 'x' }))).toBe(
-      401,
+    const verify = (password: string, token?: string) =>
+      statusOf(call('POST', 'auth/verify', { username: 'admin', password }, token));
+    expect(await verify('x', ADMIN)).toBe(400);
+    expect(await verify('admin', ADMIN)).toBe(200);
+    expect(await verify('admin')).toBe(400); // no token = no company
+  });
+
+  it('logs in with company code + username + password, one message for every failure (E3)', async () => {
+    const login = (companyCode: string, username: string, password: string) =>
+      call<LoginResponse>('POST', 'auth/login', { companyCode, username, password });
+    const failure = (p: Promise<unknown>) =>
+      p.then(
+        () => null,
+        (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+      );
+    const wrong = [401, 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง'];
+    expect(await failure(login('ACME', 'admin', 'admin'))).toEqual(wrong);
+    expect(await failure(login('DEMO', 'nobody', '1234'))).toEqual(wrong);
+    expect(await failure(login('DEMO', 'admin', '1234'))).toEqual(wrong);
+    expect(await failure(login('DEMO', 'somying', '1234'))).toEqual(wrong); // deactivated
+
+    const session = await login(' demo ', 'admin', 'admin');
+    expect(session.company).toMatchObject({ id: 1, code: 'DEMO', active: true });
+    expect(session.company.name).toBe(SEED_STORE_INFO.name);
+    // seed: HQ + BN, the admin has every branch
+    expect(session.branches.map((b) => [b.code, b.branchNo])).toEqual([
+      ['HQ', '00000'],
+      ['BN', '00001'],
+    ]);
+    const me = await call<MeResponse>('GET', 'me', undefined, session.token);
+    expect(me).toEqual({
+      user: session.user,
+      company: session.company,
+      branches: session.branches,
+      billing: null,
+    });
+  });
+
+  it("checks X-Branch-Id: not sent passes (E2), a branch outside the user's rights is 403", async () => {
+    const withBranch = (branch: string) =>
+      statusOf(
+        firstValueFrom(
+          http.get('/api/products', {
+            headers: { Authorization: `Bearer ${STAFF}`, 'X-Branch-Id': branch },
+          }),
+        ),
+      );
+    expect(await statusOf(call('GET', 'products', undefined, STAFF))).toBe(200);
+    expect(await withBranch('1')).toBe(200);
+    expect(await withBranch('2')).toBe(403);
+    expect(await withBranch('x')).toBe(403);
+    // `/me` still answers, so a client with a stale branch can recover.
+    const me = await firstValueFrom(
+      http.get<MeResponse>('/api/me', {
+        headers: { Authorization: `Bearer ${STAFF}`, 'X-Branch-Id': '2' },
+      }),
     );
-    expect(await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'x' }))).toBe(
-      400,
+    expect(me.branches.map((b) => b.id)).toEqual([1]);
+  });
+
+  it('refuses a suspended company only after a correct login', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({ companies: [{ id: 1, code: 'DEMO', active: false }] }),
     );
+    const login = (password: string) =>
+      call('POST', 'auth/login', { companyCode: 'DEMO', username: 'admin', password }).then(
+        () => null,
+        (e: { error: { message: string } }) => e.error.message,
+      );
+    expect(await login('x')).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+    expect(await login('admin')).toBe('บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
+    expect(await statusOf(call('GET', 'products', undefined, ADMIN))).toBe(401);
+  });
+});
+
+describe('mockBackendInterceptor – usernames (B5)', () => {
+  let http: HttpClient;
+
+  const call = <T>(method: string, url: string, body?: unknown) =>
+    firstValueFrom(http.request<T>(method, `/api/${url}`, { body }));
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+  const newUser = (username: string, email = '', extra: Record<string, unknown> = {}) =>
+    call<User>('POST', 'users', {
+      username,
+      name: 'ทดสอบ',
+      email,
+      role: 'user',
+      active: true,
+      branchIds: [1],
+      allBranches: false,
+      password: '5678',
+      ...extra,
+    });
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('keeps usernames and e-mails unique and stores them normalized', async () => {
+    expect(await errorOf(newUser('SomChai'))).toBe('ชื่อผู้ใช้นี้มีอยู่แล้ว');
+    expect(await errorOf(newUser('ab'))).toBe('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z, 0-9, . _ - ยาว 3–30 ตัว');
+    expect(await errorOf(newUser('somsak', 'JOHN@example.com'))).toBe(
+      'อีเมลนี้มีผู้ใช้อื่นใช้แล้ว',
+    );
+    const user = await newUser(' SomSak ');
+    expect(user).toMatchObject({ username: 'somsak', email: '' });
+    expect(await errorOf(call('PUT', `users/${user.id}`, { username: 'john' }))).toBe(
+      'ชื่อผู้ใช้นี้มีอยู่แล้ว',
+    );
+    const login = await call<LoginResponse>('POST', 'auth/login', {
+      companyCode: 'DEMO',
+      username: 'somsak',
+      password: '5678',
+    });
+    expect(login.user.id).toBe(user.id);
+  });
+
+  it('gives users stored before usernames one from their e-mail (E4)', async () => {
+    const legacy = (id: number, email: string) => ({
+      id,
+      name: `u${id}`,
+      email,
+      role: id === 1 ? 'admin' : 'user',
+      active: true,
+      createdAt: '2026-01-01T00:00:00Z',
+    });
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        users: [
+          legacy(1, 'boss@example.com'),
+          legacy(2, 'nok@example.com'),
+          legacy(3, 'nok@other.com'),
+          legacy(4, 'x@y.com'),
+        ],
+      }),
+    );
+    const users = await call<User[]>('GET', 'users');
+    expect(users.map((u) => u.username)).toEqual(['admin', 'nok', 'nok-3', 'user4']);
+    // E9: admins get every branch, the others the first one
+    expect(users.map((u) => [u.allBranches, u.branchIds])).toEqual([
+      [true, []],
+      [false, [1]],
+      [false, [1]],
+      [false, [1]],
+    ]);
+  });
+
+  it('needs branch rights and a password for a new user; admins set new passwords (E10)', async () => {
+    expect(await errorOf(newUser('somsak', '', { branchIds: [] }))).toBe(
+      'กรุณาเลือกสาขาอย่างน้อย 1 สาขา',
+    );
+    expect(await errorOf(newUser('somsak', '', { branchIds: [9] }))).toBe(
+      'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว',
+    );
+    expect(await errorOf(newUser('somsak', '', { password: '12' }))).toBe(
+      'รหัสผ่านต้องมีอย่างน้อย 4 ตัว',
+    );
+    const user = await newUser('somsak');
+    expect(user).not.toHaveProperty('password');
+    const login = (password: string) =>
+      call<LoginResponse>('POST', 'auth/login', {
+        companyCode: 'DEMO',
+        username: 'somsak',
+        password,
+      });
+    expect((await login('5678')).branches.map((b) => b.id)).toEqual([1]);
+
+    expect(await errorOf(call('PUT', `users/${user.id}/password`, { password: ' x' }))).toBe(
+      'รหัสผ่านต้องไม่ขึ้นต้นหรือลงท้ายด้วยช่องว่าง',
+    );
+    await call('PUT', `users/${user.id}/password`, { password: 'abcd' });
+    expect(await errorOf(login('5678'))).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+    expect((await login('abcd')).user.id).toBe(user.id);
+    // the seed passwords still work until changed
+    await call('PUT', 'users/2/password', { password: '9999' });
     expect(
-      await statusOf(call('POST', 'auth/verify', { username: 'admin', password: 'admin' })),
-    ).toBe(200);
+      await errorOf(
+        call('POST', 'auth/login', { companyCode: 'DEMO', username: 'somchai', password: '1234' }),
+      ),
+    ).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
+  });
+
+  it('keeps a branch admin to users of their own branches (E6)', async () => {
+    const boss = await newUser('boss', '', { role: 'admin' });
+    const asBoss = (method: string, url: string, body?: unknown) =>
+      firstValueFrom(
+        http.request(method, `/api/${url}`, {
+          body,
+          headers: { Authorization: `Bearer ${mockToken(1, boss.id)}` },
+        }),
+      ).then(
+        () => null,
+        (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+      );
+    const notMine = [403, 'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท'];
+    expect(await asBoss('PUT', 'users/1/password', { password: 'hack' })).toEqual(notMine);
+    expect(await asBoss('PUT', 'users/1', { name: 'x' })).toEqual(notMine);
+    expect(await asBoss('PUT', 'users/2', { allBranches: true })).toEqual([
+      403,
+      'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท',
+    ]);
+    expect(await asBoss('PUT', 'users/2/password', { password: '4321' })).toBeNull();
+    expect(await asBoss('PUT', 'users/2', { name: 'สมชาย' })).toBeNull();
+  });
+});
+
+describe('mockBackendInterceptor – company / branch settings (E11)', () => {
+  let http: HttpClient;
+  const call = <T>(
+    method: string,
+    url: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ) => firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('prints each branch with the company details (storeInfo = company + branch)', async () => {
+    const hq = await call<StoreInfo>('GET', 'settings/store', undefined, { 'X-Branch-Id': '1' });
+    const bn = await call<StoreInfo>('GET', 'settings/store', undefined, { 'X-Branch-Id': '2' });
+    expect(hq).toMatchObject({ name: SEED_STORE_INFO.name, branchType: 'head', branchNo: '' });
+    expect(bn).toMatchObject({
+      name: SEED_STORE_INFO.name,
+      branchType: 'branch',
+      branchNo: '00001',
+    });
+    expect(bn.address).toContain('บางนา');
+    expect(localStorage.getItem('an22.mock.db')).not.toContain('"storeInfo"');
+  });
+
+  it('edits company settings, the current branch and the branch list', async () => {
+    const company = await call<CompanyInfo>('GET', 'settings/company');
+    await call('PUT', 'settings/company', { ...company, exchangeDays: 14 });
+    expect((await call<StoreInfo>('GET', 'settings/store')).exchangeDays).toBe(14);
+    expect(await failure(call('PUT', 'settings/company', { ...company, name: '' }))).toEqual([
+      400,
+      'กรุณากรอกชื่อร้าน',
+    ]);
+
+    await call('PUT', 'settings/branch', { receiptFooter: 'ขอบคุณ BN' }, { 'X-Branch-Id': '2' });
+    const bn = await call<StoreInfo>('GET', 'settings/store', undefined, { 'X-Branch-Id': '2' });
+    expect(bn.receiptFooter).toBe('ขอบคุณ BN');
+
+    const branch = await call<Branch>('POST', 'branches', {
+      code: 'cm1',
+      name: 'สาขาเชียงใหม่',
+      branchNo: '00002',
+      address: 'เชียงใหม่',
+    });
+    expect(branch).toMatchObject({
+      id: 3,
+      code: 'CM1',
+      active: true,
+      receiptFooter: 'ขอบคุณที่ใช้บริการ',
+    });
+    expect(await failure(call('POST', 'branches', { ...branch, code: 'X2' }))).toEqual([
+      400,
+      'เลขที่สาขานี้มีอยู่แล้ว',
+    ]);
+    await call('PUT', 'branches/3', { active: false });
+    expect((await call<Branch[]>('GET', 'branches')).map((b) => b.active)).toEqual([
+      true,
+      true,
+      false,
+    ]);
+  });
+
+  it('keeps company-level work to company admins (E6)', async () => {
+    const boss = await call<User>('POST', 'users', {
+      username: 'boss',
+      name: 'ผู้จัดการบางนา',
+      email: '',
+      role: 'admin',
+      active: true,
+      branchIds: [2],
+      allBranches: false,
+      password: '5678',
+    });
+    const asBoss = (method: string, url: string, body?: unknown, branch = '2') =>
+      failure(
+        call(method, url, body, {
+          Authorization: `Bearer ${mockToken(1, boss.id)}`,
+          'X-Branch-Id': branch,
+        }),
+      );
+    const companyOnly = [403, 'ทำได้เฉพาะผู้ดูแลระบบระดับบริษัท (ทุกสาขา)'];
+    const company = await call<CompanyInfo>('GET', 'settings/company');
+    expect(await asBoss('PUT', 'settings/company', company)).toEqual(companyOnly);
+    expect(await asBoss('PUT', 'branches/2', { name: 'x' })).toEqual(companyOnly);
+    expect(await asBoss('POST', 'branches', {})).toEqual(companyOnly);
+    // their own branch's details: yes; another branch: refused by X-Branch-Id
+    expect(await asBoss('PUT', 'settings/branch', { phone: '02-000-0000' })).toBeNull();
+    expect(await asBoss('PUT', 'settings/branch', { phone: '1' }, '1')).toEqual([
+      403,
+      'ไม่มีสิทธิ์ทำงานในสาขานี้',
+    ]);
+  });
+
+  it('lets only company admins limit promotions to branches (D2 / E6)', async () => {
+    const promotion = {
+      code: 'BN-ONLY',
+      name: 'ลดเฉพาะบางนา',
+      note: '',
+      type: 'item_discount',
+      startDate: '2999-01-01',
+      endDate: null,
+      enabled: true,
+      priority: 1,
+      stackable: false,
+      scope: { all: true, productIds: [], categoryIds: [] },
+      minQty: 1,
+      minAmount: 0,
+      discount: { kind: 'percent', value: 10, maxDiscount: null },
+      freeGoods: null,
+      branchIds: [2],
+    };
+    const boss = await call<User>('POST', 'users', {
+      username: 'boss',
+      name: 'ผู้จัดการบางนา',
+      email: '',
+      role: 'admin',
+      active: true,
+      branchIds: [2],
+      allBranches: false,
+      password: '5678',
+    });
+    const asBoss = (method: string, url: string, body?: unknown) =>
+      failure(
+        call(method, url, body, {
+          Authorization: `Bearer ${mockToken(1, boss.id)}`,
+          'X-Branch-Id': '2',
+        }),
+      );
+    const companyOnly = [403, 'โปรที่จำกัดสาขาสร้าง / แก้ได้เฉพาะผู้ดูแลระบบระดับบริษัท'];
+    expect(await asBoss('POST', 'promotions', promotion)).toEqual(companyOnly);
+    expect(await failure(call('POST', 'promotions', { ...promotion, branchIds: [9] }))).toEqual([
+      400,
+      'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว',
+    ]);
+    const created = await call<Promotion>('POST', 'promotions', promotion);
+    expect(created.branchIds).toEqual([2]);
+    expect(
+      await asBoss('PUT', `promotions/${created.id}`, { ...promotion, branchIds: [] }),
+    ).toEqual(companyOnly);
+    expect(await asBoss('DELETE', `promotions/${created.id}`)).toEqual(companyOnly);
+    // an all-branch promotion stays an admin's (E6 keeps the old admin rights)
+    expect(
+      await asBoss('POST', 'promotions', { ...promotion, code: 'ALL', branchIds: [] }),
+    ).toBeNull();
+  });
+
+  it('splits an older stored store into company settings + branch details once', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        storeInfo: {
+          ...SEED_STORE_INFO,
+          name: 'ร้านเก่า',
+          address: 'ที่อยู่เก่า',
+          exchangeDays: 3,
+        },
+        branches: [{ id: 1, code: 'HQ', name: 'หน้าร้าน', branchNo: '00000', active: true }],
+      }),
+    );
+    expect(await call<Branch[]>('GET', 'branches')).toEqual([
+      expect.objectContaining({ code: 'HQ', name: 'หน้าร้าน', address: 'ที่อยู่เก่า' }),
+    ]);
+    expect(await call<CompanyInfo>('GET', 'settings/company')).toMatchObject({
+      name: 'ร้านเก่า',
+      exchangeDays: 3,
+    });
   });
 });
 
 describe('mockBackendInterceptor – menu access', () => {
   let http: HttpClient;
-  const STAFF = 'mock-jwt-token.u2';
+  const STAFF = mockToken(1, 2);
 
-  const call = <T>(method: string, body?: unknown, token = 'mock-jwt-token') =>
+  const call = <T>(method: string, body?: unknown, token = mockToken(1, 1)) =>
     firstValueFrom(
       http.request<T>(method, '/api/settings/menu-access', {
         body,
@@ -1964,5 +2415,1517 @@ describe('mockBackendInterceptor – menu access', () => {
     const saved = await call<MenuAccess>('PUT', { userMenus: ['inventory', 'pos'] });
     expect(saved.userMenus).toEqual(['pos', 'inventory']);
     expect(await call<MenuAccess>('GET', undefined, STAFF)).toEqual(saved);
+  });
+});
+
+/** SaaS step 3: stock, average cost and reorder levels per branch (D1, E13, E17, E18). */
+describe('mockBackendInterceptor – branch stock', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // seed: serial, HQ 12 units, BN 2 sample units at 20,500
+  const MOUSE = 2; // seed: HQ 3 at 350 (min 10 / max 40), BN 8 at 380 (min 5 / max 20)
+  const HQ = '1';
+  const BN = '2';
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  const call = <T>(method: string, url: string, branch = HQ, body?: unknown) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: new HttpHeaders({ 'X-Branch-Id': branch }),
+      }),
+    );
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const product = (id: number, branch = HQ) => call<Product>('GET', `products/${id}`, branch);
+
+  it('moves stored store-wide stock into the first branch, once', async () => {
+    // Stored before step 2: one branch (HQ) is made from the store details.
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        products: [
+          {
+            ...PRODUCT_DEFAULTS,
+            id: 50,
+            sku: 'OLD-1',
+            name: 'old',
+            stock: 7,
+            avgCost: 120,
+            minStock: 3,
+            maxStock: 9,
+          },
+        ],
+        movements: [],
+      }),
+    );
+    expect(await product(50)).toEqual(
+      expect.objectContaining({ stock: 7, avgCost: 120, minStock: 3, maxStock: 9 }),
+    );
+    const card = await call<StockCardResult>('GET', 'products/50/movements');
+    expect(card.closing).toEqual({ qty: 7, avgCost: 120, value: 840 });
+    // Stored products no longer carry stock fields; the branch rows do.
+    const stored = JSON.parse(localStorage.getItem('an22.mock.db')!);
+    expect(stored.products[0].stock).toBeUndefined();
+    expect(stored.branchStock).toEqual([
+      { branchId: 1, productId: 50, stock: 7, avgCost: 120, minStock: 3, maxStock: 9 },
+    ]);
+  });
+
+  it('keeps a moving average per branch: receiving at BN leaves HQ alone (D1)', async () => {
+    expect(await product(MOUSE)).toEqual(expect.objectContaining({ stock: 3, avgCost: 350 }));
+    expect(await product(MOUSE, BN)).toEqual(
+      expect.objectContaining({ stock: 8, avgCost: 380, minStock: 5, maxStock: 20 }),
+    );
+    const received = await call<Product>('PUT', `products/${MOUSE}/stock`, BN, {
+      delta: 2,
+      unitCost: 400,
+    });
+    expect(received).toEqual(expect.objectContaining({ stock: 10, avgCost: 384 }));
+    expect(await product(MOUSE)).toEqual(expect.objectContaining({ stock: 3, avgCost: 350 }));
+    const bnCard = await call<StockCardResult>('GET', `products/${MOUSE}/movements`, BN);
+    expect(bnCard.closing).toEqual({ qty: 10, avgCost: 384, value: 3840 });
+    expect(bnCard.movements.every((m) => m.branchId === 2)).toBe(true);
+    const hqCard = await call<StockCardResult>('GET', `products/${MOUSE}/movements`);
+    expect(hqCard.closing.qty).toBe(3);
+    // The notebook's BN units are its own serials.
+    expect(await product(NOTEBOOK, BN)).toEqual(
+      expect.objectContaining({ stock: 2, avgCost: 20500 }),
+    );
+    expect((await product(NOTEBOOK)).stock).toBe(12);
+  });
+
+  it('edits the reorder levels of the request branch only (E13)', async () => {
+    const atBn = await product(MOUSE, BN);
+    const saved = await call<Product>('PUT', `products/${MOUSE}`, BN, {
+      ...atBn,
+      minStock: 7,
+      maxStock: 30,
+    });
+    expect(saved).toEqual(expect.objectContaining({ minStock: 7, maxStock: 30, stock: 8 }));
+    expect(await product(MOUSE)).toEqual(expect.objectContaining({ minStock: 10, maxStock: 40 }));
+    expect(await product(MOUSE, BN)).toEqual(expect.objectContaining({ minStock: 7 }));
+  });
+
+  it('refuses stock writes without a branch, reads fall back to the first (E17)', async () => {
+    const noBranch = 'none';
+    expect(
+      await errorOf(call('PUT', `products/${MOUSE}/stock`, noBranch, { delta: 1, unitCost: 1 })),
+    ).toEqual([400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน']);
+    expect((await product(MOUSE, noBranch)).stock).toBe(3);
+  });
+
+  it('lists every branch: quantities for all, average cost for admins only (E14)', async () => {
+    expect(await call<BranchStockRow[]>('GET', `products/${MOUSE}/branch-stock`)).toEqual([
+      { branchId: 1, stock: 3, avgCost: 350 },
+      { branchId: 2, stock: 8, avgCost: 380 },
+    ]);
+    expect(await call<BranchStockRow[]>('GET', `products/${NOTEBOOK}/branch-stock`, BN)).toEqual([
+      expect.objectContaining({ branchId: 1, stock: 12 }),
+      { branchId: 2, stock: 2, avgCost: 20500 },
+    ]);
+    const staff = await firstValueFrom(
+      http.get<BranchStockRow[]>(`/api/products/${MOUSE}/branch-stock`, {
+        headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': HQ },
+      }),
+    );
+    expect(staff).toEqual([
+      { branchId: 1, stock: 3, avgCost: null },
+      { branchId: 2, stock: 8, avgCost: null },
+    ]);
+  });
+
+  it('shows the stock card of another branch only to users of that branch (E15)', async () => {
+    const card = await call<StockCardResult>('GET', `products/${MOUSE}/movements?branchId=2`);
+    expect(card.closing).toEqual({ qty: 8, avgCost: 380, value: 3040 });
+    const asStaff = http.get(`/api/products/${MOUSE}/movements?branchId=2`, {
+      headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': HQ },
+    });
+    expect(await errorOf(firstValueFrom(asStaff))).toEqual([
+      403,
+      'ไม่มีสิทธิ์ดูบัตรสต็อกของสาขานี้',
+    ]);
+  });
+
+  it('checks the stock of every branch before deleting a SKU (E18)', async () => {
+    expect(await errorOf(call('DELETE', `products/${MOUSE}`))).toEqual([
+      400,
+      'ยังมีสต็อกคงเหลือ (สาขา HQ, BN) ลบไม่ได้',
+    ]);
+    await call('PUT', `products/${MOUSE}/stock`, HQ, { delta: -3 });
+    expect(await errorOf(call('DELETE', `products/${MOUSE}`))).toEqual([
+      400,
+      'ยังมีสต็อกคงเหลือ (สาขา BN) ลบไม่ได้',
+    ]);
+  });
+});
+
+/** SaaS step 3: serials and documents belong to a branch (E12, E16). */
+describe('mockBackendInterceptor – selling per branch', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // serial: HQ 12 units, BN 2
+  const MOUSE = 2; // HQ 3 at 350, BN 8 at 380
+  const CASH = 1;
+  /** Branch + its POS terminal (seed: terminals 1–2 at HQ, 3 at BN) */
+  const HQ = { branch: '1', terminal: '1' };
+  const BN = { branch: '2', terminal: '3' };
+  type At = typeof HQ;
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 17, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+    // Selling itself is under test here; shifts have their own describe.
+    const company = await call<CompanyInfo>('GET', 'settings/company');
+    await call('PUT', 'settings/company', HQ, { ...company, requireShift: false });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function call<T>(method: string, url: string, at: At = HQ, body?: unknown): Promise<T> {
+    const headers = new HttpHeaders({ 'X-Branch-Id': at.branch, 'X-Terminal-Id': at.terminal });
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  }
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { error: { message: string } }) => e.error.message,
+    );
+  const serials = (at: At) => call<SerialNumber[]>('GET', `products/${NOTEBOOK}/serials`, at);
+  const product = (id: number, at: At) => call<Product>('GET', `products/${id}`, at);
+  /** One unit, priced like the POS does (`priceCart()` with the branch's promotions), paid in cash. */
+  async function sell(at: At, productId: number, serial: string | null = null): Promise<Sale> {
+    const items = [{ productId, factor: 1, qty: 1, serial }];
+    const cart = priceCart(items, {
+      products: await call<Product[]>('GET', 'products', at),
+      promotions: await call<Promotion[]>('GET', 'promotions', at),
+      categories: await call<Category[]>('GET', 'categories', at),
+      date: todayIso(),
+      vatRegistered: true,
+      branchId: Number(at.branch),
+    });
+    const cash = Math.ceil(cart.total);
+    return call<Sale>('POST', 'sales', at, {
+      items,
+      freeSerials: [],
+      customer: '',
+      expectedTotal: cart.total,
+      payments: [{ methodId: CASH, amount: cash, reference: '', installmentMonths: null }],
+    });
+  }
+
+  it('lists and sells only the serials of the branch (E16)', async () => {
+    const atBn = await serials(BN);
+    expect(atBn).toHaveLength(2);
+    expect(atBn.every((s) => s.branchId === 2 && s.status === 'in_stock')).toBe(true);
+    const [hqUnit] = await serials(HQ);
+    expect(hqUnit.branchId).toBe(1);
+    expect(await errorOf(sell(BN, NOTEBOOK, hqUnit.serial))).toBe(
+      `ซีเรียล ${hqUnit.serial} อยู่ที่สาขา HQ — ขายที่สาขานี้ไม่ได้`,
+    );
+    expect(
+      await errorOf(
+        call('POST', `products/${NOTEBOOK}/serials`, BN, { serials: [hqUnit.serial], unitCost: 1 }),
+      ),
+    ).toBe(`รับเข้าไม่ได้ — ${hqUnit.serial}: อยู่ในคลังสาขา HQ`);
+    expect(
+      await errorOf(
+        call('POST', `products/${NOTEBOOK}/serials/remove`, BN, {
+          ids: [hqUnit.id],
+          status: 'other',
+          note: '',
+        }),
+      ),
+    ).toBe('มี Serial ที่ไม่อยู่ในคลังแล้ว กรุณาโหลดใหม่');
+  });
+
+  it('sells and voids at BN out of / back into BN stock only; HQ cannot void it (E12, D3)', async () => {
+    const sale = await sell(BN, MOUSE);
+    expect(sale).toMatchObject({ branchId: 2, orderNo: 'POS-BN-3-20261017-0001' });
+    expect(sale.lines[0].cogs).toBe(380);
+    expect((await product(MOUSE, BN)).stock).toBe(7);
+    expect((await product(MOUSE, HQ)).stock).toBe(3);
+    expect(
+      await errorOf(call('POST', `sales/${sale.id}/void`, HQ, { reason: 'ลูกค้าเปลี่ยนใจ' })),
+    ).toBe('บิลนี้ขายที่สาขา BN — ยกเลิกได้ที่สาขานั้น');
+    await call('POST', `sales/${sale.id}/void`, BN, { reason: 'ลูกค้าเปลี่ยนใจ' });
+    expect(await product(MOUSE, BN)).toEqual(expect.objectContaining({ stock: 8, avgCost: 380 }));
+    const card = await call<StockCardResult>('GET', `products/${MOUSE}/movements`, BN);
+    expect(card.movements.map((m) => [m.type, m.qty, m.branchId])).toEqual([
+      ['issue', -1, 2],
+      ['receive', 1, 2],
+    ]);
+    expect((await call<StockCardResult>('GET', `products/${MOUSE}/movements`)).movements).toEqual(
+      [],
+    );
+  });
+
+  it('numbers documents per branch; a later invoice takes the branch of its bill (E21)', async () => {
+    const atBn = await sell(BN, MOUSE);
+    const atHq = await sell(HQ, NOTEBOOK, (await serials(HQ))[0].serial);
+    expect([atBn.orderNo, atHq.orderNo]).toEqual([
+      'POS-BN-3-20261017-0001',
+      'POS-HQ-1-20261017-0001',
+    ]);
+    const buyer = {
+      name: 'บริษัท ลูกค้า จำกัด',
+      taxId: '0105550123451',
+      branchType: 'head',
+      branchNo: '',
+      address: 'กรุงเทพฯ',
+    };
+    const invoice = await call<TaxInvoice>('POST', `sales/${atBn.id}/tax-invoice`, HQ, { buyer });
+    expect(invoice).toMatchObject({ invoiceNo: 'INV-BN-20261017-0001', branchId: 2 });
+  });
+
+  it('lists the working branch by default, another or all only within the rights (E23)', async () => {
+    const atBn = await sell(BN, MOUSE);
+    const atHq = await sell(HQ, NOTEBOOK, (await serials(HQ))[0].serial);
+    const ids = (list: Sale[]) => list.filter((x) => x.lines.length).map((x) => x.id);
+    expect(ids(await call<Sale[]>('GET', 'sales'))).toEqual([atHq.id]);
+    expect(ids(await call<Sale[]>('GET', 'sales?branchId=2'))).toEqual([atBn.id]);
+    expect(ids(await call<Sale[]>('GET', 'sales?branchId=all')).sort()).toEqual([atBn.id, atHq.id]);
+    const asStaff = (url: string) =>
+      errorOf(
+        firstValueFrom(
+          http.get(`/api/${url}`, {
+            headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': '1' },
+          }),
+        ),
+      );
+    expect(await asStaff('sales?branchId=2')).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
+    expect(await asStaff('shifts?branchId=all')).toBe('ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท');
+    expect(await asStaff('sales')).toBeNull();
+  });
+
+  it('returns a serial sold at BN into BN stock on void', async () => {
+    const [unit] = await serials(BN);
+    const sale = await sell(BN, NOTEBOOK, unit.serial);
+    expect((await product(NOTEBOOK, BN)).stock).toBe(1);
+    await call('POST', `sales/${sale.id}/void`, BN, { reason: 'x' });
+    expect((await serials(BN)).find((s) => s.id === unit.id)).toMatchObject({
+      status: 'in_stock',
+      branchId: 2,
+    });
+    expect((await product(NOTEBOOK, BN)).stock).toBe(2);
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(12);
+  });
+
+  it('moves a serial by issuing it at HQ and receiving it at BN (E16, before transfers)', async () => {
+    const [unit] = await serials(HQ);
+    await call('POST', `products/${NOTEBOOK}/serials/remove`, HQ, {
+      ids: [unit.id],
+      status: 'other',
+      note: 'ย้ายไป BN',
+    });
+    const { received, fromOtherBranch } = await call<SerialReceiveResult>(
+      'POST',
+      `products/${NOTEBOOK}/serials`,
+      BN,
+      { serials: [unit.serial], unitCost: unit.cost, note: 'ย้ายจาก HQ' },
+    );
+    expect(received[0]).toMatchObject({ id: unit.id, branchId: 2, status: 'in_stock' });
+    // The screen suggests a transfer next time (E32).
+    expect(fromOtherBranch).toEqual([{ serial: unit.serial, branchCode: 'HQ' }]);
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(11);
+    expect((await product(NOTEBOOK, BN)).stock).toBe(3);
+    expect((await serials(HQ)).some((s) => s.id === unit.id)).toBe(false);
+  });
+});
+
+/** SaaS step 4: every document belongs to a branch (E20, E24, E25). */
+describe('mockBackendInterceptor – documents per branch', () => {
+  let http: HttpClient;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 18, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const call = <T>(method: string, url: string, branch = '1', terminal = '1', body?: unknown) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: new HttpHeaders({ 'X-Branch-Id': branch, 'X-Terminal-Id': terminal }),
+      }),
+    );
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+
+  it('gives older documents the branch of their terminal, once (E20)', async () => {
+    await call('GET', 'me');
+    const db = JSON.parse(localStorage.getItem('an22.mock.db')!);
+    delete db.docBranchFixed;
+    // Stored by step 3: every older document went to the first branch.
+    db.sales.push({
+      id: 90,
+      orderNo: 'POS3-20261016-0001',
+      date: new Date(2026, 9, 16).toISOString(),
+      total: 100,
+      status: 'paid',
+      terminalId: 3,
+      branchId: 1,
+    });
+    db.taxInvoices.push({
+      id: 90,
+      invoiceNo: 'INV-20261016-0001',
+      saleId: 90,
+      orderNo: 'POS3-20261016-0001',
+      date: new Date(2026, 9, 16).toISOString(),
+      buyer: {},
+    });
+    db.shifts.push({
+      id: 90,
+      shiftNo: 'SH-20261016-01',
+      terminalId: 3,
+      cashier: 'x',
+      openedAt: new Date(2026, 9, 16).toISOString(),
+      branchId: 1,
+    });
+    localStorage.setItem('an22.mock.db', JSON.stringify(db));
+    expect((await call<Sale>('GET', 'sales/90')).branchId).toBe(2);
+    const stored = JSON.parse(localStorage.getItem('an22.mock.db')!);
+    expect(stored.taxInvoices.find((t: TaxInvoice) => t.id === 90).branchId).toBe(2);
+    expect(stored.shifts.find((s: Shift) => s.id === 90).branchId).toBe(2);
+    expect(stored.docBranchFixed).toBe(true);
+  });
+
+  it('answers the seller details of the branch of a document (E22)', async () => {
+    const here = await call<StoreInfo>('GET', 'settings/store');
+    const bn = await call<StoreInfo>('GET', 'settings/store?branchId=2');
+    expect(here.branchType).toBe('head');
+    expect(bn).toMatchObject({
+      branchType: 'branch',
+      branchNo: '00001',
+      placeName: 'ร้านไอทีดี คอมพิวเตอร์ สาขาบางนา',
+    });
+    expect(bn.name).toBe(here.name);
+    expect(await errorOf(call('GET', 'settings/store?branchId=9'))).toEqual([404, 'ไม่พบสาขา']);
+  });
+
+  it('opens a shift in the terminal branch and refuses shift writes without a branch (E24)', async () => {
+    const open = { terminalId: 3, openingFloat: 0, openingDenominations: [] };
+    expect(await errorOf(call('POST', 'shifts/open', 'none', '3', open))).toEqual([
+      400,
+      'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน',
+    ]);
+    const shift = await call<Shift>('POST', 'shifts/open', '2', '3', open);
+    expect(shift.branchId).toBe(2);
+  });
+});
+
+/** SaaS step 5: transfers between branches (E26–E29). */
+describe('mockBackendInterceptor – transfers', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // serial: HQ 12 units
+  const KEYBOARD = 3; // HQ 18 at 1,650 · BN 4 at 1,600
+  const HQ = '1';
+  const BN = '2';
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 18, 10, 0));
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const call = <T>(method: string, url: string, branch = HQ, body?: unknown, token?: string) => {
+    let headers = new HttpHeaders({ 'X-Branch-Id': branch });
+    if (token) headers = headers.set('Authorization', `Bearer ${token}`);
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const errorOf = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const product = (id: number, branch: string) => call<Product>('GET', `products/${id}`, branch);
+  const serialsAt = (branch: string) =>
+    call<SerialNumber[]>('GET', `products/${NOTEBOOK}/serials`, branch);
+  async function send(): Promise<Transfer> {
+    const [unit] = (await serialsAt(HQ)).filter((s) => s.status === 'in_stock');
+    return call<Transfer>('POST', 'transfers', HQ, {
+      toBranchId: 2,
+      note: 'เติมของสาขาบางนา',
+      lines: [
+        { productId: KEYBOARD, qty: 3, serials: [] },
+        { productId: NOTEBOOK, qty: 1, serials: [unit.serial] },
+      ],
+    });
+  }
+
+  it('sends from HQ at its cost; serials are in transit and sold by neither branch', async () => {
+    const t = await send();
+    expect(t).toMatchObject({ transferNo: 'TR-HQ-20261018-0001', status: 'in_transit' });
+    expect(t.lines[0]).toMatchObject({ sku: 'KB-020', qty: 3, unitCost: 1650, receivedQty: null });
+    expect((await product(KEYBOARD, HQ)).stock).toBe(15);
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(11);
+    const serial = t.lines[1].serials[0];
+    expect((await serialsAt(HQ)).find((s) => s.serial === serial)?.status).toBe('in_transit');
+    expect((await serialsAt(BN)).some((s) => s.serial === serial)).toBe(false);
+    const card = await call<StockCardResult>('GET', `products/${KEYBOARD}/movements`, HQ);
+    expect(card.movements.at(-1)).toMatchObject({ type: 'transfer_out', qty: -3, unitCost: 1650 });
+    // Seen from both branches.
+    expect((await call<Transfer[]>('GET', 'transfers?direction=in', BN)).map((x) => x.id)).toEqual([
+      t.id,
+    ]);
+    expect(await call<Transfer[]>('GET', 'transfers?direction=in', HQ)).toEqual([]);
+  });
+
+  it('receives at BN: all in at the transfer cost, the shortfall written off there (E27 / E28)', async () => {
+    const t = await send();
+    const serial = t.lines[1].serials[0];
+    const short = {
+      lines: [
+        { productId: KEYBOARD, receivedQty: 2, receivedSerials: [] },
+        { productId: NOTEBOOK, receivedQty: 1, receivedSerials: [serial] },
+      ],
+      shortReason: '',
+    };
+    expect(await errorOf(call('POST', `transfers/${t.id}/receive`, HQ, short))).toEqual([
+      400,
+      'รับของได้ที่สาขาปลายทางเท่านั้น',
+    ]);
+    expect(await errorOf(call('POST', `transfers/${t.id}/receive`, BN, short))).toEqual([
+      400,
+      'กรุณาระบุเหตุผลของสินค้าที่ขาด / เสียหาย',
+    ]);
+    const received = await call<Transfer>('POST', `transfers/${t.id}/receive`, BN, {
+      ...short,
+      shortReason: 'กล่องแตก 1 ชิ้น',
+    });
+    expect(received).toMatchObject({ status: 'received', shortReason: 'กล่องแตก 1 ชิ้น' });
+    // BN: 4 at 1,600 + 3 at 1,650 → average 1,621.4286; one written off.
+    expect(await product(KEYBOARD, BN)).toEqual(
+      expect.objectContaining({ stock: 6, avgCost: 1621.4286 }),
+    );
+    const card = await call<StockCardResult>('GET', `products/${KEYBOARD}/movements`, BN);
+    expect(card.movements.map((m) => [m.type, m.qty])).toEqual([
+      ['transfer_in', 3],
+      ['issue', -1],
+    ]);
+    expect((await serialsAt(BN)).find((s) => s.serial === serial)?.status).toBe('in_stock');
+    expect((await product(NOTEBOOK, BN)).stock).toBe(3);
+  });
+
+  it('cancels only at the source by an admin; goods go back at the same cost (E29)', async () => {
+    const t = await send();
+    expect(
+      await errorOf(call('POST', `transfers/${t.id}/cancel`, BN, { reason: 'ส่งผิด' })),
+    ).toEqual([400, 'ยกเลิกได้ที่สาขาต้นทางเท่านั้น']);
+    expect(
+      await errorOf(
+        call('POST', `transfers/${t.id}/cancel`, HQ, { reason: 'ส่งผิด' }, mockToken(1, 2)),
+      ),
+    ).toEqual([403, 'ยกเลิกใบโอนได้เฉพาะผู้ดูแลระบบ']);
+    const cancelled = await call<Transfer>('POST', `transfers/${t.id}/cancel`, HQ, {
+      reason: 'ส่งผิด',
+    });
+    expect(cancelled.status).toBe('cancelled');
+    expect(await product(KEYBOARD, HQ)).toEqual(
+      expect.objectContaining({ stock: 18, avgCost: 1650 }),
+    );
+    expect((await product(NOTEBOOK, HQ)).stock).toBe(12);
+    expect(await errorOf(call('POST', 'transfers', 'none', {}))).toEqual([
+      400,
+      'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน',
+    ]);
+  });
+});
+
+describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
+  let http: HttpClient;
+  const DEMO_ADMIN = mockToken(1, 1);
+  const ACME_ADMIN = mockToken(2, 1);
+
+  const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
+    const headers = token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined;
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const statusOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+  const stored = (key: string) => JSON.parse(localStorage.getItem(key) ?? 'null');
+
+  /** A second company `ACME` whose admin has the same username as DEMO's (unique per company). */
+  const plantAcme = () => {
+    localStorage.setItem(
+      'an22.mock.platform',
+      JSON.stringify({
+        companies: [
+          { id: 1, code: 'DEMO', active: true },
+          { id: 2, code: 'ACME', active: true },
+        ],
+        nextCompanyId: 3,
+      }),
+    );
+    const acmeBranch: Branch = {
+      id: 1,
+      code: 'MAIN',
+      name: 'สำนักงานใหญ่ ACME',
+      branchNo: '00000',
+      address: '1 ถนนสุขุมวิท กรุงเทพฯ',
+      phone: '',
+      receiptFooter: '',
+      active: true,
+    };
+    const acmeAdmin: User = {
+      id: 1,
+      username: 'admin',
+      name: 'ACME Admin',
+      email: 'owner@acme.test',
+      role: 'admin',
+      active: true,
+      branchIds: [],
+      allBranches: true,
+      createdAt: '2026-10-18T00:00:00.000Z',
+    };
+    localStorage.setItem(
+      'an22.mock.db.2',
+      JSON.stringify({
+        users: [acmeAdmin],
+        nextId: 2,
+        passwords: { 1: 'acme-pass' },
+        branches: [acmeBranch],
+        nextBranchId: 2,
+        companyInfo: {
+          ...COMPANY_INFO_DEFAULTS,
+          name: 'บริษัท แอคมี จำกัด',
+          taxId: '0105561000014',
+        },
+      }),
+    );
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('moves the company registry out of an older DEMO db once', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({ companies: [{ id: 1, code: 'DEMO', active: true }] }),
+    );
+    expect(await statusOf(call('GET', 'products', undefined, DEMO_ADMIN))).toBe(200);
+    const platform = stored('an22.mock.platform');
+    expect(platform.companies).toHaveLength(1);
+    expect(platform.companies[0]).toMatchObject({
+      id: 1,
+      code: 'DEMO',
+      active: true,
+      planId: 'pro',
+    });
+    expect(platform.nextCompanyId).toBe(2);
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'HQ', address: '1 ถนนสีลม', phone: '', receiptFooter: '' },
+      DEMO_ADMIN,
+    );
+    expect(stored('an22.mock.db').companies).toBeUndefined();
+  });
+
+  it('logs in to each company with its own users, data and password', async () => {
+    plantAcme();
+    const login = (companyCode: string, password: string) =>
+      call<LoginResponse>('POST', 'auth/login', { companyCode, username: 'admin', password });
+    const acme = await login('acme', 'acme-pass');
+    expect(acme.token).toBe(ACME_ADMIN);
+    expect(acme.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
+    expect(acme.branches.map((b) => b.code)).toEqual(['MAIN']);
+    expect(await statusOf(login('ACME', 'admin'))).toBe(401); // DEMO's password
+    expect((await login('DEMO', 'admin')).token).toBe(DEMO_ADMIN);
+  });
+
+  it("never serves one company's data to another company's token", async () => {
+    plantAcme();
+    const demoProducts = await call<Product[]>('GET', 'products', undefined, DEMO_ADMIN);
+    expect(demoProducts.length).toBeGreaterThan(0);
+    expect(await call<Product[]>('GET', 'products', undefined, ACME_ADMIN)).toEqual([]);
+    expect(await call<User[]>('GET', 'users', undefined, ACME_ADMIN)).toHaveLength(1);
+    // an id of DEMO's in the URL is simply not found in ACME's data
+    expect(
+      await statusOf(call('GET', `products/${demoProducts[0].id}`, undefined, ACME_ADMIN)),
+    ).toBe(404);
+
+    const branch: Branch = (await call<Branch[]>('GET', 'branches', undefined, ACME_ADMIN))[0];
+    await call('PUT', `branches/${branch.id}`, { ...branch, name: 'ACME สาขาหลัก' }, ACME_ADMIN);
+    const demoBranches = await call<Branch[]>('GET', 'branches', undefined, DEMO_ADMIN);
+    expect(demoBranches.map((b) => b.name)).not.toContain('ACME สาขาหลัก');
+    expect(stored('an22.mock.db.2').branches[0].name).toBe('ACME สาขาหลัก');
+  });
+
+  it('answers 401 to a token of a company that is not registered or suspended', async () => {
+    plantAcme();
+    expect(await statusOf(call('GET', 'products', undefined, mockToken(3, 1)))).toBe(401);
+    const platform = stored('an22.mock.platform');
+    platform.companies[1].active = false;
+    localStorage.setItem('an22.mock.platform', JSON.stringify(platform));
+    expect(await statusOf(call('GET', 'products', undefined, ACME_ADMIN))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, DEMO_ADMIN))).toBe(200);
+  });
+});
+
+describe('mockBackendInterceptor – owner (E33)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const newAdmin = {
+    username: 'mgr',
+    name: 'ผู้จัดการ',
+    email: 'mgr@x.test',
+    role: 'admin',
+    active: true,
+    allBranches: true,
+    branchIds: [],
+    password: '1234',
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('makes the first admin of every branch of older data the owner, once', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        users: [
+          {
+            id: 1,
+            username: 'boss',
+            name: 'Boss',
+            email: 'b@x.test',
+            role: 'admin',
+            active: true,
+            branchIds: [],
+            allBranches: true,
+            createdAt: '',
+          },
+          {
+            id: 2,
+            username: 'staff',
+            name: 'Staff',
+            email: '',
+            role: 'user',
+            active: true,
+            branchIds: [1],
+            allBranches: false,
+            createdAt: '',
+          },
+        ],
+      }),
+    );
+    const users = await call<User[]>('GET', 'users');
+    expect(users.map((u) => u.role)).toEqual(['owner', 'user']);
+    expect(JSON.parse(localStorage.getItem('an22.mock.db') ?? '{}').users[0].role).toBe('owner');
+  });
+
+  it('never makes an owner through the user form, nor deletes / deactivates / demotes one', async () => {
+    expect(await failure(call('POST', 'users', { ...newAdmin, role: 'owner' }))).toEqual([
+      400,
+      'ตั้งเจ้าของบริษัทได้ด้วยการโอนความเป็นเจ้าของเท่านั้น',
+    ]);
+    const mgr = await call<User>('POST', 'users', newAdmin);
+    const MGR = mockToken(1, mgr.id);
+    const owner = await call<User>('GET', 'users/1');
+    expect(await failure(call('DELETE', 'users/1', undefined, MGR))).toEqual([
+      400,
+      'ลบเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    ]);
+    expect(await failure(call('PUT', 'users/1', { ...owner, role: 'admin' }, MGR))).toEqual([
+      400,
+      'เปลี่ยนสิทธิ์ของเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    ]);
+    expect((await failure(call('PUT', 'users/1', { ...owner, email: '' })))?.[1]).toBe(
+      'เจ้าของบริษัทต้องมีอีเมล (ใช้กู้รหัสผ่านและแจ้งเรื่องการเก็บเงิน)',
+    );
+    // the owner keeps every branch whatever the form sends
+    const saved = await call<User>('PUT', 'users/1', {
+      ...owner,
+      allBranches: false,
+      branchIds: [2],
+    });
+    expect([saved.allBranches, saved.branchIds]).toEqual([true, []]);
+  });
+
+  it('hands ownership over with the owner password; the old owner becomes an admin', async () => {
+    const mgr = await call<User>('POST', 'users', newAdmin);
+    const transfer = (userId: number, password: string, token = OWNER) =>
+      call<User[]>('POST', 'company/owner', { userId, password }, token);
+    const noMail = await call<User>('POST', 'users', {
+      ...newAdmin,
+      username: 'nomail',
+      email: '',
+      role: 'user',
+      allBranches: false,
+      branchIds: [1],
+    });
+    expect(await failure(transfer(mgr.id, 'admin', STAFF))).toEqual([
+      403,
+      'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท',
+    ]);
+    expect(await failure(transfer(mgr.id, 'wrong'))).toEqual([400, 'รหัสผ่านไม่ถูกต้อง']);
+    expect(await failure(transfer(noMail.id, 'admin'))).toEqual([
+      400,
+      'ผู้รับโอนต้องมีอีเมล — แก้ข้อมูลผู้ใช้ให้มีอีเมลก่อน',
+    ]);
+    const users = await transfer(mgr.id, 'admin');
+    const roleOf = (id: number) => users.find((u) => u.id === id)?.role;
+    expect([roleOf(1), roleOf(mgr.id)]).toEqual(['admin', 'owner']);
+    expect(await failure(transfer(1, 'admin'))).toEqual([
+      403,
+      'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท',
+    ]);
+  });
+});
+
+describe('mockBackendInterceptor – audit log (E40)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER, branch = '1') =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': branch },
+      }),
+    );
+  const statusOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+  const log = (token = OWNER, query = '') =>
+    call<AuditEvent[]>('GET', `audit-log${query}`, undefined, token);
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('records logins and failed logins of a known company', async () => {
+    const login = (username: string, password: string) =>
+      statusOf(
+        firstValueFrom(http.post('/api/auth/login', { companyCode: 'DEMO', username, password })),
+      );
+    expect(await login('somchai', 'x')).toBe(401);
+    expect(await login('somchai', '1234')).toBe(200);
+    const events = await log();
+    expect(events.map((e) => [e.action, e.userName, e.userId])).toEqual([
+      ['login', 'สมชาย ใจดี', 2],
+      ['login_failed', 'somchai', null],
+    ]);
+  });
+
+  it('records important writes with who, branch and what — admins only', async () => {
+    await call('PUT', 'settings/menu-access', { userMenus: ['pos', 'sales'] });
+    const prices = await call<SkuPrice[]>('GET', 'prices');
+    await call('DELETE', `prices/${prices[0].id}`);
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'บางนา', address: 'บางนา กรุงเทพฯ', phone: '', receiptFooter: '' },
+      OWNER,
+      '2',
+    );
+    await call('GET', 'products'); // reads are never logged
+    const events = await log();
+    expect(events.map((e) => [e.action, e.branchId, e.userName])).toEqual([
+      ['branch_settings', 2, 'Admin'],
+      ['price_change', null, 'Admin'],
+      ['menu_access', null, 'Admin'],
+    ]);
+    expect(events[1].detail).toBe('ลบช่วงราคา');
+    expect(events[1].ref?.label).toContain('฿');
+    expect(events[2].detail).toBe('ผู้ใช้ทั่วไปเห็น: ขายหน้าร้าน, การขาย');
+    expect((await log(OWNER, '?action=price_change')).length).toBe(1);
+    expect(await statusOf(log(STAFF))).toBe(403);
+  });
+
+  it("records the device's terminal only when it is one of the company's", async () => {
+    const atTerminal = (terminal: string) =>
+      firstValueFrom(
+        http.put(
+          '/api/settings/menu-access',
+          { userMenus: ['pos'] },
+          {
+            headers: {
+              Authorization: `Bearer ${OWNER}`,
+              'X-Branch-Id': '1',
+              'X-Terminal-Id': terminal,
+            },
+          },
+        ),
+      );
+    await atTerminal('1');
+    await atTerminal('99');
+    const events = await log();
+    expect(events.map((e) => e.terminalId)).toEqual([null, 1]);
+  });
+
+  it('shows a branch admin only the events of their branches', async () => {
+    const bnAdmin = await call<User>('POST', 'users', {
+      username: 'bnadmin',
+      name: 'BN Admin',
+      email: '',
+      role: 'admin',
+      active: true,
+      allBranches: false,
+      branchIds: [2],
+      password: '1234',
+    });
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'บางนา', address: 'บางนา กรุงเทพฯ', phone: '', receiptFooter: '' },
+      OWNER,
+      '2',
+    );
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'สำนักงานใหญ่', address: 'สีลม กรุงเทพฯ', phone: '', receiptFooter: '' },
+      OWNER,
+      '1',
+    );
+    // (sent from BN: the branch admin may not work in HQ)
+    const seen = await call<AuditEvent[]>(
+      'GET',
+      'audit-log',
+      undefined,
+      mockToken(1, bnAdmin.id),
+      '2',
+    );
+    expect(seen.map((e) => [e.action, e.branchId])).toEqual([['branch_settings', 2]]);
+  });
+});
+
+describe('mockBackendInterceptor – packages (E34)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const newUser = (username: string, active = true) => ({
+    username,
+    name: username,
+    email: '',
+    role: 'user',
+    active,
+    allBranches: false,
+    branchIds: [1],
+    password: '1234',
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('gives DEMO the Pro package and counts active branches / users / terminals', async () => {
+    expect(await call<SubscriptionInfo>('GET', 'company/subscription')).toMatchObject({
+      planId: 'pro',
+      usage: { branches: 2, users: 3, terminals: 3 },
+    });
+    expect(await failure(call('GET', 'company/subscription', undefined, STAFF))).toEqual([
+      403,
+      'ดูแพ็กเกจได้เฉพาะผู้ดูแลระบบ',
+    ]);
+  });
+
+  it('lets only the owner change the package; a downgrade keeps what is over the limit', async () => {
+    expect(await failure(call('PUT', 'company/plan', { planId: 'starter' }, STAFF))).toEqual([
+      403,
+      'เปลี่ยนแพ็กเกจได้เฉพาะเจ้าของบริษัท',
+    ]);
+    expect(await failure(call('PUT', 'company/plan', { planId: 'gold' }))).toEqual([
+      400,
+      'ไม่มีแพ็กเกจนี้',
+    ]);
+    const info = await call<SubscriptionInfo>('PUT', 'company/plan', { planId: 'starter' });
+    expect(info.planId).toBe('starter');
+    expect(JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}').companies[0].planId).toBe(
+      'starter',
+    );
+    // 2 branches / 3 terminals stay usable, adding is blocked
+    const branches = await call<Branch[]>('GET', 'branches');
+    expect(branches.filter((b) => b.active)).toHaveLength(2);
+    expect(
+      await failure(
+        call('POST', 'branches', {
+          code: 'CM',
+          name: 'เชียงใหม่',
+          branchNo: '00002',
+          address: 'เชียงใหม่',
+          phone: '',
+          receiptFooter: '',
+          active: true,
+        }),
+      ),
+    ).toEqual([403, 'แพ็กเกจ Starter ใช้สาขาได้ 1 สาขา — เปลี่ยนแพ็กเกจได้ที่เมนูบัญชีบริษัท']);
+    expect(
+      (
+        await failure(
+          call('POST', 'pos-terminals', { id: 9, name: 'x', posId: '', branchId: 1, active: true }),
+        )
+      )?.[1],
+    ).toBe(
+      'แพ็กเกจ Starter ใช้เครื่อง POS ที่ใช้งานได้ 2 เครื่อง — เปลี่ยนแพ็กเกจได้ที่เมนูบัญชีบริษัท',
+    );
+    const events = await call<AuditEvent[]>('GET', 'audit-log?action=plan_change');
+    expect(events[0].detail).toBe('เปลี่ยนเป็นแพ็กเกจ Starter (฿590 / เดือน)');
+  });
+
+  it('counts only active users: an inactive one may be added, turning one on needs room', async () => {
+    await call('PUT', 'company/plan', { planId: 'starter' }); // 5 users; DEMO has 3 active
+    await call('POST', 'users', newUser('user4'));
+    await call('POST', 'users', newUser('user5'));
+    expect((await failure(call('POST', 'users', newUser('user6'))))?.[0]).toBe(403);
+    const off = await call<User>('POST', 'users', newUser('user7', false));
+    expect((await failure(call('PUT', `users/${off.id}`, { ...off, active: true })))?.[1]).toBe(
+      'แพ็กเกจ Starter ใช้ผู้ใช้ที่ใช้งานได้ 5 คน — เปลี่ยนแพ็กเกจได้ที่เมนูบัญชีบริษัท',
+    );
+    // an edit of an active user is not "one more"
+    const users = await call<User[]>('GET', 'users');
+    const u4 = users.find((u) => u.username === 'user4') as User;
+    expect(await call<User>('PUT', `users/${u4.id}`, { ...u4, name: 'สี่' })).toMatchObject({
+      name: 'สี่',
+    });
+  });
+});
+
+describe('mockBackendInterceptor – billing (E35)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  /** DEMO on Starter whose next period started `daysAgo` days ago. */
+  const plant = (daysAgo: number) =>
+    localStorage.setItem(
+      'an22.mock.platform',
+      JSON.stringify({
+        companies: [
+          {
+            id: 1,
+            code: 'DEMO',
+            active: true,
+            planId: 'starter',
+            subscription: { trialEndsOn: null, nextInvoiceOn: addDaysIso(todayIso(), -daysAgo) },
+            suspendedReason: null,
+          },
+        ],
+        nextCompanyId: 2,
+        invoices: [],
+        nextInvoiceId: 1,
+      }),
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('starts older companies with no trial and the first invoice next month', async () => {
+    const info = await call<SubscriptionInfo>('GET', 'company/subscription');
+    expect(info.status).toBe('active');
+    expect(info.invoices).toEqual([]);
+    expect(info.subscription.nextInvoiceOn.endsWith('-01')).toBe(true);
+    expect(info.subscription.nextInvoiceOn > todayIso()).toBe(true);
+    expect((await call<MeResponse>('GET', 'me')).billing).toBeNull();
+  });
+
+  it('issues the invoice of a period that started and warns admins once it is overdue', async () => {
+    plant(10); // due 3 days ago, grace still running
+    const info = await call<SubscriptionInfo>('GET', 'company/subscription');
+    expect(info.status).toBe('past_due');
+    expect(info.invoices).toHaveLength(1);
+    expect(info.invoices[0]).toMatchObject({
+      planId: 'starter',
+      amount: 590,
+      status: 'open',
+      dueDate: addDaysIso(todayIso(), -3),
+    });
+    expect(info.invoices[0].invoiceNo).toMatch(/^SUB-\d{6}-0001$/);
+    const me = await call<MeResponse>('GET', 'me');
+    expect(me.billing?.level).toBe('error');
+    expect(me.billing?.text).toContain('อีก 4 วัน');
+    expect((await call<MeResponse>('GET', 'me', undefined, STAFF)).billing).toBeNull();
+    // issued once
+    expect((await call<SubscriptionInfo>('GET', 'company/subscription')).invoices).toHaveLength(1);
+  });
+
+  it('suspends the company after the grace period: 401, and login says why', async () => {
+    plant(20);
+    expect((await failure(call('GET', 'products')))?.[0]).toBe(401);
+    const login = await failure(
+      firstValueFrom(
+        http.post('/api/auth/login', { companyCode: 'DEMO', username: 'admin', password: 'admin' }),
+      ),
+    );
+    expect(login).toEqual([
+      401,
+      'บริษัทนี้ถูกระงับการใช้งานเพราะค้างชำระค่าบริการ — เจ้าของบริษัทติดต่อผู้ให้บริการเพื่อชำระเงิน',
+    ]);
+    const stored = JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
+    expect(stored.companies[0]).toMatchObject({ active: false, suspendedReason: 'overdue' });
+  });
+});
+
+describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)', () => {
+  let http: HttpClient;
+  const post = <T>(url: string, body: unknown, token?: string) =>
+    firstValueFrom(
+      http.post<T>(`/api/${url}`, body, {
+        headers: token ? { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' } : {},
+      }),
+    );
+  const get = <T>(url: string, token: string) =>
+    firstValueFrom(
+      http.get<T>(`/api/${url}`, {
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const payload = {
+    companyCode: ' acme ',
+    companyName: 'บริษัท แอคมี จำกัด',
+    taxId: '0105550123451',
+    vatRegistered: true,
+    branch: { code: 'hq', name: 'สำนักงานใหญ่', branchNo: '00000', address: 'กรุงเทพฯ', phone: '' },
+    owner: { name: 'สมศักดิ์', username: 'Boss', email: 'boss@acme.test', password: 'secret' },
+    planId: 'starter',
+  };
+  const platform = () => JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('creates a company on a trial with only its first branch, owner and cash', async () => {
+    const session = await post<LoginResponse>('auth/signup', payload);
+    expect(session.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
+    expect(session.user).toMatchObject({ username: 'boss', role: 'owner', allBranches: true });
+    expect(session.branches.map((b) => b.code)).toEqual(['HQ']);
+    expect(session.token).toBe(mockToken(2, 1));
+    const info = await get<SubscriptionInfo>('company/subscription', session.token);
+    expect(info).toMatchObject({ planId: 'starter', status: 'trial' });
+    expect(info.subscription.trialEndsOn).toBe(addDaysIso(todayIso(), 14));
+    expect(await get<Product[]>('products', session.token)).toEqual([]);
+    expect(
+      (await get<PaymentMethod[]>('payment-methods', session.token)).map((m) => m.type),
+    ).toEqual(['cash']);
+    expect(await get<unknown>('company/onboarding', session.token)).toEqual({
+      terminals: 0,
+      categories: 0,
+      products: 0,
+      prices: 0,
+      users: 1,
+    });
+    const events = await get<AuditEvent[]>('audit-log', session.token);
+    expect(events.map((e) => e.action)).toEqual(['signup']);
+    // the new owner logs in with their own code; DEMO is untouched
+    const login = await post<LoginResponse>('auth/login', {
+      companyCode: 'ACME',
+      username: 'boss',
+      password: 'secret',
+    });
+    expect(login.company.id).toBe(2);
+    expect((await get<Product[]>('products', mockToken(1, 1))).length).toBeGreaterThan(0);
+  });
+
+  it('refuses a taken code and an invalid form', async () => {
+    expect(await failure(post('auth/signup', { ...payload, companyCode: 'demo' }))).toEqual([
+      400,
+      'รหัสบริษัทนี้ถูกใช้แล้ว',
+    ]);
+    expect(await failure(post('auth/signup', { ...payload, companyCode: 'x' }))).toEqual([
+      400,
+      'รหัสบริษัทใช้ได้เฉพาะ A-Z, 0-9 ยาว 3–20 ตัว',
+    ]);
+    expect(platform().companies).toHaveLength(1);
+  });
+
+  it('sends a single-use reset link only to the owner, with one answer for everything', async () => {
+    await post('auth/signup', payload);
+    const ask = (companyCode: string, email: string) =>
+      post<{ message: string }>('auth/forgot-password', { companyCode, email });
+    const same = (await ask('NOPE', 'x@y.z')).message;
+    expect((await ask('ACME', 'someone@else.test')).message).toBe(same);
+    expect(platform().outbox).toHaveLength(0);
+    expect((await ask('acme', 'BOSS@acme.test')).message).toBe(same);
+    const mail = platform().outbox[0];
+    expect(mail).toMatchObject({ companyId: 2, to: 'boss@acme.test' });
+    const token = new URLSearchParams(mail.body.split('?')[1]).get('token');
+
+    expect((await failure(post('auth/reset-password', { token, password: '1' })))?.[0]).toBe(400);
+    await post('auth/reset-password', { token, password: 'new-pass' });
+    expect(await failure(post('auth/reset-password', { token, password: 'again-pass' }))).toEqual([
+      400,
+      'ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่',
+    ]);
+    const login = await post<LoginResponse>('auth/login', {
+      companyCode: 'ACME',
+      username: 'boss',
+      password: 'new-pass',
+    });
+    expect(login.user.role).toBe('owner');
+  });
+});
+
+describe('mockBackendInterceptor – platform admin (E36)', () => {
+  let http: HttpClient;
+  const call = <T>(method: string, url: string, body?: unknown, token?: string) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const loginPlatform = async () =>
+    (
+      await call<PlatformLoginResponse>('POST', 'platform/auth/login', {
+        username: 'platform',
+        password: 'platform',
+      })
+    ).token;
+  const plantOverdue = () =>
+    localStorage.setItem(
+      'an22.mock.platform',
+      JSON.stringify({
+        companies: [
+          {
+            id: 1,
+            code: 'DEMO',
+            active: true,
+            planId: 'pro',
+            subscription: { trialEndsOn: null, nextInvoiceOn: addDaysIso(todayIso(), -20) },
+            suspendedReason: null,
+          },
+        ],
+        nextCompanyId: 2,
+      }),
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('logs in apart from the companies; tokens of one side never pass on the other', async () => {
+    expect(
+      await failure(call('POST', 'platform/auth/login', { username: 'platform', password: 'x' })),
+    ).toEqual([401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง']);
+    const token = await loginPlatform();
+    expect(token).toBe('mock-platform-token.p1');
+    expect(
+      (await failure(call('GET', 'platform/companies', undefined, mockToken(1, 1))))?.[0],
+    ).toBe(401);
+    expect((await failure(call('GET', 'products', undefined, token)))?.[0]).toBe(401);
+    const rows = await call<PlatformCompanyRow[]>('GET', 'platform/companies', undefined, token);
+    expect(rows.map((r) => [r.code, r.planId, r.status])).toEqual([['DEMO', 'pro', 'active']]);
+    expect(rows[0].name).toBe(SEED_STORE_INFO.name);
+  });
+
+  it('marks an overdue invoice paid and the company comes back on by itself', async () => {
+    plantOverdue();
+    const token = await loginPlatform();
+    const detail = await call<PlatformCompanyDetail>(
+      'GET',
+      'platform/companies/1',
+      undefined,
+      token,
+    );
+    expect([detail.active, detail.suspendedReason]).toEqual([false, 'overdue']);
+    expect(await failure(call('POST', 'platform/companies/1/reactivate', {}, token))).toEqual([
+      400,
+      'บริษัทค้างชำระ — บันทึกรับชำระใบแจ้งหนี้แทน',
+    ]);
+    const paid = await call<PlatformCompanyDetail>(
+      'POST',
+      `platform/invoices/${detail.invoices[0].id}/pay`,
+      {},
+      token,
+    );
+    expect([paid.active, paid.suspendedReason, paid.invoices[0].status]).toEqual([
+      true,
+      null,
+      'paid',
+    ]);
+    const events = await call<AuditEvent[]>('GET', 'audit-log', undefined, mockToken(1, 1));
+    expect(events[0]).toMatchObject({
+      action: 'invoice_paid',
+      actorKind: 'platform',
+      userId: null,
+    });
+  });
+
+  it('suspends with a reason, turns back on, changes the package and the owner password', async () => {
+    const token = await loginPlatform();
+    expect(
+      (await failure(call('POST', 'platform/companies/1/suspend', { note: '' }, token)))?.[1],
+    ).toBe('กรุณากรอกเหตุผลที่ระงับ');
+    const suspended = await call<PlatformCompanyDetail>(
+      'POST',
+      'platform/companies/1/suspend',
+      { note: 'ทดสอบ' },
+      token,
+    );
+    expect([suspended.active, suspended.suspendNote]).toEqual([false, 'ทดสอบ']);
+    expect((await failure(call('GET', 'products', undefined, mockToken(1, 1))))?.[0]).toBe(401);
+    await call('POST', 'platform/companies/1/reactivate', {}, token);
+    const changed = await call<PlatformCompanyDetail>(
+      'PUT',
+      'platform/companies/1/plan',
+      { planId: 'standard' },
+      token,
+    );
+    expect(changed.planId).toBe('standard');
+    await call('PUT', 'platform/companies/1/owner-password', { password: 'owner-new' }, token);
+    const login = await call<LoginResponse>('POST', 'auth/login', {
+      companyCode: 'DEMO',
+      username: 'admin',
+      password: 'owner-new',
+    });
+    expect(login.user.role).toBe('owner');
+    const actions = (await call<AuditEvent[]>('GET', 'audit-log', undefined, login.token)).map(
+      (e) => e.action,
+    );
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'company_suspend',
+        'company_reactivate',
+        'plan_change',
+        'user_password',
+      ]),
+    );
+  });
+});
+
+describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const login = (username: string, password: string) =>
+    firstValueFrom(
+      http.post<LoginResponse>('/api/auth/login', { companyCode: 'DEMO', username, password }),
+    );
+  const platformToken = async () =>
+    (
+      await firstValueFrom(
+        http.post<PlatformLoginResponse>('/api/platform/auth/login', {
+          username: 'platform',
+          password: 'platform',
+        }),
+      )
+    ).token;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('exports every collection for the owner only, without passwords, and logs it', async () => {
+    expect((await failure(call('GET', 'company/export', undefined, STAFF)))?.[0]).toBe(403);
+    const dump = await call<CompanyExport>('GET', 'company/export');
+    expect(dump).toMatchObject({ schemaVersion: 1, company: { id: 1, code: 'DEMO' } });
+    expect(Object.keys(dump.data)).toEqual(
+      expect.arrayContaining(['products', 'branchStock', 'sales', 'users', 'shifts', 'auditLog']),
+    );
+    expect(dump.data['passwords']).toBeUndefined();
+    expect(dump.data['nextId']).toBeUndefined();
+    const events = await call<AuditEvent[]>('GET', 'audit-log?action=company_export');
+    expect(events).toHaveLength(1);
+  });
+
+  it('suspends everyone but the owner, who may only download or cancel', async () => {
+    const ask = (body: Partial<DeletionRequest>) =>
+      call<CompanyDeletion>('POST', 'company/deletion', {
+        companyCode: 'DEMO',
+        password: 'admin',
+        reason: 'เลิกกิจการ',
+        ...body,
+      });
+    expect(await failure(ask({ companyCode: 'X' }))).toEqual([
+      400,
+      'พิมพ์รหัสบริษัทให้ตรงเพื่อยืนยัน',
+    ]);
+    expect(await failure(ask({ password: 'wrong' }))).toEqual([400, 'รหัสผ่านไม่ถูกต้อง']);
+    await ask({});
+    // staff are logged out at once
+    expect(await failure(call('GET', 'products', undefined, STAFF))).toEqual([
+      401,
+      'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+    ]);
+    const pending = await call<CompanyDeletion | null>('GET', 'company/deletion');
+    expect(pending?.purgeAfter).toBe(addDaysIso(todayIso(), 30));
+    expect((await failure(login('somchai', '1234')))?.[1]).toBe(
+      'บริษัทนี้อยู่ระหว่างรอลบข้อมูล — ติดต่อเจ้าของบริษัท',
+    );
+    const session = await login('admin', 'admin');
+    expect(session.company.deletionPurgeAfter).toBe(pending?.purgeAfter);
+    expect((await failure(call('GET', 'products')))?.[0]).toBe(403);
+    expect((await call<CompanyExport>('GET', 'company/export')).schemaVersion).toBe(1);
+    // cancelled: back to normal for everyone
+    await call('DELETE', 'company/deletion');
+    expect((await call<Product[]>('GET', 'products', undefined, STAFF)).length).toBeGreaterThan(0);
+    const actions = (await call<AuditEvent[]>('GET', 'audit-log')).map((e) => e.action);
+    expect(actions).toEqual(expect.arrayContaining(['deletion_request', 'deletion_cancel']));
+  });
+
+  it('lets the platform delete the data once due; the code stays taken', async () => {
+    await call('POST', 'company/deletion', { companyCode: 'DEMO', password: 'admin', reason: '' });
+    const token = await platformToken();
+    const purge = () =>
+      firstValueFrom(
+        http.post<PlatformCompanyDetail>(
+          '/api/platform/companies/1/purge',
+          {},
+          { headers: { Authorization: `Bearer ${token}` } },
+        ),
+      );
+    expect((await failure(purge()))?.[1]).toContain('ลบข้อมูลได้ตั้งแต่วันที่');
+    const platform = JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
+    platform.companies[0].deletion.purgeAfter = todayIso();
+    localStorage.setItem('an22.mock.platform', JSON.stringify(platform));
+    const gone = await purge();
+    expect(gone.deletedAt).not.toBeNull();
+    expect(gone.name).toBe(SEED_STORE_INFO.name);
+    expect(localStorage.getItem('an22.mock.db')).toBeNull();
+    expect((await failure(login('admin', 'admin')))?.[1]).toBe(
+      'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง',
+    );
+    expect((await failure(call('GET', 'me')))?.[0]).toBe(401);
+    const signup = await failure(
+      firstValueFrom(
+        http.post('/api/auth/signup', {
+          companyCode: 'DEMO',
+          companyName: 'ใหม่',
+          taxId: '0105550123451',
+          vatRegistered: true,
+          branch: {
+            code: 'HQ',
+            name: 'สำนักงานใหญ่',
+            branchNo: '00000',
+            address: 'กรุงเทพฯ',
+            phone: '',
+          },
+          owner: { name: 'x', username: 'boss', email: 'b@x.test', password: 'secret' },
+          planId: 'starter',
+        }),
+      ),
+    );
+    expect(signup).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
   });
 });

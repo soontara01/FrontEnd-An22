@@ -2,6 +2,7 @@ import { provideThaiDateAdapter } from '@shared/utils/thai-date-adapter';
 import { Routes } from '@angular/router';
 import { InventoryApi } from './data/inventory-api.service';
 import { InventoryStore } from './data/inventory.store';
+import BranchStock from './pages/branch-stock/branch-stock';
 import ProductList from './pages/product-list/product-list';
 import ReceiveImport from './pages/receive-import/receive-import';
 import ReorderSuggestions from './pages/reorder-suggestions/reorder-suggestions';
@@ -20,6 +21,7 @@ export default [
       { path: 'receive-import', title: 'รับสินค้าเข้าจาก Excel', component: ReceiveImport },
       { path: 'reorder', title: 'แนะนำสั่งซื้อ', component: ReorderSuggestions },
       { path: 'stock-card/:productId', title: 'บัตรสต็อก', component: StockCard },
+      { path: 'branch-stock/:productId', title: 'สต็อกทุกสาขา', component: BranchStock },
       { path: 'serial-labels/:productId', title: 'พิมพ์ป้าย Serial', component: SerialLabels },
     ],
   },

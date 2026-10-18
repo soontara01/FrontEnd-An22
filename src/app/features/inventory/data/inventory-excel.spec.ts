@@ -57,10 +57,19 @@ describe('inventory Excel', () => {
     expect(book.getWorksheet('Serial')).toBeUndefined();
   });
 
+  it('names the branch the stock belongs to (D1)', async () => {
+    const blob = await inventoryXlsx(products, [], new Date(), 'สาขา BN');
+    const ExcelJS = await loadExcel();
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await blob.arrayBuffer());
+    expect(String(book.worksheets[0].getCell('A1').value)).toMatch(/^สต็อกคงเหลือ สาขา BN ณ /);
+  });
+
   it('lists in-stock serials on a second sheet', async () => {
     const serial = (id: number, sn: string, status: SerialNumber['status'], cost: number) => ({
       id,
       productId: 1,
+      branchId: 1,
       serial: sn,
       status,
       receivedAt: '2026-10-01T03:00:00.000Z',

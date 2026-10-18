@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, tap } from 'rxjs';
-import { User, UserPayload } from '@core/models';
+import { NewUserPayload, User, UserPayload } from '@core/models';
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { UsersApi } from './users-api.service';
 
@@ -37,7 +37,7 @@ export class UsersStore {
     return this.api.get(id);
   }
 
-  create(payload: UserPayload): Observable<User> {
+  create(payload: NewUserPayload): Observable<User> {
     return this.api
       .create(payload)
       .pipe(tap((user) => this._users.update((list) => [...list, user])));
@@ -47,6 +47,14 @@ export class UsersStore {
     return this.api
       .update(id, payload)
       .pipe(tap((user) => this._users.update((list) => list.map((u) => (u.id === id ? user : u)))));
+  }
+
+  setPassword(id: number, password: string): Observable<null> {
+    return this.api.setPassword(id, password);
+  }
+
+  transferOwner(userId: number, password: string): Observable<User[]> {
+    return this.api.transferOwner(userId, password).pipe(tap((users) => this._users.set(users)));
   }
 
   remove(id: number): Observable<void> {

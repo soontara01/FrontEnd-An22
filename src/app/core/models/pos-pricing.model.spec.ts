@@ -65,6 +65,7 @@ const ctx = (products: Product[], promotions: Promotion[] = []): PricingContext 
   categories,
   date: TODAY,
   vatRegistered: true,
+  branchId: 1,
 });
 
 describe('priceCart', () => {

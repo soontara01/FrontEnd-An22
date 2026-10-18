@@ -1,15 +1,206 @@
-export type UserRole = 'admin' | 'user';
+import type { Branch } from './company.model';
+
+/**
+ * `owner` (E33): one per company, every admin right + the company's own account (package, billing,
+ * export, deletion, handing over ownership). `admin` = manager, `user` = cashier / stock clerk.
+ */
+export type UserRole = 'owner' | 'admin' | 'user';
+
+export const ROLE_LABEL: Record<UserRole, string> = {
+  owner: 'เจ้าของบริษัท',
+  admin: 'ผู้ดูแลระบบ',
+  user: 'ผู้ใช้ทั่วไป',
+};
 
 export interface User {
   id: number;
+  /** Login name (D4): `a-z 0-9 . _ -`, 3–30, lower case, unique within the company */
+  username: string;
   name: string;
+  /** Optional ('' = none); unique within the company when set */
   email: string;
   role: UserRole;
   active: boolean;
+  /** Branches this user may work in (ignored when `allBranches`) */
+  branchIds: number[];
+  /** Every branch of the company, now and later (an admin with it = company admin, E5; owner always) */
+  allBranches: boolean;
   createdAt: string;
 }
 
 export type UserPayload = Omit<User, 'id' | 'createdAt'>;
+
+/** `POST /users`: a new user needs a password (E10); the API never returns it. */
+export type NewUserPayload = UserPayload & { password: string };
+
+/** Every admin right (403 rules, approvals, admin screens): an admin or the owner (E33). */
+export const hasAdminRights = (u: Pick<User, 'role'> | null | undefined): boolean =>
+  !!u && (u.role === 'admin' || u.role === 'owner');
+
+/** The company's owner (E33): package, billing, export, deletion, handing over ownership. */
+export const isOwner = (u: Pick<User, 'role'> | null | undefined): boolean => u?.role === 'owner';
+
+/**
+ * Who may do company-level work (branches, company settings, branch-limited promotions — E5 / E6):
+ * an admin of every branch, or the owner.
+ */
+export const isCompanyAdmin = (u: Pick<User, 'role' | 'allBranches'> | null | undefined): boolean =>
+  isOwner(u) || (!!u && u.role === 'admin' && u.allBranches);
+
+/** Whether the user may work in this branch (an inactive branch is never open to anyone). */
+export const canWorkIn = (
+  u: Pick<User, 'allBranches' | 'branchIds'>,
+  branch: Pick<Branch, 'id' | 'active'>,
+): boolean => branch.active && (u.allBranches || u.branchIds.includes(branch.id));
+
+/** Which branch a list / report shows (E23): one branch's id, or every branch. */
+export type BranchScope = number | 'all';
+
+/** `?branchId=` of a list → its scope; missing = the working branch, anything odd = null (400). */
+export function parseBranchScope(
+  param: string | null,
+  workingBranchId: number,
+): BranchScope | null {
+  if (!param) return workingBranchId;
+  if (param === 'all') return 'all';
+  const id = Number(param);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+/**
+ * Who may read the documents of a branch (E23, server + screens): company admins any branch of the
+ * company or all of them; everyone else only the branches they work in (`canWorkIn()`) → else 403.
+ */
+export function branchScopeError(
+  scope: BranchScope,
+  user: Pick<User, 'role' | 'allBranches' | 'branchIds'>,
+  branches: readonly Pick<Branch, 'id' | 'active'>[],
+): string | null {
+  if (scope === 'all') {
+    return isCompanyAdmin(user) ? null : 'ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท';
+  }
+  const branch = branches.find((b) => b.id === scope);
+  if (branch && (isCompanyAdmin(user) || canWorkIn(user, branch))) return null;
+  return 'ไม่มีสิทธิ์ดูข้อมูลของสาขานี้';
+}
+
+/** Branch rights of a user form / `POST`·`PUT /users`: all branches or at least one active one. */
+export function userBranchError(
+  p: Pick<UserPayload, 'allBranches' | 'branchIds'>,
+  branches: readonly Pick<Branch, 'id' | 'active'>[],
+): string | null {
+  if (p.allBranches) return null;
+  if (p.branchIds.length === 0) return 'กรุณาเลือกสาขาอย่างน้อย 1 สาขา';
+  const active = new Set(branches.filter((b) => b.active).map((b) => b.id));
+  if (p.branchIds.some((id) => !active.has(id))) return 'สาขาที่เลือกไม่มีอยู่หรือปิดใช้งานแล้ว';
+  return null;
+}
+
+/**
+ * E6: an admin limited to some branches manages only users within those branches, and cannot give
+ * all branches or a branch they don't have. `before` null = a new user, `after` null = a delete.
+ */
+export function userScopeError(
+  actor: Pick<User, 'role' | 'allBranches' | 'branchIds'>,
+  before: Pick<User, 'allBranches' | 'branchIds'> | null,
+  after: Pick<User, 'allBranches' | 'branchIds'> | null,
+): string | null {
+  if (isCompanyAdmin(actor)) return null;
+  const mine = new Set(actor.branchIds);
+  const within = (u: Pick<User, 'allBranches' | 'branchIds'>) =>
+    !u.allBranches && u.branchIds.every((id) => mine.has(id));
+  if (before && !within(before)) {
+    return 'จัดการผู้ใช้ของสาขาอื่นหรือทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท';
+  }
+  if (after && !within(after)) {
+    return 'ให้สิทธิ์ทุกสาขาหรือสาขาที่ตัวเองไม่มีได้เฉพาะผู้ดูแลระบบระดับบริษัท';
+  }
+  return null;
+}
+
+/** A password set by an admin (E10): 4–64 characters, no spaces at either end. */
+export function passwordError(password: string): string | null {
+  if (!password) return 'กรุณากรอกรหัสผ่าน';
+  if (password !== password.trim()) return 'รหัสผ่านต้องไม่ขึ้นต้นหรือลงท้ายด้วยช่องว่าง';
+  if (password.length < 4) return 'รหัสผ่านต้องมีอย่างน้อย 4 ตัว';
+  if (password.length > 64) return 'รหัสผ่านต้องไม่เกิน 64 ตัว';
+  return null;
+}
+
+/** The form a username is stored and compared in (trimmed, lower case). */
+export const normalizeUsername = (username: string): string => username.trim().toLowerCase();
+
+const USERNAME_PATTERN = /^[a-z0-9._-]{3,30}$/;
+const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Format of a login name (decided 2026-10-16, E4). Thai message or null. */
+export function usernameError(username: string): string | null {
+  const name = normalizeUsername(username);
+  if (!name) return 'กรุณากรอกชื่อผู้ใช้';
+  if (!USERNAME_PATTERN.test(name)) {
+    return 'ชื่อผู้ใช้ใช้ได้เฉพาะ a-z, 0-9, . _ - ยาว 3–30 ตัว';
+  }
+  return null;
+}
+
+/**
+ * The single rule for a user's login name and e-mail (user form + server, closes B5): a valid
+ * username not used by another user of the company (ignoring case); an e-mail is optional but,
+ * when given, valid and not used by another user. `exceptId` = the user being edited.
+ */
+export function userIdentityError(
+  users: readonly Pick<User, 'id' | 'username' | 'email'>[],
+  payload: Pick<UserPayload, 'username' | 'email'> & Partial<Pick<UserPayload, 'role'>>,
+  exceptId: number | null,
+): string | null {
+  const nameProblem = usernameError(payload.username);
+  if (nameProblem) return nameProblem;
+  const others = users.filter((u) => u.id !== exceptId);
+  const name = normalizeUsername(payload.username);
+  if (others.some((u) => normalizeUsername(u.username) === name)) return 'ชื่อผู้ใช้นี้มีอยู่แล้ว';
+  const email = payload.email.trim().toLowerCase();
+  if (!email) return payload.role === 'owner' ? OWNER_EMAIL_REQUIRED : null;
+  if (!EMAIL_PATTERN.test(email)) return 'รูปแบบอีเมลไม่ถูกต้อง';
+  if (others.some((u) => u.email.trim().toLowerCase() === email)) {
+    return 'อีเมลนี้มีผู้ใช้อื่นใช้แล้ว';
+  }
+  return null;
+}
+
+const OWNER_EMAIL_REQUIRED = 'เจ้าของบริษัทต้องมีอีเมล (ใช้กู้รหัสผ่านและแจ้งเรื่องการเก็บเงิน)';
+
+/**
+ * The owner role changes only by handing ownership over (`ownerTransferError()`), never through
+ * the user form / `POST`·`PUT /users`: nobody becomes owner there and the owner stays owner.
+ * `before` null = a new user.
+ */
+export function ownerRoleError(before: UserRole | null, after: UserRole): string | null {
+  if (after === 'owner' && before !== 'owner') {
+    return 'ตั้งเจ้าของบริษัทได้ด้วยการโอนความเป็นเจ้าของเท่านั้น';
+  }
+  if (before === 'owner' && after !== 'owner') {
+    return 'เปลี่ยนสิทธิ์ของเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน';
+  }
+  return null;
+}
+
+/**
+ * Handing ownership over (E33, `POST /company/owner`): only the owner, to another active user of
+ * the company who has an e-mail. The new owner gets every branch; the old one becomes an admin.
+ */
+export function ownerTransferError(
+  users: readonly Pick<User, 'id' | 'role' | 'active' | 'email'>[],
+  actor: Pick<User, 'id' | 'role'>,
+  targetId: number,
+): string | null {
+  if (!isOwner(actor)) return 'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท';
+  const target = users.find((u) => u.id === targetId);
+  if (!target) return 'ไม่พบผู้ใช้ที่จะรับโอน';
+  if (target.id === actor.id) return 'เลือกผู้ใช้อื่นที่จะรับโอน';
+  if (!target.active) return 'ผู้รับโอนต้องเป็นผู้ใช้ที่ใช้งานอยู่';
+  if (!target.email.trim()) return 'ผู้รับโอนต้องมีอีเมล — แก้ข้อมูลผู้ใช้ให้มีอีเมลก่อน';
+  return null;
+}
 
 /** A change to a user account checked by `userChangeError()`: an edit (new values) or a delete. */
 export type UserChange =
@@ -18,7 +209,9 @@ export type UserChange =
 
 /**
  * Admin-account rule for the user form and the server (the caller must already be an admin):
- * nobody may demote / deactivate / delete themselves, and the last active admin always stays.
+ * nobody may demote / deactivate / delete themselves, the last active admin always stays, and the
+ * owner is never deactivated / deleted (E33 — hand ownership over first). Owner and admin both
+ * count as admins (`hasAdminRights()`).
  */
 export function userChangeError(
   users: readonly Pick<User, 'id' | 'role' | 'active'>[],
@@ -28,17 +221,28 @@ export function userChangeError(
   const target = users.find((u) => u.id === change.id);
   if (!target) return null;
   const removesAdmin =
-    change.kind === 'delete' || change.payload.role !== 'admin' || !change.payload.active;
+    change.kind === 'delete' || !hasAdminRights(change.payload) || !change.payload.active;
   const removesAccess = change.kind === 'delete' || !change.payload.active;
   if (change.id === actorId) {
     if (change.kind === 'delete') return 'ลบบัญชีของตัวเองไม่ได้';
-    if (target.role === 'admin' && change.payload.role !== 'admin') {
+    if (hasAdminRights(target) && !hasAdminRights(change.payload)) {
       return 'ลดสิทธิ์ผู้ดูแลระบบของตัวเองไม่ได้';
     }
     if (removesAccess) return 'ปิดใช้งานบัญชีของตัวเองไม่ได้';
   }
-  if (target.role === 'admin' && target.active && removesAdmin) {
-    const others = users.filter((u) => u.id !== target.id && u.role === 'admin' && u.active);
+  if (isOwner(target)) {
+    if (change.kind === 'delete')
+      return 'ลบเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน';
+    if (!change.payload.active) {
+      return 'ปิดใช้งานเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน';
+    }
+  }
+  if (change.kind === 'update') {
+    const roleProblem = ownerRoleError(target.role, change.payload.role);
+    if (roleProblem) return roleProblem;
+  }
+  if (hasAdminRights(target) && target.active && removesAdmin) {
+    const others = users.filter((u) => u.id !== target.id && hasAdminRights(u) && u.active);
     if (others.length === 0) return 'ต้องมีผู้ดูแลระบบที่ใช้งานอยู่อย่างน้อย 1 คน';
   }
   return null;

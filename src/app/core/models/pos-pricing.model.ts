@@ -1,7 +1,7 @@
 import type { Category } from './category.model';
 import { effectiveCost, round2 } from './costing.model';
 import { Product, canSell, isService, vatBreakdown } from './product.model';
-import { Promotion, discountAmount, inScope, promotionStatus } from './promotion.model';
+import { Promotion, discountAmount, inBranch, inScope, promotionStatus } from './promotion.model';
 import type { CartItem, FreeSerial, ManualDiscount, SaleLine } from './sale.model';
 
 /**
@@ -35,6 +35,8 @@ export interface PricingContext {
   date: string;
   /** The store is VAT-registered now; false → every line's `vat` is 0, prices unchanged (B20) */
   vatRegistered: boolean;
+  /** Branch of the sale (`X-Branch-Id`): promotions limited to other branches don't apply (D2) */
+  branchId: number | null;
 }
 
 export interface PricedLine extends Omit<SaleLine, 'cogs'> {
@@ -143,7 +145,7 @@ export function priceCart(
   const issues: CartIssue[] = [];
   const products = new Map(ctx.products.map((p) => [p.id, p]));
   const active = ctx.promotions
-    .filter((p) => promotionStatus(p, ctx.date) === 'active')
+    .filter((p) => promotionStatus(p, ctx.date) === 'active' && inBranch(p, ctx.branchId))
     .sort(byPriority);
   const itemPromos = active.filter((p) => p.type !== 'bill_discount');
   const blocking = (index: number | null, productId: number, message: string): void => {

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { Category, Product, Promotion, PromotionPayload } from '@core/models';
+import { Branch, Category, Product, Promotion, PromotionPayload } from '@core/models';
 
 /** HTTP calls for the promotions feature (provided in promotions.routes.ts). */
 @Injectable()
@@ -30,6 +30,11 @@ export class PromotionsApi {
 
   products(): Observable<Product[]> {
     return this.api.get<Product[]>('products');
+  }
+
+  /** Every branch of the company (names of limited promotions, the branch picker). */
+  branches(): Observable<Branch[]> {
+    return this.api.get<Branch[]>('branches');
   }
 
   categories(): Observable<Category[]> {

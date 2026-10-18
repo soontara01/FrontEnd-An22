@@ -132,6 +132,10 @@ export default class CreditNoteForm {
       methods: this.store.methods(),
       today: todayIso(),
       exchanges: this.exchanges(),
+      here: {
+        branchId: this.auth.currentBranch()?.id ?? null,
+        branches: this.auth.branches(),
+      },
     });
   });
   protected readonly refunded = computed(() =>

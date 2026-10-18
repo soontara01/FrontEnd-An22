@@ -1,0 +1,21 @@
+.section {
+  margin-bottom: 16px;
+  max-width: 720px;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.warn {
+  color: var(--mat-sys-error);
+}
+
+.danger-zone {
+  border-color: var(--mat-sys-error);
+}
+
+.danger {
+  color: var(--mat-sys-error);
+}

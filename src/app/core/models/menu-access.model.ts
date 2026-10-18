@@ -8,8 +8,8 @@ export interface MenuAccess {
   userMenus: string[];
 }
 
-/** Admin-only menu: never shown to the `user` role. */
-export const ADMIN_ONLY_MENU = 'users';
+/** Admin-only menus (`MenuItem.adminOnly`): never shown to the `user` role. */
+export const ADMIN_ONLY_MENUS: readonly string[] = ['users', 'account'];
 
 /** Default for a new store: cashier work only (decided 2026-10-16). */
 export const DEFAULT_USER_MENUS: readonly string[] = ['dashboard', 'pos', 'sales', 'settings'];
@@ -23,16 +23,18 @@ export function menuAccessError(
 ): string | null {
   const menus = p?.userMenus;
   if (!Array.isArray(menus) || !menus.length) return 'ต้องเลือกอย่างน้อย 1 เมนูให้ผู้ใช้ทั่วไป';
-  if (menus.includes(ADMIN_ONLY_MENU)) return 'เมนูผู้ใช้งานเป็นของผู้ดูแลระบบเท่านั้น';
+  if (menus.some((m) => ADMIN_ONLY_MENUS.includes(m))) {
+    return 'เมนูผู้ใช้งาน / บัญชีบริษัท เป็นของผู้ดูแลระบบเท่านั้น';
+  }
   const unknown = menus.find((m) => !knownPaths.includes(m));
   if (unknown !== undefined) return `ไม่มีเมนู ${unknown}`;
   if (new Set(menus).size !== menus.length) return 'เลือกเมนูซ้ำ';
   return null;
 }
 
-/** Whether a role sees a menu: admins every one, `user` only those in `access` (never `users`). */
+/** Whether a role sees a menu: admins every one, `user` only those in `access` (never an admin-only one). */
 export function canSeeMenu(path: string, isAdmin: boolean, access: MenuAccess | null): boolean {
   if (isAdmin) return true;
-  if (path === ADMIN_ONLY_MENU) return false;
+  if (ADMIN_ONLY_MENUS.includes(path)) return false;
   return (access ?? DEFAULT_MENU_ACCESS).userMenus.includes(path);
 }

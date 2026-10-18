@@ -1,0 +1,208 @@
+@if (company(); as c) {
+  <app-page-header [title]="c.code + (c.name ? ' · ' + c.name : '')" [subtitle]="statusText(c)">
+    <a mat-stroked-button routerLink="/platform/companies">
+      <mat-icon>arrow_back</mat-icon>
+      บริษัททั้งหมด
+    </a>
+  </app-page-header>
+
+  <div class="grid">
+    <mat-card appearance="outlined">
+      <mat-card-header><mat-card-title>บริษัท</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <dl>
+          <dt>เลขผู้เสียภาษี</dt>
+          <dd>{{ c.taxId || '-' }}</dd>
+          <dt>เจ้าของ</dt>
+          <dd>
+            @if (c.owner; as o) {
+              {{ o.name }} ({{ o.username }}) · {{ o.email || 'ไม่มีอีเมล' }}
+            } @else {
+              -
+            }
+          </dd>
+          <dt>ใช้งาน</dt>
+          <dd>
+            {{ c.usage.branches }} สาขา · {{ c.usage.users }} ผู้ใช้ ·
+            {{ c.usage.terminals }} เครื่อง POS
+          </dd>
+          @if (!c.deletedAt) {
+            @if (c.subscription.trialEndsOn) {
+              <dt>ทดลองใช้ถึง</dt>
+              <dd>{{ c.subscription.trialEndsOn | thaiDate }}</dd>
+            }
+            <dt>ใบแจ้งหนี้ถัดไป</dt>
+            <dd>{{ c.subscription.nextInvoiceOn | thaiDate }}</dd>
+          }
+          @if (c.suspendNote) {
+            <dt>เหตุผลที่ระงับ</dt>
+            <dd>{{ c.suspendNote }}</dd>
+          }
+        </dl>
+      </mat-card-content>
+    </mat-card>
+
+    @if (c.deletion; as d) {
+      <mat-card appearance="outlined" class="deletion">
+        <mat-card-header><mat-card-title>คำขอลบข้อมูล</mat-card-title></mat-card-header>
+        <mat-card-content class="stack">
+          <p>
+            ขอเมื่อ {{ d.requestedAt | thaiDate: 'datetime' }} โดย {{ d.requestedBy }}
+            @if (d.reason) {
+              — {{ d.reason }}
+            }
+          </p>
+          @if (c.deletedAt) {
+            <p>ลบข้อมูลแล้วเมื่อ {{ c.deletedAt | thaiDate: 'datetime' }}</p>
+          } @else {
+            <p>ลบได้ตั้งแต่วันที่ {{ d.purgeAfter | thaiDate }}</p>
+            <span [matTooltip]="purgeProblem() ?? ''">
+              <button
+                mat-stroked-button
+                class="danger"
+                [disabled]="busy() || !!purgeProblem()"
+                (click)="purge()"
+              >
+                ลบข้อมูลถาวร
+              </button>
+            </span>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+
+    @if (!c.deletedAt) {
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>แพ็กเกจ</mat-card-title></mat-card-header>
+        <mat-card-content class="stack">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>แพ็กเกจ</mat-label>
+            <mat-select [value]="selectedPlan()" (selectionChange)="planId.set($event.value)">
+              @for (p of plans; track p.id) {
+                <mat-option [value]="p.id">{{ p.name }} — ฿{{ p.monthlyPrice }} / เดือน</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <button
+            mat-stroked-button
+            [disabled]="busy() || selectedPlan() === c.planId"
+            (click)="savePlan()"
+          >
+            บันทึกแพ็กเกจ
+          </button>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>การใช้งานของบริษัท</mat-card-title></mat-card-header>
+        <mat-card-content class="stack">
+          @if (c.active) {
+            <mat-form-field appearance="outline">
+              <mat-label>เหตุผลที่ระงับ</mat-label>
+              <input matInput [value]="note()" (input)="note.set($any($event.target).value)" />
+            </mat-form-field>
+            <button
+              mat-stroked-button
+              class="danger"
+              [disabled]="busy() || !!suspendProblem()"
+              (click)="suspend()"
+            >
+              ระงับบริษัท
+            </button>
+          } @else {
+            <p>ระงับอยู่ ({{ statusText(c) }})</p>
+            <span [matTooltip]="reactivateProblem() ?? ''">
+              <button
+                mat-flat-button
+                [disabled]="busy() || !!reactivateProblem()"
+                (click)="reactivate()"
+              >
+                เปิดใช้งานอีกครั้ง
+              </button>
+            </span>
+            @if (reactivateProblem(); as p) {
+              <p class="text-muted small">{{ p }}</p>
+            }
+          }
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>รหัสผ่านเจ้าของบริษัท</mat-card-title></mat-card-header>
+        <mat-card-content class="stack">
+          <mat-form-field appearance="outline">
+            <mat-label>รหัสผ่านใหม่</mat-label>
+            <input
+              matInput
+              type="password"
+              autocomplete="new-password"
+              [value]="password()"
+              (input)="password.set($any($event.target).value)"
+            />
+            @if (passwordTouched() && passwordProblem(); as p) {
+              <mat-hint class="field-error">{{ p }}</mat-hint>
+            } @else {
+              <mat-hint>เมื่อเจ้าของติดต่อมาเพราะเข้าระบบไม่ได้ (ยืนยันตัวตนก่อน)</mat-hint>
+            }
+          </mat-form-field>
+          <button mat-stroked-button [disabled]="busy() || !c.owner" (click)="setOwnerPassword()">
+            ตั้งรหัสผ่านใหม่
+          </button>
+        </mat-card-content>
+      </mat-card>
+    }
+  </div>
+
+  <h3 class="section-title">ใบแจ้งหนี้</h3>
+  <mat-card appearance="outlined">
+    @if (!c.invoices.length) {
+      <p class="text-muted empty">ยังไม่มีใบแจ้งหนี้</p>
+    } @else {
+      <div class="table-wrap">
+        <table mat-table [dataSource]="c.invoices">
+          <ng-container matColumnDef="invoiceNo">
+            <th mat-header-cell *matHeaderCellDef>เลขที่</th>
+            <td mat-cell *matCellDef="let i" class="mono">{{ i.invoiceNo }}</td>
+          </ng-container>
+          <ng-container matColumnDef="period">
+            <th mat-header-cell *matHeaderCellDef>รอบ</th>
+            <td mat-cell *matCellDef="let i">
+              {{ i.periodStart | thaiDate }} – {{ i.periodEnd | thaiDate }} ·
+              {{ planName(i.planId) }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="amount">
+            <th mat-header-cell *matHeaderCellDef class="num">ยอด</th>
+            <td mat-cell *matCellDef="let i" class="num">
+              {{ i.amount | currency: 'THB' : 'symbol-narrow' : '1.0-0' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="dueDate">
+            <th mat-header-cell *matHeaderCellDef>ครบกำหนด</th>
+            <td mat-cell *matCellDef="let i">{{ i.dueDate | thaiDate }}</td>
+          </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+            <td mat-cell *matCellDef="let i">
+              <span class="badge" [class.badge-success]="i.status === 'paid'">{{
+                invoiceStatus(i)
+              }}</span>
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef></th>
+            <td mat-cell *matCellDef="let i">
+              @if (canPay(i)) {
+                <button mat-stroked-button [disabled]="busy()" (click)="pay(i)">รับชำระ</button>
+              }
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="invoiceColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: invoiceColumns"></tr>
+        </table>
+      </div>
+    }
+  </mat-card>
+} @else {
+  <app-loading-spinner />
+}

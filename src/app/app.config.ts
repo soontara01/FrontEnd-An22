@@ -5,6 +5,7 @@ import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { provideRouter, withComponentInputBinding, withViewTransitions } from '@angular/router';
 import { GlobalErrorHandler } from '@core/error/global-error-handler';
 import { authInterceptor } from '@core/interceptors/auth.interceptor';
+import { branchInterceptor } from '@core/interceptors/branch.interceptor';
 import { errorInterceptor } from '@core/interceptors/error.interceptor';
 import { loadingInterceptor } from '@core/interceptors/loading.interceptor';
 import { terminalInterceptor } from '@core/interceptors/terminal.interceptor';
@@ -22,6 +23,7 @@ export const appConfig: ApplicationConfig = {
         loadingInterceptor,
         authInterceptor,
         terminalInterceptor,
+        branchInterceptor,
         errorInterceptor,
         // Mock must be last: it replaces the real backend call. Loaded lazily (own chunk).
         ...(environment.useMock ? [lazyMockBackendInterceptor] : []),

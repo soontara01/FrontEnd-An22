@@ -106,7 +106,7 @@
             }
           </dd>
           @if (!service()) {
-            <dt>สต็อกคงเหลือ</dt>
+            <dt>สต็อกคงเหลือ (สาขา {{ branch()?.code }})</dt>
             <dd>
               <strong>{{ s.stock }} {{ s.unit }}</strong>
               @if (s.packUnits.length && s.stock) {
@@ -116,7 +116,7 @@
                 <span class="badge" [class]="l.badge">{{ l.label }}</span>
               }
             </dd>
-            <dt>จุดสั่งซื้อ</dt>
+            <dt>จุดสั่งซื้อ (สาขา {{ branch()?.code }})</dt>
             <dd>{{ s.minStock }} {{ s.unit }}</dd>
             <dt>สต็อกสูงสุด</dt>
             <dd>{{ s.maxStock ? s.maxStock + ' ' + s.unit : 'ไม่กำหนด (2 เท่าจุดสั่งซื้อ)' }}</dd>

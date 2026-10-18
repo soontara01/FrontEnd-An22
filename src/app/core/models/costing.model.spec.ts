@@ -25,6 +25,7 @@ describe('buildStockCard', () => {
   const m = (id: number, day: string, qty: number, balanceQty: number, balanceAvgCost: number) => ({
     id,
     productId: 1,
+    branchId: 1,
     date: at(day),
     type: (qty > 0 ? 'receive' : 'issue') as 'receive' | 'issue',
     qty,

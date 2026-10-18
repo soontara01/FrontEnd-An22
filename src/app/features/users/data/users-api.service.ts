@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { MenuAccess, User, UserPayload } from '@core/models';
+import { MenuAccess, NewUserPayload, User, UserPayload } from '@core/models';
 
 /** HTTP calls for the users feature (provided in users.routes.ts). */
 @Injectable()
@@ -16,12 +16,22 @@ export class UsersApi {
     return this.api.get<User>(`users/${id}`);
   }
 
-  create(payload: UserPayload): Observable<User> {
+  create(payload: NewUserPayload): Observable<User> {
     return this.api.post<User>('users', payload);
   }
 
   update(id: number, payload: UserPayload): Observable<User> {
     return this.api.put<User>(`users/${id}`, payload);
+  }
+
+  /** An admin sets a new password for the user (E10). */
+  setPassword(id: number, password: string): Observable<null> {
+    return this.api.put<null>(`users/${id}/password`, { password });
+  }
+
+  /** The owner hands ownership over (E33), confirming with their own password. */
+  transferOwner(userId: number, password: string): Observable<User[]> {
+    return this.api.post<User[]>('company/owner', { userId, password });
   }
 
   remove(id: number): Observable<void> {

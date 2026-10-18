@@ -37,7 +37,7 @@ export interface TaxInvoiceBuyer {
 
 export interface TaxInvoice {
   id: number;
-  /** 'INV-YYYYMMDD-NNNN', issued by the server */
+  /** 'INV-<bill branch>-<sale day>-NNNN', issued by the server (E21; older without branch) */
   invoiceNo: string;
   saleId: number;
   /** Abbreviated receipt it replaces */
@@ -59,6 +59,11 @@ export interface TaxInvoice {
   replacedByNo: string | null;
   /** Issued together with the sale (true) or later in place of the abbreviated invoice (false) */
   atSale: boolean;
+  /**
+   * Branch of the bill = the seller's business place on the invoice and the sales tax report it
+   * belongs to (server-set, E25)
+   */
+  branchId?: number | null;
 }
 
 export interface InvoiceTotals {

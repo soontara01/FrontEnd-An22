@@ -5,7 +5,7 @@
       <mat-icon>arrow_back</mat-icon>
       การขาย
     </a>
-    @if (isPos() && store.storeInfo()) {
+    @if (isPos() && docInfo()) {
       <button mat-stroked-button (click)="printCopy()">
         <mat-icon>print</mat-icon>
         พิมพ์สำเนาใบเสร็จ
@@ -36,6 +36,9 @@
       </button>
     }
   </app-page-header>
+  @if (otherBranch(); as message) {
+    <p class="other-branch"><mat-icon>store</mat-icon>{{ message }}</p>
+  }
 
   <div class="layout">
     <div class="main">
@@ -77,7 +80,7 @@
               }
             </div>
           }
-          @if (isPos() && s.status === 'paid' && voidBlocker()) {
+          @if (isPos() && s.status === 'paid' && voidBlocker() && !otherBranch()) {
             <div class="text-muted small hint">
               <mat-icon inline>info</mat-icon> {{ voidBlocker() }}
               @if (canCredit() && !isAdmin()) {
@@ -268,7 +271,7 @@
                   </div>
                 </div>
                 <span></span>
-                @if (store.storeInfo()) {
+                @if (docInfo()) {
                   <span class="print-buttons">
                     @if (canReissue()) {
                       <a
@@ -351,7 +354,7 @@
                     </div>
                   </div>
                   <strong class="loss">-{{ cn.total | number: '1.2-2' }}</strong>
-                  @if (store.storeInfo()) {
+                  @if (docInfo()) {
                     <button mat-icon-button matTooltip="พิมพ์ใบลดหนี้" (click)="printNote(i)">
                       <mat-icon>print</mat-icon>
                     </button>
@@ -383,7 +386,7 @@
                     </div>
                   </div>
                   <span></span>
-                  @if (store.storeInfo()) {
+                  @if (docInfo()) {
                     <button
                       mat-icon-button
                       matTooltip="พิมพ์ใบเปลี่ยนสินค้า"
@@ -407,7 +410,7 @@
       }
     </div>
 
-    @if (isPos() && store.storeInfo(); as info) {
+    @if (isPos() && docInfo(); as info) {
       <aside class="preview">
         <div class="text-muted small">ใบเสร็จ (สำเนา)</div>
         <app-receipt #receipt [sale]="s" [store]="info" [copy]="true" />
@@ -415,7 +418,7 @@
     }
   </div>
   <!-- Off-screen credit note slips, printed by printNote() -->
-  @if (store.storeInfo(); as info) {
+  @if (docInfo(); as info) {
     <div class="print-stage" aria-hidden="true">
       @for (cn of creditNotes(); track cn.id) {
         <app-credit-note-receipt #noteSlip [note]="cn" [store]="info" />

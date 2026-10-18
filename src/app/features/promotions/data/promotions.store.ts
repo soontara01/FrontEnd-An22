@@ -1,16 +1,17 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, forkJoin, tap } from 'rxjs';
 import {
-  Category,
-  Product,
-  Promotion,
-  PromotionPayload,
-  PromotionStatus,
+  Branch,
   canSell,
+  Category,
   categoryPath,
   discountLabel,
   isDiscontinued,
+  Product,
+  Promotion,
+  PromotionPayload,
   promotionStatus,
+  PromotionStatus,
   todayIso,
 } from '@core/models';
 import { httpErrorShown } from '@core/http/http-error-shown';
@@ -40,6 +41,8 @@ export class PromotionsStore {
   private readonly _promotions = signal<Promotion[]>([]);
   private readonly _products = signal<Product[]>([]);
   private readonly _categories = signal<Category[]>([]);
+  private readonly _branches = signal<Branch[]>([]);
+  readonly branches = this._branches.asReadonly();
   private readonly _loading = signal(false);
   private loaded = false;
 
@@ -94,17 +97,26 @@ export class PromotionsStore {
       promotions: this.api.list(),
       products: this.api.products(),
       categories: this.api.categories(),
+      branches: this.api.branches(),
     })
       .pipe(finalize(() => this._loading.set(false)))
       .subscribe({
-        next: ({ promotions, products, categories }) => {
+        next: ({ promotions, products, categories, branches }) => {
           this._promotions.set(promotions);
           this._products.set(products);
           this._categories.set(categories);
+          this._branches.set(branches);
           this.loaded = true;
         },
         error: httpErrorShown,
       });
+  }
+
+  /** "ทุกสาขา" or the codes of the branches a promotion is limited to (D2). */
+  branchText(p: Pick<Promotion, 'branchIds'>): string {
+    if (!p.branchIds?.length) return 'ทุกสาขา';
+    const codes = new Map(this._branches().map((b) => [b.id, b.code]));
+    return p.branchIds.map((id) => codes.get(id) ?? `#${id}`).join(', ');
   }
 
   getById(id: number): Observable<Promotion> {

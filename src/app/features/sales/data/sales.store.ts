@@ -1,6 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, forkJoin, map, of } from 'rxjs';
 import {
+  Branch,
+  BranchScope,
   CreditNote,
   CreditNotePayload,
   Exchange,
@@ -21,6 +23,7 @@ import {
   terminalLabel,
   toIsoDate,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { SalesApi } from './sales-api.service';
 
 /**
@@ -32,7 +35,12 @@ import { SalesApi } from './sales-api.service';
 export class SalesStore {
   private readonly api = inject(SalesApi);
 
+  private readonly auth = inject(AuthService);
+
   private readonly _storeInfo = signal<StoreInfo | null>(null);
+  /** Seller details of other branches, for documents made there (E22) */
+  private readonly _branchInfo = signal<ReadonlyMap<number, StoreInfo>>(new Map());
+  private readonly branchInfoLoading = new Set<number>();
   private readonly _promotions = signal<Promotion[]>([]);
   private readonly _methods = signal<PaymentMethod[]>([]);
   private readonly _terminals = signal<PosTerminal[]>([]);
@@ -48,8 +56,8 @@ export class SalesStore {
     () => new Map(this._promotions().map((p) => [p.id, `${p.code} ${p.name}`])),
   );
 
-  list(from: string | null, to: string | null): Observable<Sale[]> {
-    return this.api.list(from, to);
+  list(from: string | null, to: string | null, branch?: BranchScope): Observable<Sale[]> {
+    return this.api.list(from, to, branch);
   }
 
   get(id: number): Observable<Sale> {
@@ -60,8 +68,12 @@ export class SalesStore {
     return this.api.creditNotesOf(saleId);
   }
 
-  creditNotes(from: string | null, to: string | null): Observable<CreditNote[]> {
-    return this.api.creditNotes(from, to);
+  creditNotes(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<CreditNote[]> {
+    return this.api.creditNotes(from, to, branch);
   }
 
   /** Bills sold or voided in a shift, newest first (bill list `?shift=`). */
@@ -120,6 +132,26 @@ export class SalesStore {
     this.api.posTerminals().subscribe({ next: (list) => this._terminals.set(list), error: retry });
   }
 
+  /**
+   * Seller details to print on a document of `branchId` (E22): the working branch's from the
+   * lookups, another branch's once `loadBranchInfo()` brought it (null until then).
+   */
+  storeInfoFor(branchId: number | null | undefined): StoreInfo | null {
+    if (branchId == null || branchId === this.auth.currentBranch()?.id) return this._storeInfo();
+    return this._branchInfo().get(branchId) ?? null;
+  }
+
+  /** Fetches another branch's seller details once per page load (see `storeInfoFor()`). */
+  loadBranchInfo(branchId: number | null | undefined): void {
+    if (branchId == null || branchId === this.auth.currentBranch()?.id) return;
+    if (this._branchInfo().has(branchId) || this.branchInfoLoading.has(branchId)) return;
+    this.branchInfoLoading.add(branchId);
+    this.api.storeInfo(branchId).subscribe({
+      next: (info) => this._branchInfo.update((m) => new Map(m).set(branchId, info)),
+      error: () => this.branchInfoLoading.delete(branchId),
+    });
+  }
+
   /** 'เครื่อง 2 · แคชเชียร์หน้าร้าน'; '-' when unknown (bills from before the registry). */
   terminalLabel(id: number | null | undefined): string {
     return id ? terminalLabel(id, this._terminals()) : '-';
@@ -130,10 +162,10 @@ export class SalesStore {
   }
 
   /** Shifts opened within the range + the variance per cashier over them. */
-  shiftList(from: string | null, to: string | null) {
+  shiftList(from: string | null, to: string | null, branch?: BranchScope) {
     return forkJoin({
-      shifts: this.api.shifts(from, to),
-      report: this.api.varianceReport(from, to),
+      shifts: this.api.shifts(from, to, branch),
+      report: this.api.varianceReport(from, to, branch),
     });
   }
 
@@ -166,16 +198,21 @@ export class SalesStore {
   }
 
   /** Everything the monthly sales tax report needs ('YYYY-MM'). */
-  taxReportData(month: string) {
+  taxReportData(month: string, branch?: BranchScope) {
     const from = `${month}-01`;
     // Last day of the month (a real server would reject 2026-02-31).
     const [y, m] = month.split('-').map(Number);
     const to = toIsoDate(new Date(y, m, 0));
     return forkJoin({
-      sales: this.api.list(from, to),
-      invoices: this.api.taxInvoices(from, to),
-      notes: this.api.creditNotes(from, to),
+      sales: this.api.list(from, to, branch),
+      invoices: this.api.taxInvoices(from, to, branch),
+      notes: this.api.creditNotes(from, to, branch),
     });
+  }
+
+  /** Every branch of the company, closed ones too (summary of every branch). */
+  branches(): Observable<Branch[]> {
+    return this.api.branches();
   }
 
   taxInvoiceOf(saleId: number): Observable<TaxInvoice | null> {

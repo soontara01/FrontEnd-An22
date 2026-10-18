@@ -5,7 +5,7 @@
   align-items: flex-start;
 }
 
-form {
+.forms {
   flex: 1 1 360px;
   min-width: 0;
 }
@@ -77,4 +77,14 @@ form {
 .section {
   font: var(--mat-sys-title-small);
   margin: 16px 0 4px;
+
+  &.first {
+    margin-top: 0;
+  }
+}
+
+form + form {
+  margin-top: 24px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mat-sys-outline-variant);
 }

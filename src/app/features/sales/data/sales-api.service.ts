@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
+  Branch,
+  BranchScope,
   CashMovement,
   CreditNote,
   CreditNotePayload,
@@ -25,6 +27,7 @@ import {
   TaxInvoice,
   TaxInvoiceBuyer,
   normalizeSale,
+  normalizeShift,
 } from '@core/models';
 
 /** HTTP calls for the sales feature (provided in sales.routes.ts). */
@@ -33,9 +36,9 @@ export class SalesApi {
   private readonly api = inject(ApiService);
 
   /** Bills sold within a local-date range (null = open end), newest first. */
-  list(from: string | null, to: string | null): Observable<Sale[]> {
+  list(from: string | null, to: string | null, branch?: BranchScope): Observable<Sale[]> {
     return this.api
-      .get<Sale[]>('sales', rangeParams(from, to))
+      .get<Sale[]>('sales', rangeParams(from, to, branch))
       .pipe(map((l) => l.map(normalizeSale)));
   }
 
@@ -61,13 +64,25 @@ export class SalesApi {
   }
 
   /** Credit notes issued within a local-date range, newest first. */
-  creditNotes(from: string | null, to: string | null): Observable<CreditNote[]> {
-    return this.api.get<CreditNote[]>('credit-notes', rangeParams(from, to));
+  creditNotes(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<CreditNote[]> {
+    return this.api.get<CreditNote[]>('credit-notes', rangeParams(from, to, branch));
+  }
+
+  branches(): Observable<Branch[]> {
+    return this.api.get<Branch[]>('branches');
   }
 
   /** Full tax invoices issued within a local-date range, oldest first. */
-  taxInvoices(from: string | null, to: string | null): Observable<TaxInvoice[]> {
-    return this.api.get<TaxInvoice[]>('tax-invoices', rangeParams(from, to));
+  taxInvoices(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<TaxInvoice[]> {
+    return this.api.get<TaxInvoice[]>('tax-invoices', rangeParams(from, to, branch));
   }
 
   /** The bill's full tax invoice, or null when none was issued. */
@@ -115,8 +130,12 @@ export class SalesApi {
     return this.api.get<SerialNumber[]>(`products/${productId}/serials`);
   }
 
-  storeInfo(): Observable<StoreInfo> {
-    return this.api.get<StoreInfo>('settings/store');
+  /** Seller details for printing: the working branch's, or `branchId`'s (a document's, E22). */
+  storeInfo(branchId?: number): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>(
+      'settings/store',
+      branchId ? { branchId: String(branchId) } : {},
+    );
   }
 
   posTerminals(): Observable<PosTerminal[]> {
@@ -132,12 +151,14 @@ export class SalesApi {
   }
 
   /** POS shifts opened within a local-date range (null = open end), newest first. */
-  shifts(from: string | null, to: string | null): Observable<Shift[]> {
-    return this.api.get<Shift[]>('shifts', rangeParams(from, to));
+  shifts(from: string | null, to: string | null, branch?: BranchScope): Observable<Shift[]> {
+    return this.api
+      .get<Shift[]>('shifts', rangeParams(from, to, branch))
+      .pipe(map((l) => l.map(normalizeShift)));
   }
 
   shift(id: number): Observable<Shift> {
-    return this.api.get<Shift>(`shifts/${id}`);
+    return this.api.get<Shift>(`shifts/${id}`).pipe(map(normalizeShift));
   }
 
   /** X / Z report; per-method lines only for admins while the shift is open. */
@@ -162,12 +183,19 @@ export class SalesApi {
   }
 
   approveShift(id: number): Observable<Shift> {
-    return this.api.post<Shift>(`shifts/${id}/approve`, {});
+    return this.api.post<Shift>(`shifts/${id}/approve`, {}).pipe(map(normalizeShift));
   }
 
   /** Variance per cashier over shifts opened within the range. */
-  varianceReport(from: string | null, to: string | null): Observable<VarianceReportRow[]> {
-    return this.api.get<VarianceReportRow[]>('shifts/variance-report', rangeParams(from, to));
+  varianceReport(
+    from: string | null,
+    to: string | null,
+    branch?: BranchScope,
+  ): Observable<VarianceReportRow[]> {
+    return this.api.get<VarianceReportRow[]>(
+      'shifts/variance-report',
+      rangeParams(from, to, branch),
+    );
   }
 
   /** Bills sold or voided in a shift, newest first. */
@@ -183,9 +211,15 @@ export class SalesApi {
   }
 }
 
-function rangeParams(from: string | null, to: string | null): Record<string, string> {
+/** Date range + branch (`?branchId=<id>|all`, none = the working branch, E23). */
+function rangeParams(
+  from: string | null,
+  to: string | null,
+  branch?: BranchScope,
+): Record<string, string> {
   const params: Record<string, string> = {};
   if (from) params['from'] = from;
   if (to) params['to'] = to;
+  if (branch !== undefined) params['branchId'] = String(branch);
   return params;
 }

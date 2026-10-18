@@ -30,7 +30,34 @@
       >
         <mat-icon>{{ menuOpen() && !isCompact() ? 'menu_open' : 'menu' }}</mat-icon>
       </button>
-      <span class="spacer"></span>
+      <!-- Always visible so nobody sells in the wrong company / branch (saas-plan section 8). -->
+      @if (auth.branches().length > 1) {
+        <div class="tenant">
+          <button
+            mat-button
+            class="switch"
+            [matMenuTriggerFor]="branchMenu"
+            [title]="tenantLabel() + ' — สลับสาขา'"
+          >
+            <span class="label">{{ tenantLabel() }}</span>
+            <mat-icon iconPositionEnd>arrow_drop_down</mat-icon>
+          </button>
+        </div>
+        <mat-menu #branchMenu="matMenu">
+          @for (b of auth.branches(); track b.id) {
+            <button
+              mat-menu-item
+              [disabled]="b.id === auth.currentBranch()?.id"
+              (click)="switchBranch(b.id)"
+            >
+              <mat-icon>{{ b.id === auth.currentBranch()?.id ? 'check' : 'store' }}</mat-icon>
+              <span>{{ b.code }} · {{ b.name }}</span>
+            </button>
+          }
+        </mat-menu>
+      } @else {
+        <span class="tenant" [title]="tenantLabel()">{{ tenantLabel() }}</span>
+      }
 
       <button
         mat-icon-button
@@ -65,6 +92,13 @@
     </div>
 
     <main class="content">
+      @if (auth.billing(); as notice) {
+        <div [class]="'billing-notice no-print ' + notice.level" role="status">
+          <mat-icon>{{ notice.level === 'error' ? 'error' : 'info' }}</mat-icon>
+          <span>{{ notice.text }}</span>
+          <a href="/account/subscription">ดูแพ็กเกจ / ใบแจ้งหนี้</a>
+        </div>
+      }
       <router-outlet />
     </main>
   </mat-sidenav-content>

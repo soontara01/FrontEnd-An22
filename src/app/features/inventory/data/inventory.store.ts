@@ -1,6 +1,8 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, forkJoin, map, tap } from 'rxjs';
 import {
+  Branch,
+  BranchStockRow,
   Product,
   SerialNumber,
   SerialRemoveStatus,
@@ -16,6 +18,7 @@ import {
   suggestReorderQty,
 } from '@core/models';
 import { httpErrorShown } from '@core/http/http-error-shown';
+import { NotificationService } from '@core/services/notification.service';
 import { InventoryApi } from './inventory-api.service';
 
 /** One SKU that should be reordered now. */
@@ -47,6 +50,7 @@ export interface ReorderGroup {
 @Injectable()
 export class InventoryStore {
   private readonly api = inject(InventoryApi);
+  private readonly notify = inject(NotificationService);
 
   private readonly _products = signal<Product[]>([]);
   private readonly _suppliers = signal<Supplier[]>([]);
@@ -138,8 +142,21 @@ export class InventoryStore {
       .pipe(tap((product) => this.replace(product)));
   }
 
-  movements(productId: number, from?: string, to?: string): Observable<StockCardResult> {
-    return this.api.movements(productId, from, to);
+  movements(
+    productId: number,
+    from?: string,
+    to?: string,
+    branchId?: number,
+  ): Observable<StockCardResult> {
+    return this.api.movements(productId, from, to, branchId);
+  }
+
+  branchStock(productId: number): Observable<BranchStockRow[]> {
+    return this.api.branchStock(productId);
+  }
+
+  branches(): Observable<Branch[]> {
+    return this.api.branches();
   }
 
   serials(productId: number): Observable<SerialNumber[]> {
@@ -153,6 +170,12 @@ export class InventoryStore {
     note = '',
   ): Observable<Product> {
     return this.api.receiveSerials(productId, serials, unitCost, note).pipe(
+      tap((result) => {
+        const moved = result.fromOtherBranch ?? [];
+        if (!moved.length) return;
+        const list = moved.map((m) => `${m.serial} (สาขา ${m.branchCode})`).join(', ');
+        this.notify.info(`${list} เคยอยู่สาขาอื่น — ถ้าย้ายของระหว่างสาขา ให้ใช้เมนูโอนสินค้า`);
+      }),
       map((result) => result.product),
       tap((product) => this.replace(product)),
     );

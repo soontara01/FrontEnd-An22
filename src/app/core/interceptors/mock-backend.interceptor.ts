@@ -13,7 +13,38 @@ import {
   Category,
   CategoryLevel,
   CategoryPayload,
+  Branch,
+  BranchHere,
+  BranchStock,
+  branchDocPrefix,
+  BranchStockRow,
+  Company,
+  HEAD_OFFICE_BRANCH_NO,
+  withBranchStock,
+  Transfer,
+  TransferLine,
+  TransferPayload,
+  TransferReceivePayload,
+  cancelTransferError,
+  receiveTransferError,
+  transferError,
+  branchScopeError,
+  parseBranchScope,
+  BRANCH_DEFAULTS,
+  BranchDetails,
+  BranchPayload,
+  CompanyInfo,
+  COMPANY_INFO_DEFAULTS,
+  branchDetailsError,
+  branchError,
+  companyInfoError,
+  companyInfoOf,
+  normalizeBranch,
+  normalizeCompanyInfo,
+  storeInfoOf,
   LoginRequest,
+  MeResponse,
+  normalizeCompanyCode,
   LoginResponse,
   PAYMENT_METHOD_DEFAULTS,
   PRODUCT_DEFAULTS,
@@ -52,8 +83,64 @@ import {
   Supplier,
   SupplierPayload,
   User,
+  NewUserPayload,
   UserPayload,
+  normalizeUsername,
+  canWorkIn,
+  isCompanyAdmin,
+  passwordError,
+  userBranchError,
   userChangeError,
+  hasAdminRights,
+  isOwner,
+  ROLE_LABEL,
+  CompanyDeletion,
+  CompanyExport,
+  DELETION_WAIT_DAYS,
+  DeletionRequest,
+  EXPORT_SCHEMA_VERSION,
+  deletionRequestError,
+  purgeError,
+  AuditActorKind,
+  PlatformAdmin,
+  PlatformEmail,
+  PlatformCompanyDetail,
+  PlatformCompanyRow,
+  PlatformLoginResponse,
+  payInvoiceError,
+  reactivateCompanyError,
+  suspendCompanyError,
+  FORGOT_PASSWORD_ANSWER,
+  OnboardingCounts,
+  RESET_LINK_MINUTES,
+  SignupPayload,
+  TRIAL_DAYS,
+  signupError,
+  BillingInvoice,
+  CompanySuspendReason,
+  INVOICE_DUE_DAYS,
+  Subscription,
+  addMonthsIso,
+  billingNotice,
+  periodsToInvoice,
+  subscriptionStatus,
+  LimitKind,
+  PLANS,
+  PlanId,
+  PlanUsage,
+  SubscriptionInfo,
+  planLimitError,
+  planOf,
+  planUsage,
+  AuditEvent,
+  AuditRef,
+  filterAuditEvents,
+  parseAuditQuery,
+  ownerRoleError,
+  ownerTransferError,
+  userIdentityError,
+  userScopeError,
+  usernameError,
   allBarcodes,
   canPurchase,
   categoryPath,
@@ -71,11 +158,13 @@ import {
   isValidThaiTaxId,
   paymentMethodError,
   withPaymentTypeRules,
+  promotionBranchScopeError,
   promotionError,
   promotionStatus,
   hasStarted,
   serialFormatError,
   todayIso,
+  addDaysIso,
   toIsoDate,
   cartError,
   paymentError,
@@ -93,6 +182,7 @@ import {
   moneyProblem,
   moneyProblemText,
   normalizeSale,
+  normalizeShift,
   normalizeStoreInfo,
   creditNoteError,
   draftCreditNote,
@@ -149,8 +239,20 @@ import { StorageService } from '../services/storage.service';
 interface MockDb {
   users: User[];
   nextId: number;
+  /** SKU master (company level); stock / avgCost / min / max live in `branchStock`. */
   products: Product[];
   nextProductId: number;
+  /**
+   * Stock of each SKU per branch (SaaS step 3, D1). `products` is filled in with the request's
+   * branch on read (`atBranch()`) and written back here before saving (`storeBranchStock()`).
+   */
+  branchStock: BranchStock[];
+  /** Set once the single store-wide stock moved into the first branch (`migrateBranchStock()`). */
+  branchStockMigrated?: boolean;
+  /** Set once older documents got their terminal's branch (`fixDocumentBranches()`, E20). */
+  docBranchFixed?: boolean;
+  /** Stock transfers between branches (SaaS step 5). */
+  transfers: Transfer[];
   sales: Sale[];
   /** Serial numbers of serial-controlled SKUs (history kept; removal changes status). */
   serials: SerialNumber[];
@@ -173,8 +275,14 @@ interface MockDb {
   /** Payment method master (POS tender buttons), ordered by sortOrder. */
   paymentMethods: PaymentMethod[];
   nextPaymentMethodId: number;
-  /** The store's details printed on receipts (Settings menu). */
+  /**
+   * The details documents print for the request's branch: `storeInfoOf(companyInfo, branch)`, set
+   * per request and never saved (E11). Older stored dbs kept the whole store here; it is split into
+   * `companyInfo` + branch details once (`splitStoreInfo()`).
+   */
   storeInfo: StoreInfo;
+  /** Company settings (Settings → ข้อมูลบริษัท). */
+  companyInfo: CompanyInfo;
   /** Menus the `user` role sees (admins see all); set on `/users/menu-access`. */
   menuAccess: MenuAccess;
   /** Credit notes (returns after the day of sale). */
@@ -198,42 +306,128 @@ interface MockDb {
    * Z reports printed, filled into their missing snapshots on read.
    */
   legacyPosId?: string;
+  /** Branches of the company with their printed details (seed: HQ + BN). */
+  branches: Branch[];
+  nextBranchId: number;
+  /** Passwords by user id (a real API keeps a hash); none = `admin` for the first user, else `1234` (E10). */
+  passwords: Record<number, string>;
+  /** Audit log (E40): appended by `recordAudit()` / `pushAudit()`, never edited or deleted. */
+  auditLog: AuditEvent[];
+  nextAuditId: number;
 }
+
+/**
+ * A tenant in the platform registry with its package (E34); name and tax ID come from the
+ * tenant's own `companyInfo`.
+ */
+type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & {
+  planId: PlanId;
+  /** Billing schedule (E35) */
+  subscription: Subscription;
+  /** Why `active` is false (null while active): overdue billing, the platform admin, deletion */
+  suspendedReason: CompanySuspendReason | null;
+  /** Its data was deleted (E39): the entry stays so the code is never reused */
+  deletedAt?: string | null;
+  /** Why the platform admin suspended it (`suspendedReason: 'platform'`) */
+  suspendNote?: string;
+  /** The owner's deletion request (E39; `suspendedReason: 'deletion'` while pending) */
+  deletion?: CompanyDeletion | null;
+  /** Name when its data was deleted (the registry keeps no other data of it) */
+  deletedName?: string;
+};
+
+/**
+ * Platform-level data (SaaS step 6): the registry of every company. Each company's own data is a
+ * separate `MockDb` (`tenantKey()`), so handlers keep treating "the db" as the tenant — like the
+ * real API, where RLS shows a request only its own company's rows (D7).
+ */
+interface MockPlatform {
+  companies: StoredCompany[];
+  nextCompanyId: number;
+  /** Invoices of the SaaS to every company (E35) */
+  invoices: BillingInvoice[];
+  nextInvoiceId: number;
+  /** Password reset links of owners (E41): single use, `RESET_LINK_MINUTES` */
+  resetTokens: ResetToken[];
+  /** E-mails the platform "sent" (the mock sends none — read on the platform pages) */
+  outbox: PlatformEmail[];
+  nextEmailId: number;
+  /** The SaaS operator's admins (E36) — not users of any company */
+  platformAdmins: PlatformAdmin[];
+  /** Passwords by platform admin id; none = `platform` */
+  platformPasswords: Record<number, string>;
+}
+
+interface ResetToken {
+  token: string;
+  companyId: number;
+  userId: number;
+  /** ISO time */
+  expiresAt: string;
+  usedAt: string | null;
+}
+
+/** The seed company; its data stays under the pre-SaaS key `mock.db` (older stored data). */
+const DEMO_COMPANY: StoredCompany = {
+  id: 1,
+  code: 'DEMO',
+  active: true,
+  planId: 'pro',
+  subscription: { trialEndsOn: null, nextInvoiceOn: '9999-12-31' },
+  suspendedReason: null,
+};
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
 const DB_KEY = 'mock.db';
+const PLATFORM_KEY = 'mock.platform';
+
+/** Storage key of a company's data: `mock.db` for DEMO, `mock.db.<id>` for the others. */
+const tenantKey = (companyId: number): string =>
+  companyId === DEMO_COMPANY.id ? DB_KEY : `${DB_KEY}.${companyId}`;
 
 const SEED_USERS: User[] = [
   {
     id: 1,
+    username: 'admin',
     name: 'Admin',
     email: 'admin@example.com',
-    role: 'admin',
+    role: 'owner',
     active: true,
+    branchIds: [],
+    allBranches: true,
     createdAt: '2026-01-05T09:00:00Z',
   },
   {
     id: 2,
+    username: 'somchai',
     name: 'สมชาย ใจดี',
     email: 'somchai@example.com',
     role: 'user',
     active: true,
+    branchIds: [1],
+    allBranches: false,
     createdAt: '2026-02-11T10:30:00Z',
   },
   {
     id: 3,
+    username: 'somying',
     name: 'สมหญิง รักงาน',
     email: 'somying@example.com',
     role: 'user',
     active: false,
+    branchIds: [1],
+    allBranches: false,
     createdAt: '2026-03-20T14:15:00Z',
   },
   {
     id: 4,
+    username: 'john',
     name: 'John Doe',
     email: 'john@example.com',
     role: 'user',
     active: true,
+    branchIds: [1],
+    allBranches: false,
     createdAt: '2026-05-02T08:45:00Z',
   },
 ];
@@ -764,9 +958,33 @@ export const SEED_STORE_INFO: StoreInfo = {
   receiptFooter: 'ขอบคุณที่ใช้บริการ · เปลี่ยน/คืนสินค้าภายใน 7 วันพร้อมใบเสร็จ',
 };
 
+const SEED_BRANCHES: Branch[] = [
+  {
+    id: 1,
+    code: 'HQ',
+    name: SEED_STORE_INFO.placeName,
+    branchNo: HEAD_OFFICE_BRANCH_NO,
+    address: SEED_STORE_INFO.address,
+    phone: SEED_STORE_INFO.phone,
+    receiptFooter: SEED_STORE_INFO.receiptFooter,
+    active: true,
+  },
+  {
+    id: 2,
+    code: 'BN',
+    name: 'ร้านไอทีดี คอมพิวเตอร์ สาขาบางนา',
+    branchNo: '00001',
+    address: '1/23 ถนนบางนา-ตราด แขวงบางนาใต้ เขตบางนา กรุงเทพฯ 10260',
+    phone: '02-765-4321',
+    receiptFooter: SEED_STORE_INFO.receiptFooter,
+    active: true,
+  },
+];
+
 const SEED_POS_TERMINALS: PosTerminal[] = [
-  { id: 1, name: 'แคชเชียร์หน้าร้าน', posId: 'E051234567890', active: true },
-  { id: 2, name: 'แคชเชียร์โซนมือถือ', posId: 'E051234567891', active: true },
+  { id: 1, name: 'แคชเชียร์หน้าร้าน', posId: 'E051234567890', branchId: 1, active: true },
+  { id: 2, name: 'แคชเชียร์โซนมือถือ', posId: 'E051234567891', branchId: 1, active: true },
+  { id: 3, name: 'แคชเชียร์สาขาบางนา', posId: 'E051234567892', branchId: 2, active: true },
 ];
 
 const seedDb = (): MockDb => ({
@@ -774,6 +992,8 @@ const seedDb = (): MockDb => ({
   nextId: SEED_USERS.length + 1,
   products: [...SEED_PRODUCTS],
   nextProductId: SEED_PRODUCTS.length + 1,
+  branchStock: [],
+  transfers: [],
   sales: [...SEED_SALES],
   serials: [],
   nextSerialId: 1,
@@ -790,6 +1010,7 @@ const seedDb = (): MockDb => ({
   paymentMethods: SEED_PAYMENT_METHODS.map((x) => structuredClone(x)),
   nextPaymentMethodId: SEED_PAYMENT_METHODS.length + 1,
   storeInfo: { ...SEED_STORE_INFO },
+  companyInfo: companyInfoOf(SEED_STORE_INFO),
   menuAccess: { userMenus: [...DEFAULT_USER_MENUS] },
   creditNotes: [],
   exchanges: [],
@@ -799,45 +1020,162 @@ const seedDb = (): MockDb => ({
   drawerOpens: [],
   shiftAdjustments: [],
   posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
+  branches: SEED_BRANCHES.map((b) => ({ ...b })),
+  nextBranchId: SEED_BRANCHES.length + 1,
+  passwords: {},
+  auditLog: [],
+  nextAuditId: 1,
 });
 
-const LATENCY_MS = 300;
-
-/** The user of the request being handled (set by the interceptor before `handle()`). */
-let actor: User | undefined;
-/** Name recorded as cashier / issuer on documents. */
-const actorName = (): string => actor?.name ?? '';
-/** Admin-only rules (exchange window, manual-discount ceiling) follow the logged-in user. */
-const actorIsAdmin = (): boolean => actor?.role === 'admin';
-/** POS terminal (cash drawer) of the request: header `X-Terminal-Id`, null = not set on the device. */
-let terminalId: number | null = null;
+/**
+ * Base of a company other than DEMO: no sample data, and the one-time migrations of pre-SaaS data
+ * already count as done (such a company never had any). Its stored db holds at least its branches,
+ * users and `companyInfo`.
+ */
+const blankDb = (): MockDb => ({
+  users: [],
+  nextId: 1,
+  products: [],
+  nextProductId: 1,
+  branchStock: [],
+  branchStockMigrated: true,
+  docBranchFixed: true,
+  transfers: [],
+  sales: [],
+  serials: [],
+  nextSerialId: 1,
+  prices: [],
+  nextPriceId: 1,
+  categories: [],
+  nextCategoryId: 1,
+  suppliers: [],
+  nextSupplierId: 1,
+  movements: [],
+  nextMovementId: 1,
+  promotions: [],
+  nextPromotionId: 1,
+  paymentMethods: [],
+  nextPaymentMethodId: 1,
+  storeInfo: { ...STORE_INFO_DEFAULTS },
+  companyInfo: { ...COMPANY_INFO_DEFAULTS },
+  menuAccess: { userMenus: [...DEFAULT_USER_MENUS] },
+  creditNotes: [],
+  exchanges: [],
+  taxInvoices: [],
+  shifts: [],
+  cashMovements: [],
+  drawerOpens: [],
+  shiftAdjustments: [],
+  shiftsEnabled: true,
+  posTerminals: [],
+  branches: [],
+  nextBranchId: 1,
+  passwords: {},
+  auditLog: [],
+  nextAuditId: 1,
+});
 
 /**
- * Fake backend for development without a real API.
- * Registered only when `environment.useMock` is true (see app.config.ts).
+ * The platform registry. Stored dbs from before step 6 kept `companies` inside the DEMO db: they
+ * move here once (`changed`); a fresh install starts with DEMO alone.
  */
-export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
-  const base = environment.apiUrl.replace(/\/$/, '');
-  if (!original.url.startsWith(base + '/')) return next(original);
-  // Accept a query string written into the URL as well as HttpParams (like a real server).
-  const [url, query] = original.url.split('?');
-  const fromUrl = new HttpParams({ fromString: query ?? '' });
-  const params = fromUrl
-    .keys()
-    .reduce((acc, key) => acc.set(key, fromUrl.get(key) ?? ''), original.params);
-  const req = original.clone({ url, params });
+function loadPlatform(storage: StorageService): { platform: MockPlatform; changed: boolean } {
+  const stored = storage.get<Partial<MockPlatform>>(PLATFORM_KEY);
+  // Companies registered before packages / billing (steps 6.4 – 6.5): DEMO gets Pro, any other
+  // the smallest; no trial, first invoice on the 1st of next month; a suspended one = the platform.
+  const firstOfNextMonth = addMonthsIso(`${todayIso().slice(0, 7)}-01`, 1);
+  const filled = (c: Partial<StoredCompany> & Pick<StoredCompany, 'id' | 'active'>) =>
+    ({
+      ...c,
+      planId: c.planId ?? (c.id === DEMO_COMPANY.id ? 'pro' : 'starter'),
+      subscription: c.subscription ?? { trialEndsOn: null, nextInvoiceOn: firstOfNextMonth },
+      suspendedReason:
+        c.suspendedReason !== undefined ? c.suspendedReason : c.active ? null : 'platform',
+    }) as StoredCompany;
+  const legacy = storage.get<{ companies?: StoredCompany[] }>(DB_KEY)?.companies;
+  const fresh = [{ id: DEMO_COMPANY.id, code: DEMO_COMPANY.code, active: true }];
+  const raw: (Partial<StoredCompany> & Pick<StoredCompany, 'id' | 'active'>)[] =
+    stored?.companies ?? (legacy?.length ? legacy : fresh);
+  const companies = raw.map(filled);
+  return {
+    platform: {
+      companies,
+      nextCompanyId: stored?.nextCompanyId ?? Math.max(0, ...companies.map((c) => c.id)) + 1,
+      invoices: stored?.invoices ?? [],
+      nextInvoiceId: stored?.nextInvoiceId ?? 1,
+      resetTokens: stored?.resetTokens ?? [],
+      outbox: stored?.outbox ?? [],
+      nextEmailId: stored?.nextEmailId ?? 1,
+      platformAdmins: stored?.platformAdmins ?? [
+        { id: 1, username: 'platform', name: 'ผู้ดูแลแพลตฟอร์ม' },
+      ],
+      platformPasswords: stored?.platformPasswords ?? {},
+    },
+    changed: !stored?.companies || raw.some((c) => !c.subscription || !c.planId),
+  };
+}
 
-  const storage = inject(StorageService);
+/**
+ * Issues the invoices a company's schedule has reached by today (package price of the day, VAT
+ * included) and suspends it once an unpaid one is past the grace period (E35). True = changed.
+ */
+function refreshBilling(platform: MockPlatform, company: StoredCompany, today: string): boolean {
+  const { periods, nextInvoiceOn } = periodsToInvoice(company.subscription.nextInvoiceOn, today);
+  for (const period of periods) {
+    const prefix = `SUB-${period.start.slice(0, 4)}${period.start.slice(5, 7)}-`;
+    const seq = platform.invoices.filter((i) => i.invoiceNo.startsWith(prefix)).length + 1;
+    const plan = planOf(company.planId);
+    platform.invoices.push({
+      id: platform.nextInvoiceId++,
+      companyId: company.id,
+      invoiceNo: `${prefix}${String(seq).padStart(4, '0')}`,
+      planId: plan.id,
+      periodStart: period.start,
+      periodEnd: period.end,
+      amount: plan.monthlyPrice,
+      issuedOn: period.start,
+      dueDate: addDaysIso(period.start, INVOICE_DUE_DAYS),
+      status: 'open',
+      paidAt: null,
+    });
+  }
+  company.subscription = { ...company.subscription, nextInvoiceOn };
+  const status = subscriptionStatus(company.subscription, invoicesOf(platform, company.id), today);
+  if (status === 'suspended' && company.active) {
+    company.active = false;
+    company.suspendedReason = 'overdue';
+    return true;
+  }
+  return periods.length > 0;
+}
+
+const invoicesOf = (platform: MockPlatform, companyId: number): BillingInvoice[] =>
+  platform.invoices.filter((i) => i.companyId === companyId);
+
+/**
+ * One company's data with defaults filled in and the one-time migrations of older stored data run
+ * (`changed` = something was migrated, so the db is saved even on a GET). Only DEMO can hold
+ * pre-SaaS data: the migrations that read the raw stored db get it only there.
+ */
+function loadTenantDb(
+  storage: StorageService,
+  companyId: number,
+): { db: MockDb; changed: boolean } {
+  const demo = companyId === DEMO_COMPANY.id;
+  const stored = storage.get<Partial<MockDb>>(tenantKey(companyId));
+  const legacy = demo ? stored : null;
   // Merge with seed so collections added later still exist in an older stored db.
-  const stored = storage.get<Partial<MockDb>>(DB_KEY);
-  const db: MockDb = { ...seedDb(), ...stored };
+  const db: MockDb = { ...(demo ? seedDb() : blankDb()), ...stored };
   // Products stored before the SKU master fields existed get defaults filled in.
   db.products = db.products.map((p) => ({ ...PRODUCT_DEFAULTS, ...p }));
   db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
   db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
   db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
   db.sales = db.sales.map(withSaleDefaults);
-  db.storeInfo = { ...STORE_INFO_DEFAULTS, ...db.storeInfo };
+  db.shifts = db.shifts.map(normalizeShift);
+  const branched = splitStoreInfo(db, legacy);
+  fillUserDefaults(db);
+  const owned = fillOwner(db);
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
     ...t,
@@ -858,24 +1196,819 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   refreshCurrentPrices(db);
   refreshCategoryInfo(db);
   refreshSupplierInfo(db);
-  // Serial SKUs with stock but no serials (seed / older data) get sample serials.
-  const generated = syncSerials(db);
-  const costed = migrateCosting(db);
+  // Older stored data: one store-wide stock → the first branch (+ sample stock for BN), once.
+  const stockMoved = migrateBranchStock(db);
   const shiftsOn = enableShifts(db);
-  const registered = migrateTerminals(db, stored);
+  const registered = migrateTerminals(db, legacy);
+  // Terminals registered before E8 stand in the first branch.
+  db.posTerminals = db.posTerminals.map((t) => ({
+    ...t,
+    branchId: t.branchId ?? db.branches[0].id,
+  }));
   fillTerminalSnapshots(db);
-  const path = req.url.slice(base.length + 1);
-  // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
-  actor = requestUser(req, db.users);
-  const terminal = Number(req.headers.get('X-Terminal-Id'));
-  terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
-  const response$ = handle(req, path, db);
-  if (generated || costed || shiftsOn || registered || req.method !== 'GET') {
-    storage.set(DB_KEY, db);
-  }
+  const docsFixed = fixDocumentBranches(db);
+  return { db, changed: stockMoved || docsFixed || shiftsOn || registered || branched || owned };
+}
 
+/** Saves one company's data; derived fields (`storeInfo`, the products' branch stock) never are. */
+function saveTenantDb(storage: StorageService, companyId: number, db: MockDb): void {
+  // `companies` moved to the platform registry (step 6); older stored dbs still carry it.
+  storage.set(tenantKey(companyId), {
+    ...db,
+    products: storeBranchStock(db),
+    storeInfo: undefined,
+    companies: undefined,
+  });
+}
+
+const LATENCY_MS = 300;
+
+/**
+ * The company of the request being handled (set before `handle()`, like `actor`): the registry's
+ * own record, so a handler changes it in place and sets `platformChanged` to have it saved.
+ */
+let tenant: StoredCompany = DEMO_COMPANY;
+/** The platform registry of this request (companies + billing). */
+let platform: MockPlatform = {
+  companies: [],
+  nextCompanyId: 1,
+  invoices: [],
+  nextInvoiceId: 1,
+  resetTokens: [],
+  outbox: [],
+  nextEmailId: 1,
+  platformAdmins: [],
+  platformPasswords: {},
+};
+let platformChanged = false;
+/** The user of the request being handled (set by the interceptor before `handle()`). */
+let actor: User | undefined;
+/** Name recorded as cashier / issuer on documents. */
+const actorName = (): string => actor?.name ?? '';
+/** Admin-only rules (exchange window, manual-discount ceiling) follow the logged-in user. */
+const actorIsAdmin = (): boolean => hasAdminRights(actor);
+/** POS terminal (cash drawer) of the request: header `X-Terminal-Id`, null = not set on the device. */
+let terminalId: number | null = null;
+/**
+ * Raw `X-Branch-Id` of the request (null = not sent — allowed in SaaS step 1, E2); checked against
+ * the user's branches in `handle()` (403). Branch-level data uses it from step 3.
+ */
+let branchHeader: string | null = null;
+/**
+ * Branch whose stock this request reads and moves: `X-Branch-Id`, else the first branch (reads
+ * only — stock writes without the header are refused, E17). Every write of step 3 happens there.
+ */
+let stockBranch = 1;
+
+/**
+ * Fake backend for development without a real API.
+ * Registered only when `environment.useMock` is true (see app.config.ts).
+ */
+export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
+  const base = environment.apiUrl.replace(/\/$/, '');
+  if (!original.url.startsWith(base + '/')) return next(original);
+  // Accept a query string written into the URL as well as HttpParams (like a real server).
+  const [url, query] = original.url.split('?');
+  const fromUrl = new HttpParams({ fromString: query ?? '' });
+  const params = fromUrl
+    .keys()
+    .reduce((acc, key) => acc.set(key, fromUrl.get(key) ?? ''), original.params);
+  const req = original.clone({ url, params });
+
+  const storage = inject(StorageService);
+  const path = req.url.slice(base.length + 1);
+  const loaded = loadPlatform(storage);
+  platform = loaded.platform;
+  const registryMoved = loaded.changed;
+  platformChanged = false;
+  const company = requestCompany(req, path, platform);
+  if (company && refreshBilling(platform, company, todayIso())) platformChanged = true;
+  const response$ =
+    path === 'platform' || path.startsWith('platform/')
+      ? platformResponse(req, path, storage)
+      : (publicResponse(req, path, storage) ??
+        (company ? tenantResponse(req, path, company, storage) : noTenant(req, path)));
+  // A handler that changed the request's company (package …) sets `platformChanged`.
+  if (registryMoved || platformChanged) storage.set(PLATFORM_KEY, platform);
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
 };
+
+/**
+ * The company a request belongs to: the one a login names by code, else the one in the token —
+ * the tenant never comes from the URL / body (saas-plan section 2). Undefined = no such company.
+ */
+function requestCompany(
+  req: HttpRequest<unknown>,
+  path: string,
+  registry: MockPlatform,
+): StoredCompany | undefined {
+  if (path === 'auth/login' && req.method === 'POST') {
+    const code = normalizeCompanyCode(
+      (req.body as Partial<LoginRequest> | null)?.companyCode ?? '',
+    );
+    return registry.companies.find((c) => c.code === code && !c.deletedAt);
+  }
+  // A deleted company (E39) has no data left: its code and tokens lead nowhere.
+  const id = tokenIds(req)?.companyId;
+  return registry.companies.find((c) => c.id === id && !c.deletedAt);
+}
+
+/**
+ * Requests without a session that are not a login (E37 / E41): signing up, asking for a password
+ * reset link, setting the new password. Null = not one of them.
+ */
+function publicResponse(
+  req: HttpRequest<unknown>,
+  path: string,
+  storage: StorageService,
+): Observable<HttpResponse<unknown>> | null {
+  if (req.method !== 'POST') return null;
+  terminalId = null;
+  if (path === 'auth/signup') return signup(req.body as SignupPayload, storage);
+  if (path === 'auth/forgot-password') return forgotPassword(req.body, storage);
+  if (path === 'auth/reset-password') return resetPassword(req.body, storage);
+  return null;
+}
+
+/**
+ * A new company (E37): registry entry on a `TRIAL_DAYS` trial of the chosen package, and its own
+ * data — first branch, the owner, one cash payment method, nothing else. Logs the owner in.
+ */
+function signup(
+  body: SignupPayload | null,
+  storage: StorageService,
+): Observable<HttpResponse<LoginResponse>> {
+  const p: SignupPayload = {
+    companyCode: body?.companyCode ?? '',
+    companyName: (body?.companyName ?? '').trim(),
+    taxId: (body?.taxId ?? '').trim(),
+    vatRegistered: !!body?.vatRegistered,
+    branch: { code: '', name: '', branchNo: '', address: '', phone: '', ...body?.branch },
+    owner: { name: '', username: '', email: '', password: '', ...body?.owner },
+    planId: body?.planId ?? ('' as PlanId),
+  };
+  const problem = signupError(p);
+  if (problem) return error(400, problem);
+  const code = normalizeCompanyCode(p.companyCode);
+  // Codes of deleted companies stay taken (E39): the registry keeps them.
+  if (platform.companies.some((c) => c.code === code)) return error(400, 'รหัสบริษัทนี้ถูกใช้แล้ว');
+  const today = todayIso();
+  const trialEndsOn = addDaysIso(today, TRIAL_DAYS);
+  const company: StoredCompany = {
+    id: platform.nextCompanyId++,
+    code,
+    active: true,
+    planId: p.planId,
+    subscription: { trialEndsOn, nextInvoiceOn: addDaysIso(trialEndsOn, 1) },
+    suspendedReason: null,
+  };
+  platform.companies.push(company);
+  platformChanged = true;
+  const owner: User = {
+    id: 1,
+    username: normalizeUsername(p.owner.username),
+    name: p.owner.name.trim(),
+    email: p.owner.email.trim(),
+    role: 'owner',
+    active: true,
+    branchIds: [],
+    allBranches: true,
+    createdAt: new Date().toISOString(),
+  };
+  const cash = SEED_PAYMENT_METHODS.find((m) => m.type === 'cash') as PaymentMethod;
+  const db: MockDb = {
+    ...blankDb(),
+    companyInfo: {
+      ...COMPANY_INFO_DEFAULTS,
+      name: p.companyName,
+      taxId: p.taxId,
+      vatRegistered: p.vatRegistered,
+    },
+    branches: [
+      normalizeBranch({
+        ...BRANCH_DEFAULTS,
+        ...p.branch,
+        code: p.branch.code.trim().toUpperCase(),
+        id: 1,
+        receiptFooter: 'ขอบคุณที่ใช้บริการ',
+        active: true,
+      }) as Branch,
+    ],
+    nextBranchId: 2,
+    users: [owner],
+    nextId: 2,
+    passwords: { [owner.id]: p.owner.password },
+    paymentMethods: [{ ...structuredClone(cash), id: 1, sortOrder: 1 }],
+    nextPaymentMethodId: 2,
+  };
+  tenant = company;
+  actor = owner;
+  branchHeader = null;
+  pushAudit(db, {
+    action: 'signup',
+    ref: { kind: 'company', id: company.id, label: code },
+    detail: `สมัครใช้งาน แพ็กเกจ ${planOf(p.planId).name} ทดลองใช้ถึง ${trialEndsOn}`,
+  });
+  saveTenantDb(storage, company.id, db);
+  return ok({ token: mockToken(company.id, owner.id), ...companySession(db, owner) });
+}
+
+/**
+ * An owner who forgot their password (E41): a single-use link valid `RESET_LINK_MINUTES`, "sent"
+ * to the owner's e-mail (the mock's outbox) when code + e-mail match — the answer is always the
+ * same, so nobody learns which companies or e-mails exist.
+ */
+function forgotPassword(body: unknown, storage: StorageService): Observable<HttpResponse<unknown>> {
+  const { companyCode, email } = (body ?? {}) as { companyCode?: string; email?: string };
+  const answer = ok({ message: FORGOT_PASSWORD_ANSWER });
+  const company = platform.companies.find(
+    (c) => c.code === normalizeCompanyCode(companyCode ?? ''),
+  );
+  const wanted = (email ?? '').trim().toLowerCase();
+  if (!company || company.deletedAt || !wanted) return answer;
+  const { db } = loadTenantDb(storage, company.id);
+  const owner = db.users.find((u) => isOwner(u) && u.active && u.email.toLowerCase() === wanted);
+  if (!owner) return answer;
+  const token = crypto.randomUUID();
+  platform.resetTokens.push({
+    token,
+    companyId: company.id,
+    userId: owner.id,
+    expiresAt: new Date(Date.now() + RESET_LINK_MINUTES * 60_000).toISOString(),
+    usedAt: null,
+  });
+  platform.outbox.push({
+    id: platform.nextEmailId++,
+    at: new Date().toISOString(),
+    companyId: company.id,
+    to: owner.email,
+    subject: `ตั้งรหัสผ่านใหม่ — บริษัท ${company.code}`,
+    body: `/auth/reset-password?token=${token}`,
+  });
+  platformChanged = true;
+  return answer;
+}
+
+/** Sets the owner's new password with a reset link (once, before it expires). */
+function resetPassword(body: unknown, storage: StorageService): Observable<HttpResponse<unknown>> {
+  const { token, password } = (body ?? {}) as { token?: string; password?: string };
+  const link = platform.resetTokens.find((t) => t.token === token);
+  const invalid = 'ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่';
+  if (!link || link.usedAt || link.expiresAt < new Date().toISOString()) return error(400, invalid);
+  const company = platform.companies.find((c) => c.id === link.companyId);
+  if (!company || company.deletedAt) return error(400, invalid);
+  const { db } = loadTenantDb(storage, company.id);
+  const user = db.users.find((u) => u.id === link.userId && u.active);
+  if (!user) return error(400, invalid);
+  const problem = passwordError(password ?? '');
+  if (problem) return error(400, problem);
+  db.passwords[user.id] = password ?? '';
+  link.usedAt = new Date().toISOString();
+  platformChanged = true;
+  tenant = company;
+  pushAudit(
+    db,
+    {
+      action: 'password_reset',
+      ref: { kind: 'user', id: user.id, label: user.username },
+      detail: 'ตั้งรหัสผ่านใหม่ด้วยลิงก์ทางอีเมล',
+    },
+    user,
+  );
+  saveTenantDb(storage, company.id, db);
+  return ok(null);
+}
+
+/** A fake platform admin token (E36): another shape than a shop token, so neither passes for the other. */
+export const mockPlatformToken = (adminId: number): string => `mock-platform-token.p${adminId}`;
+
+/**
+ * The SaaS operator's API (E36): `POST /platform/auth/login`, then with a platform token —
+ * companies (list / detail / package / suspend / reactivate / owner password), invoices (paid)
+ * and the mock outbox. Every action is written to the company's own audit log as `platform`.
+ */
+function platformResponse(
+  req: HttpRequest<unknown>,
+  path: string,
+  storage: StorageService,
+): Observable<HttpResponse<unknown>> {
+  terminalId = null;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (path === 'platform/auth/login' && req.method === 'POST') {
+    const name = normalizeUsername(String(body['username'] ?? ''));
+    const admin = platform.platformAdmins.find((a) => a.username === name);
+    const password = admin ? (platform.platformPasswords[admin.id] ?? 'platform') : null;
+    if (!admin || body['password'] !== password) return error(401, WRONG_LOGIN);
+    return ok({ token: mockPlatformToken(admin.id), admin } satisfies PlatformLoginResponse);
+  }
+  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
+  const match = /^mock-platform-token\.p(\d+)$/.exec(token);
+  const admin = match && platform.platformAdmins.find((a) => a.id === Number(match[1]));
+  if (!admin) return error(401, 'เซสชันผู้ให้บริการหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  const by = { id: null, name: admin.name, kind: 'platform' as const };
+  const today = todayIso();
+  for (const c of platform.companies) {
+    if (!c.deletedAt && refreshBilling(platform, c, today)) platformChanged = true;
+  }
+
+  if (path === 'platform/me' && req.method === 'GET') return ok(admin);
+  if (path === 'platform/outbox' && req.method === 'GET') {
+    return ok([...platform.outbox].sort((a, b) => b.id - a.id));
+  }
+  if (path === 'platform/companies' && req.method === 'GET') {
+    return ok(platform.companies.map((c) => platformRow(c, storage)));
+  }
+  const payMatch = /^platform\/invoices\/(\d+)\/pay$/.exec(path);
+  if (payMatch && req.method === 'POST') {
+    const invoice = platform.invoices.find((i) => i.id === Number(payMatch[1]));
+    if (!invoice) return error(404, 'ไม่พบใบแจ้งหนี้');
+    const problem = payInvoiceError(invoice);
+    if (problem) return error(400, problem);
+    invoice.status = 'paid';
+    invoice.paidAt = new Date().toISOString();
+    const company = platform.companies.find((c) => c.id === invoice.companyId) as StoredCompany;
+    // Paid off: an overdue suspension ends by itself (E35).
+    const status = subscriptionStatus(
+      company.subscription,
+      invoicesOf(platform, company.id),
+      today,
+    );
+    if (company.suspendedReason === 'overdue' && status !== 'suspended') {
+      company.active = true;
+      company.suspendedReason = null;
+    }
+    platformChanged = true;
+    withTenantDb(storage, company, (db) =>
+      pushAudit(
+        db,
+        {
+          action: 'invoice_paid',
+          ref: { kind: 'company', id: company.id, label: invoice.invoiceNo },
+          detail: `฿${invoice.amount}`,
+        },
+        by,
+      ),
+    );
+    return ok(platformDetail(company, storage));
+  }
+  const m = /^platform\/companies\/(\d+)(?:\/([\w-]+))?$/.exec(path);
+  const company = m ? platform.companies.find((c) => c.id === Number(m[1])) : undefined;
+  if (!m || !company) return error(404, 'ไม่พบบริษัท');
+  const action = m[2];
+  if (!action && req.method === 'GET') return ok(platformDetail(company, storage));
+  if (company.deletedAt) return error(400, 'บริษัทนี้ถูกลบข้อมูลแล้ว');
+  const record = (entry: AuditEntry) =>
+    withTenantDb(storage, company, (db) => pushAudit(db, entry, by));
+  const ref: AuditRef = { kind: 'company', id: company.id, label: company.code };
+  if (action === 'plan' && req.method === 'PUT') {
+    const plan = PLANS.find((p) => p.id === body['planId']);
+    if (!plan) return error(400, 'ไม่มีแพ็กเกจนี้');
+    company.planId = plan.id;
+    platformChanged = true;
+    record({ action: 'plan_change', ref, detail: `ผู้ให้บริการเปลี่ยนเป็นแพ็กเกจ ${plan.name}` });
+    return ok(platformDetail(company, storage));
+  }
+  if (action === 'suspend' && req.method === 'POST') {
+    const note = String(body['note'] ?? '').trim();
+    const problem = suspendCompanyError(
+      { active: company.active, deletedAt: company.deletedAt ?? null },
+      note,
+    );
+    if (problem) return error(400, problem);
+    Object.assign(company, { active: false, suspendedReason: 'platform', suspendNote: note });
+    platformChanged = true;
+    record({ action: 'company_suspend', ref, detail: note });
+    return ok(platformDetail(company, storage));
+  }
+  if (action === 'reactivate' && req.method === 'POST') {
+    const problem = reactivateCompanyError({
+      active: company.active,
+      suspendedReason: company.suspendedReason,
+      deletedAt: company.deletedAt ?? null,
+    });
+    if (problem) return error(400, problem);
+    Object.assign(company, { active: true, suspendedReason: null, suspendNote: '' });
+    platformChanged = true;
+    record({ action: 'company_reactivate', ref, detail: '' });
+    return ok(platformDetail(company, storage));
+  }
+  if (action === 'purge' && req.method === 'POST') {
+    const problem = purgeError(company.deletion, today);
+    if (problem) return error(400, problem);
+    // The data goes for good (E39); the registry entry stays, so the code is never reused.
+    const { db } = loadTenantDb(storage, company.id);
+    storage.remove(tenantKey(company.id));
+    platform.resetTokens = platform.resetTokens.filter((t) => t.companyId !== company.id);
+    Object.assign(company, {
+      deletedAt: new Date().toISOString(),
+      deletedName: db.companyInfo.name,
+      active: false,
+      suspendedReason: 'deletion',
+    });
+    platformChanged = true;
+    return ok(platformDetail(company, storage));
+  }
+  if (action === 'owner-password' && req.method === 'PUT') {
+    const password = String(body['password'] ?? '');
+    const problem = passwordError(password);
+    if (problem) return error(400, problem);
+    let owner: User | undefined;
+    withTenantDb(storage, company, (db) => {
+      owner = db.users.find((u) => isOwner(u));
+      if (!owner) return;
+      db.passwords[owner.id] = password;
+      pushAudit(
+        db,
+        {
+          action: 'user_password',
+          ref: { kind: 'user', id: owner.id, label: owner.username },
+          detail: 'ผู้ให้บริการตั้งรหัสผ่านใหม่ให้เจ้าของบริษัท',
+        },
+        by,
+      );
+    });
+    if (!owner) return error(400, 'บริษัทนี้ไม่มีเจ้าของบริษัท');
+    return ok(null);
+  }
+  return notFound(req, path);
+}
+
+/** Loads a company's data, lets `change` edit it and saves it back. */
+function withTenantDb(
+  storage: StorageService,
+  company: StoredCompany,
+  change: (db: MockDb) => void,
+): void {
+  const { db } = loadTenantDb(storage, company.id);
+  const before = tenant;
+  tenant = company;
+  change(db);
+  saveTenantDb(storage, company.id, db);
+  tenant = before;
+}
+
+function platformRow(company: StoredCompany, storage: StorageService): PlatformCompanyRow {
+  const invoices = invoicesOf(platform, company.id);
+  const deletedAt = company.deletedAt ?? null;
+  const db = deletedAt ? null : loadTenantDb(storage, company.id).db;
+  return {
+    id: company.id,
+    code: company.code,
+    name: db?.companyInfo.name ?? company.deletedName ?? '',
+    taxId: db?.companyInfo.taxId ?? '',
+    planId: company.planId,
+    active: company.active,
+    suspendedReason: company.suspendedReason,
+    status: subscriptionStatus(company.subscription, invoices, todayIso()),
+    usage: db ? usageOf(db) : { branches: 0, users: 0, terminals: 0 },
+    subscription: company.subscription,
+    openAmount: invoices.filter((i) => i.status === 'open').reduce((sum, i) => sum + i.amount, 0),
+    deletedAt,
+    deletion: company.deletion ?? null,
+  };
+}
+
+function platformDetail(company: StoredCompany, storage: StorageService): PlatformCompanyDetail {
+  const row = platformRow(company, storage);
+  const owner = row.deletedAt
+    ? undefined
+    : loadTenantDb(storage, company.id).db.users.find((u) => isOwner(u));
+  return {
+    ...row,
+    invoices: invoicesOf(platform, company.id).sort((a, b) => b.id - a.id),
+    owner: owner
+      ? { id: owner.id, name: owner.name, username: owner.username, email: owner.email }
+      : null,
+    suspendNote: company.suspendNote ?? '',
+  };
+}
+
+/** Answer when no company is known: the same messages as a wrong login / an expired session. */
+function noTenant(req: HttpRequest<unknown>, path: string): Observable<never> {
+  if (path === 'auth/login' && req.method === 'POST') return error(401, WRONG_COMPANY_LOGIN);
+  if (path === 'auth/verify' && req.method === 'POST') return error(400, WRONG_LOGIN);
+  return error(401, SESSION_EXPIRED);
+}
+
+/** Loads the company's data, handles the request in it and saves it after a write / migration. */
+function tenantResponse(
+  req: HttpRequest<unknown>,
+  path: string,
+  company: StoredCompany,
+  storage: StorageService,
+): Observable<HttpResponse<unknown>> {
+  const { db, changed } = loadTenantDb(storage, company.id);
+  // `handle()` is synchronous, so the tenant and caller can be kept module-wide for this request.
+  tenant = company;
+  actor = requestUser(req, db);
+  const terminal = Number(req.headers.get('X-Terminal-Id'));
+  terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
+  branchHeader = req.headers.get('X-Branch-Id');
+  db.storeInfo = storeInfoOf(db.companyInfo, requestBranch(db));
+  stockBranch = requestBranch(db).id;
+  db.products = db.products.map((p) => atBranch(db, p));
+  // A deleted record's label is read before the handler removes it.
+  const deleted = req.method === 'DELETE' ? deletedLabel(path, db) : '';
+  const response$ = handle(req, path, db);
+  // Writes, plus the one read that is an event of its own: downloading all the data (E38).
+  if ((req.method !== 'GET' || path === 'company/export') && actor) {
+    const done = syncResult(response$);
+    if (done) recordAudit(req, path, db, done.body, deleted);
+  }
+  if (changed || req.method !== 'GET' || path === 'company/export') {
+    saveTenantDb(storage, company.id, db);
+  }
+  return response$;
+}
+
+/** The success response of a handler (handlers answer synchronously with `of()`); null = an error. */
+function syncResult(response$: Observable<HttpResponse<unknown>>): HttpResponse<unknown> | null {
+  let result: HttpResponse<unknown> | null = null;
+  response$.subscribe({ next: (r) => (result = r), error: () => undefined });
+  return result;
+}
+
+/** What an audit event says beyond who / when / where (`pushAudit()` fills the rest). */
+type AuditEntry = Pick<AuditEvent, 'action' | 'ref' | 'detail'> & { branchId?: number | null };
+
+/** Appends an event done by the request's user at its terminal (E40). */
+function pushAudit(
+  db: MockDb,
+  entry: AuditEntry,
+  by: { id: number | null; name: string; kind?: AuditActorKind } | null = actor ?? null,
+): void {
+  db.auditLog.push({
+    id: db.nextAuditId++,
+    at: new Date().toISOString(),
+    actorKind: by?.kind ?? 'user',
+    userId: by?.id ?? null,
+    userName: by?.name ?? '',
+    branchId: entry.branchId === undefined ? null : entry.branchId,
+    // The device's terminal only when it is one of this company's (a device set up for another
+    // company still sends its number).
+    terminalId: db.posTerminals.some((t) => t.id === terminalId) ? terminalId : null,
+    action: entry.action,
+    ref: entry.ref,
+    detail: entry.detail,
+  });
+}
+
+/** Label of the record a `DELETE` removes (price / promotion / user / terminal), for its event. */
+function deletedLabel(path: string, db: MockDb): string {
+  const [kind, raw] = path.split('/');
+  const id = Number(raw);
+  if (kind === 'prices') {
+    const price = db.prices.find((p) => p.id === id);
+    return price ? `${skuOf(db, price.productId)} ฿${price.price} ตั้งแต่ ${price.startDate}` : '';
+  }
+  if (kind === 'promotions') {
+    const promo = db.promotions.find((p) => p.id === id);
+    return promo ? `${promo.code} ${promo.name}` : '';
+  }
+  if (kind === 'users') return db.users.find((u) => u.id === id)?.username ?? '';
+  if (kind === 'pos-terminals') return id ? `เครื่อง ${id}` : '';
+  return '';
+}
+
+const skuOf = (db: MockDb, productId: number): string =>
+  db.products.find((p) => p.id === productId)?.sku ?? `#${productId}`;
+
+/**
+ * The audit events of a successful write (E40): which requests are "important" lives here, in one
+ * place, instead of in every handler. `body` = the response, `deleted` = `deletedLabel()`.
+ */
+function recordAudit(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+  body: unknown,
+  deleted: string,
+): void {
+  const input = (req.body ?? {}) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const here = requestBranchId();
+  const verb = req.method === 'POST' ? 'เพิ่ม' : req.method === 'DELETE' ? 'ลบ' : 'แก้';
+  const add = (entry: AuditEntry) => pushAudit(db, entry);
+  let m: RegExpExecArray | null;
+
+  if (path === 'sales' && req.method === 'POST') {
+    const sale = body as Sale;
+    if (sale.manualDiscount > 0) {
+      add({
+        action: 'manual_discount',
+        branchId: sale.branchId ?? here,
+        ref: { kind: 'sale', id: sale.id, label: sale.orderNo },
+        detail: `฿${sale.manualDiscount} — ${sale.manualDiscountReason}`,
+      });
+    }
+  } else if ((m = /^sales\/(\d+)\/(void|credit-notes|tax-invoice\/reissue)$/.exec(path))) {
+    const sale = db.sales.find((x) => x.id === Number(m![1]));
+    if (!sale) return;
+    const branchId = sale.branchId ?? here;
+    if (m[2] === 'void') {
+      const approved = sale.voidApprovedBy ? ` (อนุมัติโดย ${sale.voidApprovedBy})` : '';
+      add({
+        action: 'sale_void',
+        branchId,
+        ref: { kind: 'sale', id: sale.id, label: sale.orderNo },
+        detail: `฿${sale.total} — ${sale.voidReason}${approved}`,
+      });
+    } else if (m[2] === 'credit-notes') {
+      const note = body as CreditNote;
+      add({
+        action: 'credit_note',
+        branchId,
+        ref: { kind: 'credit_note', id: note.id, label: note.cnNo },
+        detail: `บิล ${sale.orderNo} คืนเงิน ฿${note.total}`,
+      });
+    } else {
+      const invoice = body as TaxInvoice;
+      add({
+        action: 'tax_invoice_reissue',
+        branchId,
+        ref: { kind: 'tax_invoice', id: invoice.id, label: invoice.invoiceNo },
+        detail: `แทน ${invoice.replacesInvoiceNo ?? '-'} — ${text(input['reason'])}`,
+      });
+    }
+  } else if ((m = /^products\/(\d+)\/(stock|serials\/remove)$/.exec(path))) {
+    const productId = Number(m[1]);
+    const ref: AuditRef = { kind: 'product', id: productId, label: skuOf(db, productId) };
+    if (m[2] === 'stock') {
+      const delta = Number(input['delta']);
+      if (!(delta < 0)) return;
+      add({
+        action: 'stock_out',
+        branchId: here,
+        ref,
+        detail: `${delta} — ${text(input['note'])}`,
+      });
+    } else {
+      const ids = (input['ids'] as number[] | undefined) ?? [];
+      const serials = db.serials.filter((x) => ids.includes(x.id)).map((x) => x.serial);
+      add({
+        action: 'serial_remove',
+        branchId: here,
+        ref,
+        detail: `${serials.join(', ')} → ${text(input['status'])} — ${text(input['note'])}`,
+      });
+    }
+  } else if ((m = /^transfers\/(\d+)\/cancel$/.exec(path))) {
+    const transfer = body as Transfer;
+    add({
+      action: 'transfer_cancel',
+      branchId: transfer.fromBranchId,
+      ref: { kind: 'transfer', id: transfer.id, label: transfer.transferNo },
+      detail: transfer.cancelReason,
+    });
+  } else if (path === 'prices' || path.startsWith('prices/')) {
+    const price = body as SkuPrice | null;
+    const label = price ? `${skuOf(db, price.productId)} ฿${price.price}` : deleted;
+    const period = price ? ` ${price.startDate} – ${price.endDate ?? 'ไม่มีกำหนด'}` : '';
+    add({
+      action: 'price_change',
+      ref: { kind: 'price', id: price?.id ?? (Number(path.split('/')[1]) || null), label },
+      detail: `${verb}ช่วงราคา${period}`,
+    });
+  } else if (path === 'promotions' || /^promotions\/\d+$/.test(path)) {
+    const promo = body as Promotion | null;
+    add({
+      action: 'promotion_change',
+      ref: {
+        kind: 'promotion',
+        id: promo?.id ?? (Number(path.split('/')[1]) || null),
+        label: promo ? `${promo.code} ${promo.name}` : deleted,
+      },
+      detail: promo ? `${verb}โปรโมชั่น${promo.enabled ? '' : ' (ปิดใช้งาน)'}` : 'ลบโปรโมชั่น',
+    });
+  } else if ((m = /^users\/(\d+)\/password$/.exec(path))) {
+    const user = db.users.find((u) => u.id === Number(m![1]));
+    add({
+      action: 'user_password',
+      ref: { kind: 'user', id: user?.id ?? null, label: user?.username ?? '' },
+      detail: 'ผู้ดูแลระบบตั้งรหัสผ่านใหม่ให้',
+    });
+  } else if (path === 'users' || /^users\/\d+$/.test(path)) {
+    const user = body as User | null;
+    const rights = user
+      ? `${ROLE_LABEL[user.role]} · ${user.allBranches ? 'ทุกสาขา' : `สาขา ${user.branchIds.join(', ')}`}` +
+        (user.active ? '' : ' · ปิดใช้งาน')
+      : '';
+    add({
+      action: 'user_change',
+      ref: {
+        kind: 'user',
+        id: user?.id ?? (Number(path.split('/')[1]) || null),
+        label: user?.username ?? deleted,
+      },
+      detail: user ? `${verb}ผู้ใช้ — ${rights}` : 'ลบผู้ใช้',
+    });
+  } else if (path === 'company/plan') {
+    const plan = planOf((body as SubscriptionInfo).planId);
+    add({
+      action: 'plan_change',
+      ref: { kind: 'company', id: tenant.id, label: tenant.code },
+      detail: `เปลี่ยนเป็นแพ็กเกจ ${plan.name} (฿${plan.monthlyPrice} / เดือน)`,
+    });
+  } else if (path === 'company/export') {
+    add({
+      action: 'company_export',
+      ref: { kind: 'company', id: tenant.id, label: tenant.code },
+      detail: 'ดาวน์โหลดข้อมูลทั้งบริษัท (JSON)',
+    });
+  } else if (path === 'company/deletion') {
+    const ref: AuditRef = { kind: 'company', id: tenant.id, label: tenant.code };
+    if (req.method === 'POST') {
+      const d = body as CompanyDeletion;
+      add({
+        action: 'deletion_request',
+        ref,
+        detail: `ลบได้ตั้งแต่ ${d.purgeAfter}${d.reason ? ` — ${d.reason}` : ''}`,
+      });
+    } else if (req.method === 'DELETE') {
+      add({ action: 'deletion_cancel', ref, detail: '' });
+    }
+  } else if (path === 'company/owner') {
+    const owner = (body as User[]).find((u) => isOwner(u));
+    add({
+      action: 'owner_transfer',
+      ref: { kind: 'user', id: owner?.id ?? null, label: owner?.username ?? '' },
+      detail: `โอนความเป็นเจ้าของให้ ${owner?.name ?? ''}`,
+    });
+  } else if (path === 'settings/menu-access') {
+    const menus = (body as MenuAccess).userMenus;
+    const label = (p: string) => MENU.find((x) => x.path === p)?.label ?? p;
+    add({
+      action: 'menu_access',
+      ref: null,
+      detail: `ผู้ใช้ทั่วไปเห็น: ${menus.map(label).join(', ')}`,
+    });
+  } else if (path === 'settings/company' || path === 'settings/store') {
+    const info = body as CompanyInfo;
+    add({
+      action: 'company_settings',
+      ref: { kind: 'company', id: tenant.id, label: tenant.code },
+      detail: `VAT ${info.vatRegistered ? 'จด' : 'ไม่จด'} · ระบบกะ ${info.requireShift ? 'เปิด' : 'ปิด'} · ส่วนลดพนักงานสูงสุด ${info.manualDiscountMaxPercent}%`,
+    });
+  } else if (path === 'settings/branch') {
+    const branch = requestBranch(db);
+    add({
+      action: 'branch_settings',
+      branchId: branch.id,
+      ref: { kind: 'branch', id: branch.id, label: branch.code },
+      detail: 'แก้ชื่อสถานประกอบการ / ที่อยู่ / โทร / ท้ายใบเสร็จ',
+    });
+  } else if (path === 'branches' || /^branches\/\d+$/.test(path)) {
+    const branch = body as Branch;
+    add({
+      action: 'branch_change',
+      branchId: branch.id,
+      ref: { kind: 'branch', id: branch.id, label: branch.code },
+      detail: `${verb}สาขา ${branch.name}${branch.active ? '' : ' (ปิดใช้งาน)'}`,
+    });
+  } else if (path === 'pos-terminals' || /^pos-terminals\/\d+$/.test(path)) {
+    const t = body as PosTerminal | null;
+    add({
+      action: 'terminal_change',
+      branchId: t?.branchId ?? null,
+      ref: {
+        kind: 'terminal',
+        id: t?.id ?? (Number(path.split('/')[1]) || null),
+        label: t ? `เครื่อง ${t.id}` : deleted,
+      },
+      detail: t
+        ? `${verb}เครื่อง ${t.name} · POS ID ${t.posId || '-'}${t.active ? '' : ' (ปิดใช้งาน)'}`
+        : 'ลบเครื่อง',
+    });
+  } else if ((m = /^shifts\/(\d+)\/(close|approve|adjustments)$/.exec(path))) {
+    const shift = db.shifts.find((x) => x.id === Number(m![1]));
+    if (!shift) return;
+    const ref: AuditRef = { kind: 'shift', id: shift.id, label: shift.shiftNo };
+    if (m[2] === 'close') {
+      if (shift.cashier === actorName()) return;
+      add({
+        action: 'shift_close_other',
+        branchId: shift.branchId ?? null,
+        ref,
+        detail: `กะของ ${shift.cashier}`,
+      });
+    } else if (m[2] === 'approve') {
+      add({
+        action: 'shift_approve',
+        branchId: shift.branchId ?? null,
+        ref,
+        detail: `กะของ ${shift.cashier}`,
+      });
+    } else {
+      const adj = body as ShiftAdjustment;
+      add({
+        action: 'shift_adjust',
+        branchId: shift.branchId ?? null,
+        ref,
+        detail: `${adj.amount > 0 ? '+' : ''}${adj.amount} — ${adj.reason}`,
+      });
+    }
+  }
+}
 
 /** Routes one request to its handler; `db` is mutated in place for writes. */
 function handle(
@@ -884,20 +2017,46 @@ function handle(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   if (path === 'auth/login' && req.method === 'POST') {
-    return login(req.body as LoginRequest, db.users);
+    return login(req.body as LoginRequest, db);
   }
   if (path === 'auth/verify' && req.method === 'POST') {
-    // Checks a login without starting a session (shift approval, unlocking the POS). A wrong
-    // password is a 400, not a 401: the error interceptor logs out on 401.
+    // Checks a login of the token's company without starting a session (shift approval, unlocking
+    // the POS). Always a 400, never a 401: the error interceptor logs out on 401.
     const { username, password } = (req.body ?? {}) as Partial<LoginRequest>;
-    const user = checkCredentials(username, password, db.users);
+    const user = actor ? checkCredentials(username, password, db) : WRONG_LOGIN;
     return typeof user === 'string' ? error(400, user) : ok({ user });
   }
-  // No fallback user: SaaS reads the company from the token, so an unknown one must never pass.
-  if (!actor) return error(401, 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  // No fallback user: the company comes only from the token, an unknown one never passes.
+  if (!actor) return error(401, SESSION_EXPIRED);
+  // `/me` answers whatever branch the client remembers, so a stale one can be corrected (step 2).
+  if (path === 'me' && req.method === 'GET') {
+    return ok(companySession(db, actor));
+  }
+  if (
+    tenant.suspendedReason === 'deletion' &&
+    !path.startsWith('company/') &&
+    path !== 'audit-log'
+  ) {
+    return error(
+      403,
+      'บริษัทอยู่ระหว่างรอลบข้อมูล — ดาวน์โหลดข้อมูลหรือยกเลิกคำขอลบได้ที่เมนูบัญชีบริษัท',
+    );
+  }
+  if (branchHeader !== null && !allowedBranch(db, actor, branchHeader)) {
+    return error(403, 'ไม่มีสิทธิ์ทำงานในสาขานี้');
+  }
   const forbidden = adminOnlyError(req, path);
   if (forbidden) return error(403, forbidden);
+  if (branchHeader === null && needsBranch(req, path)) {
+    return error(400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน');
+  }
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
+  if (path === 'company' || path.startsWith('company/')) return handleCompany(req, path, db);
+  if (path === 'audit-log' && req.method === 'GET') {
+    // Admins only (`adminOnlyError()`); a branch admin sees only their branches' events (E40).
+    const query = parseAuditQuery((name) => req.params.get(name));
+    return ok(filterAuditEvents(db.auditLog, query, actor as User));
+  }
   if (path === 'products' || path.startsWith('products/')) return handleProducts(req, path, db);
   if (path === 'prices' || path.startsWith('prices/')) return handlePrices(req, path, db);
   if (path === 'suppliers' || path.startsWith('suppliers/')) {
@@ -914,6 +2073,13 @@ function handle(
     return handlePaymentMethods(req, path, db);
   }
   if (path === 'settings/store') return handleStoreInfo(req, path, db);
+  if (path === 'settings/company' || path === 'settings/branch') {
+    return handleCompanySettings(req, path, db);
+  }
+  if (path === 'branches' || path.startsWith('branches/')) return handleBranches(req, path, db);
+  if (path === 'transfers' || path.startsWith('transfers/')) {
+    return handleTransfers(req, path, db);
+  }
   if (path === 'settings/menu-access') return handleMenuAccess(req, path, db);
   if (path === 'shifts' || path.startsWith('shifts/')) return handleShifts(req, path, db);
   if (path === 'pos-terminals' || path.startsWith('pos-terminals/')) {
@@ -925,8 +2091,11 @@ function handle(
     const from = req.params.get('from') || null;
     const to = req.params.get('to') || null;
     const day = (t: TaxInvoice) => toIsoDate(new Date(t.date));
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
     return ok(
       db.taxInvoices
+        .filter(inScope)
         .filter((t) => (!from || day(t) >= from) && (!to || day(t) <= to))
         .sort((a, b) => a.date.localeCompare(b.date)),
     );
@@ -938,6 +2107,20 @@ function handle(
     return ok(found?.buyer ?? null);
   }
   return notFound(req, path);
+}
+
+/**
+ * Writes that belong to a branch need `X-Branch-Id` (E2 → E17 stock / sales, E24 shifts and
+ * documents): the SKU form too, since its reorder levels belong to the branch (E13).
+ */
+function needsBranch(req: HttpRequest<unknown>, path: string): boolean {
+  if (req.method === 'GET') return false;
+  return (
+    /^products(\/\d+(\/stock|\/serials(\/remove)?)?)?$/.test(path) ||
+    /^sales(\/\d+\/(void|credit-notes|exchanges|tax-invoice|tax-invoice\/reissue))?$/.test(path) ||
+    /^shifts(\/.*)?$/.test(path) ||
+    /^transfers(\/.*)?$/.test(path)
+  );
 }
 
 /** Writes per master that only admins may make (`saas-plan.md` section 17); reads stay open. */
@@ -976,7 +2159,14 @@ function adminOnlyError(req: HttpRequest<unknown>, path: string): string | null 
   }
   if (path === 'tax-invoices' && req.method === 'GET') return 'ดูรายงานภาษีขายได้เฉพาะผู้ดูแลระบบ';
   if (path === 'settings/store' && write) return 'แก้ข้อมูลร้านได้เฉพาะผู้ดูแลระบบ';
+  if ((path === 'settings/company' || path === 'settings/branch') && write) {
+    return 'แก้ข้อมูลร้านได้เฉพาะผู้ดูแลระบบ';
+  }
+  if ((path === 'branches' || path.startsWith('branches/')) && write) {
+    return 'จัดการสาขาได้เฉพาะผู้ดูแลระบบ';
+  }
   if (path === 'settings/menu-access' && write) return 'กำหนดสิทธิ์เมนูได้เฉพาะผู้ดูแลระบบ';
+  if (path === 'audit-log') return 'ดูประวัติการใช้งานได้เฉพาะผู้ดูแลระบบ';
   if (req.method === 'POST' && /^shifts\/\d+\/approve$/.test(path)) {
     return 'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ';
   }
@@ -992,17 +2182,40 @@ function handleUsers(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   const { users } = db;
+  // Only admins reach this handler (`adminOnlyError()`).
+  const caller = actor as User;
   if (path === 'users' && req.method === 'GET') {
     return ok([...users]);
   }
   if (path === 'users' && req.method === 'POST') {
-    const user: User = {
-      ...(req.body as UserPayload),
-      id: db.nextId++,
-      createdAt: new Date().toISOString(),
-    };
+    const { password, ...body } = withUserRules(req.body as NewUserPayload);
+    const scope = userScopeError(caller, null, body);
+    if (scope) return error(403, scope);
+    const problem =
+      ownerRoleError(null, body.role) ??
+      userIdentityError(users, body, null) ??
+      userBranchError(body, db.branches) ??
+      passwordError(password ?? '');
+    if (problem) return error(400, problem);
+    const limit = limitError(db, 'users', body.active);
+    if (limit) return error(403, limit);
+    const user: User = { ...body, id: db.nextId++, createdAt: new Date().toISOString() };
     users.push(user);
+    db.passwords[user.id] = password;
     return ok(user);
+  }
+  const passwordMatch = /^users\/(\d+)\/password$/.exec(path);
+  if (passwordMatch && req.method === 'PUT') {
+    // An admin sets a new password for a user (D4 section 14: staff have no e-mail reset).
+    const user = users.find((u) => u.id === Number(passwordMatch[1]));
+    if (!user) return error(404, 'ไม่พบผู้ใช้');
+    const scope = userScopeError(caller, user, user);
+    if (scope) return error(403, scope);
+    const password = (req.body as { password?: string } | null)?.password ?? '';
+    const problem = passwordError(password);
+    if (problem) return error(400, problem);
+    db.passwords[user.id] = password;
+    return ok(null);
   }
   const idMatch = /^users\/(\d+)$/.exec(path);
   if (idMatch) {
@@ -1012,17 +2225,27 @@ function handleUsers(
       case 'GET':
         return ok(users[index]);
       case 'PUT': {
-        const payload = { ...users[index], ...(req.body as Partial<UserPayload>) };
+        const payload = withUserRules({ ...users[index], ...(req.body as Partial<UserPayload>) });
+        const scope = userScopeError(caller, users[index], payload);
+        if (scope) return error(403, scope);
+        const identity =
+          userIdentityError(users, payload, users[index].id) ??
+          userBranchError(payload, db.branches);
+        if (identity) return error(400, identity);
         const problem = userChangeError(
           users,
           { kind: 'update', id: users[index].id, payload },
           actor?.id ?? null,
         );
         if (problem) return error(400, problem);
+        const limit = limitError(db, 'users', payload.active, users[index].active);
+        if (limit) return error(403, limit);
         users[index] = payload;
         return ok(users[index]);
       }
       case 'DELETE': {
+        const scope = userScopeError(caller, users[index], null);
+        if (scope) return error(403, scope);
         const problem = userChangeError(
           users,
           { kind: 'delete', id: users[index].id },
@@ -1030,11 +2253,205 @@ function handleUsers(
         );
         if (problem) return error(400, problem);
         users.splice(index, 1);
+        delete db.passwords[Number(idMatch[1])];
         return ok(null);
       }
     }
   }
   return notFound(req, path);
+}
+
+/**
+ * A user as stored: username lower case, e-mail trimmed ('' when not given), branch ids unique and
+ * sorted — none when the user has all branches (the owner always has, E33).
+ */
+function withUserRules<
+  T extends Pick<User, 'username' | 'email' | 'allBranches' | 'branchIds' | 'role'>,
+>(u: T): T {
+  const allBranches = !!u.allBranches || isOwner(u);
+  return {
+    ...u,
+    username: normalizeUsername(u.username ?? ''),
+    email: (u.email ?? '').trim(),
+    allBranches,
+    branchIds: allBranches ? [] : [...new Set(u.branchIds ?? [])].sort((a, b) => a - b),
+  };
+}
+
+/**
+ * The company's own account, owner only (E33): `POST /company/owner { userId, password }` hands
+ * ownership over — the owner confirms with their password, the new owner gets every branch and
+ * the old one becomes an admin of every branch. Answers the users.
+ */
+function handleCompany(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const caller = actor as User;
+  if (path === 'company/subscription' && req.method === 'GET') {
+    if (!hasAdminRights(caller)) return error(403, 'ดูแพ็กเกจได้เฉพาะผู้ดูแลระบบ');
+    return ok(subscriptionInfo(db));
+  }
+  if (path === 'company/onboarding' && req.method === 'GET') {
+    if (!hasAdminRights(caller)) return error(403, 'ดูขั้นตอนเริ่มต้นใช้งานได้เฉพาะผู้ดูแลระบบ');
+    return ok({
+      terminals: db.posTerminals.length,
+      categories: db.categories.length,
+      products: db.products.length,
+      prices: db.prices.length,
+      users: db.users.length,
+    } satisfies OnboardingCounts);
+  }
+  if (path === 'company/plan' && req.method === 'PUT') {
+    if (!isOwner(caller)) return error(403, 'เปลี่ยนแพ็กเกจได้เฉพาะเจ้าของบริษัท');
+    const planId = (req.body as { planId?: string } | null)?.planId;
+    const plan = PLANS.find((p) => p.id === planId);
+    if (!plan) return error(400, 'ไม่มีแพ็กเกจนี้');
+    // A downgrade is allowed even when over its limits: only adding more is blocked (E34).
+    tenant.planId = plan.id;
+    platformChanged = true;
+    return ok(subscriptionInfo(db));
+  }
+  if (path === 'company/export' && req.method === 'GET') {
+    if (!isOwner(caller)) return error(403, 'ดาวน์โหลดข้อมูลทั้งบริษัทได้เฉพาะเจ้าของบริษัท');
+    return ok(companyExport(db));
+  }
+  if (path === 'company/deletion') {
+    if (!isOwner(caller)) return error(403, 'ขอลบข้อมูลบริษัทได้เฉพาะเจ้าของบริษัท');
+    if (req.method === 'GET') return ok(tenant.deletion ?? null);
+    if (req.method === 'POST') {
+      const p = {
+        companyCode: '',
+        password: '',
+        reason: '',
+        ...(req.body as Partial<DeletionRequest>),
+      };
+      const problem = deletionRequestError(p, tenant.code);
+      if (problem) return error(400, problem);
+      if (p.password !== passwordOf(db, caller.id)) return error(400, 'รหัสผ่านไม่ถูกต้อง');
+      if (tenant.deletion) return error(400, 'ขอลบข้อมูลไว้แล้ว');
+      tenant.deletion = {
+        requestedAt: new Date().toISOString(),
+        requestedBy: caller.name,
+        reason: p.reason.trim(),
+        purgeAfter: addDaysIso(todayIso(), DELETION_WAIT_DAYS),
+      };
+      // Suspended at once for everyone but the owner (E39); an earlier suspension is replaced.
+      Object.assign(tenant, { active: false, suspendedReason: 'deletion' });
+      platformChanged = true;
+      return ok(tenant.deletion);
+    }
+    if (req.method === 'DELETE') {
+      if (!tenant.deletion) return error(400, 'ไม่มีคำขอลบข้อมูล');
+      Object.assign(tenant, { deletion: null, active: true, suspendedReason: null });
+      // Billing decides again: an overdue company is suspended again right away.
+      refreshBilling(platform, tenant, todayIso());
+      platformChanged = true;
+      return ok(null);
+    }
+  }
+  if (path === 'company/owner' && req.method === 'POST') {
+    const { userId, password } = (req.body ?? {}) as { userId?: number; password?: string };
+    const problem = ownerTransferError(db.users, caller, Number(userId));
+    if (problem) return error(isOwner(caller) ? 400 : 403, problem);
+    if (password !== passwordOf(db, caller.id)) return error(400, 'รหัสผ่านไม่ถูกต้อง');
+    for (const u of db.users) {
+      if (u.id === caller.id) Object.assign(u, { role: 'admin', allBranches: true, branchIds: [] });
+      if (u.id === Number(userId)) {
+        Object.assign(u, { role: 'owner', allBranches: true, branchIds: [] });
+      }
+    }
+    return ok([...db.users]);
+  }
+  return notFound(req, path);
+}
+
+/** Every collection of the company as stored, never a password (E38). */
+function companyExport(db: MockDb): CompanyExport {
+  const stored: Record<string, unknown> = { ...db, products: storeBranchStock(db) };
+  for (const key of ['passwords', 'storeInfo', 'legacyPosId'] as const) delete stored[key];
+  for (const key of Object.keys(stored)) {
+    // Counters and one-time migration flags are the mock's own bookkeeping.
+    if (/^next[A-Z]/.test(key) || /(Migrated|Fixed|Enabled)$/.test(key)) delete stored[key];
+  }
+  return {
+    schemaVersion: EXPORT_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    company: {
+      id: tenant.id,
+      code: tenant.code,
+      name: db.companyInfo.name,
+      taxId: db.companyInfo.taxId,
+    },
+    data: stored,
+  };
+}
+
+/** The request company's package and what it uses (E34). */
+function subscriptionInfo(db: MockDb): SubscriptionInfo {
+  const invoices = invoicesOf(platform, tenant.id).sort((a, b) => b.id - a.id);
+  return {
+    planId: tenant.planId,
+    usage: usageOf(db),
+    status: subscriptionStatus(tenant.subscription, invoices, todayIso()),
+    subscription: tenant.subscription,
+    invoices,
+  };
+}
+
+const usageOf = (db: MockDb): PlanUsage =>
+  planUsage({ branches: db.branches, users: db.users, terminals: db.posTerminals });
+
+/**
+ * One more active branch / user / POS terminal must fit the package (E34) — checked when adding
+ * one or turning one back on (`wasActive` false); a record staying active never counts as new.
+ */
+function limitError(
+  db: MockDb,
+  kind: LimitKind,
+  active: boolean,
+  wasActive = false,
+): string | null {
+  if (!active || wasActive) return null;
+  return planLimitError(kind, planOf(tenant.planId), usageOf(db));
+}
+
+/**
+ * Companies stored before the owner role (E33): the first active admin of every branch (else the
+ * first active admin) becomes the owner, once.
+ */
+function fillOwner(db: MockDb): boolean {
+  if (db.users.some((u) => isOwner(u))) return false;
+  const admins = db.users.filter((u) => u.active && u.role === 'admin');
+  const owner = admins.find((u) => u.allBranches) ?? admins[0];
+  if (!owner) return false;
+  Object.assign(owner, { role: 'owner', allBranches: true, branchIds: [] });
+  return true;
+}
+
+/**
+ * Users stored before usernames / branch rights existed: the first user (the admin login) gets
+ * `admin`, the others the part of their e-mail before @, with `-<id>` added on a clash (E4);
+ * admins get all branches, the others the first branch (E9).
+ */
+function fillUserDefaults(db: MockDb): void {
+  const { users } = db;
+  for (const u of users) {
+    if (u.allBranches !== undefined) continue;
+    u.allBranches = hasAdminRights(u);
+    u.branchIds = u.allBranches ? [] : [db.branches[0].id];
+  }
+  const taken = new Set(users.filter((u) => u.username).map((u) => normalizeUsername(u.username)));
+  users.forEach((u, i) => {
+    if (u.username) return;
+    const base = i === 0 ? 'admin' : normalizeUsername((u.email ?? '').split('@')[0]);
+    let name = usernameError(base) ? `user${u.id}` : base;
+    if (taken.has(name)) name = `${name}-${u.id}`;
+    taken.add(name);
+    u.username = name;
+    u.email ??= '';
+  });
 }
 
 /**
@@ -1077,8 +2494,20 @@ function handleProducts(
     const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
-    const own = db.movements.filter((m) => m.productId === productId);
+    // One branch's card only (E15): another branch the user may work in via `?branchId=`.
+    const asked = req.params.get('branchId');
+    const branchId = asked ? Number(asked) : stockBranch;
+    if (asked && branchId !== stockBranch && !(actor && allowedBranch(db, actor, asked))) {
+      return error(403, 'ไม่มีสิทธิ์ดูบัตรสต็อกของสาขานี้');
+    }
+    const own = db.movements.filter((m) => m.productId === productId && m.branchId === branchId);
     return ok(buildStockCard(own, from, to));
+  }
+  const branchStockMatch = /^products\/(\d+)\/branch-stock$/.exec(path);
+  if (branchStockMatch && req.method === 'GET') {
+    const product = products.find((p) => p.id === Number(branchStockMatch[1]));
+    if (!product) return error(404, 'ไม่พบ SKU');
+    return ok(branchStockRows(db, product));
   }
   const serialMatch = /^products\/(\d+)\/serials(?:\/(\w+))?$/.exec(path);
   if (serialMatch) return handleSerials(req, Number(serialMatch[1]), serialMatch[2], db);
@@ -1095,11 +2524,13 @@ function handleProducts(
         const payload = withServiceRules(withoutDerived(req.body as ProductPayload));
         const problem = validateSku(payload, db, id);
         if (problem) return error(400, problem);
-        if (payload.serialControl !== products[index].serialControl && products[index].stock > 0) {
-          return error(400, 'ยังมีสต็อกคงเหลือ เปลี่ยนการคุม Serial ไม่ได้');
+        // Stock in any branch counts (E18).
+        const stocked = stockedBranches(db, id) || inTransitNote(db, id);
+        if (payload.serialControl !== products[index].serialControl && stocked) {
+          return error(400, `ยังมีสต็อกคงเหลือ${stocked} เปลี่ยนการคุม Serial ไม่ได้`);
         }
-        if (payload.itemType !== products[index].itemType && products[index].stock > 0) {
-          return error(400, 'ยังมีสต็อกคงเหลือ เปลี่ยนเป็นสินค้าบริการไม่ได้');
+        if (payload.itemType !== products[index].itemType && stocked) {
+          return error(400, `ยังมีสต็อกคงเหลือ${stocked} เปลี่ยนเป็นสินค้าบริการไม่ได้`);
         }
         // Stock is owned by the Inventory menu; never overwritten from the SKU form.
         products[index] = {
@@ -1112,7 +2543,8 @@ function handleProducts(
         return ok(products[index]);
       }
       case 'DELETE': {
-        if (products[index].stock > 0) return error(400, 'ยังมีสต็อกคงเหลือ ลบไม่ได้');
+        const stocked = stockedBranches(db, id) || inTransitNote(db, id);
+        if (stocked) return error(400, `ยังมีสต็อกคงเหลือ${stocked} ลบไม่ได้`);
         if (db.sales.some((s) => s.lines.some((l) => l.productId === id))) {
           return error(400, 'SKU นี้มีประวัติการขาย ลบไม่ได้ (เปลี่ยนสถานะเป็นเลิกจำหน่ายแทน)');
         }
@@ -1167,9 +2599,15 @@ function handleProducts(
   return notFound(req, path);
 }
 
-/** Serial SKU: stock = in-stock serials, avgCost = mean of their own costs (kept when none). */
-function withSerialStock(product: Product, db: MockDb): Product {
-  const inStock = db.serials.filter((s) => s.productId === product.id && s.status === 'in_stock');
+/**
+ * Serial SKU in the request's branch: stock = its in-stock serials, avgCost = mean of their own
+ * costs (kept when none).
+ */
+function withSerialStock(product: Product, db: MockDb, branchId = stockBranch): Product {
+  if (!product.serialControl) return product;
+  const inStock = db.serials.filter(
+    (s) => s.productId === product.id && s.branchId === branchId && s.status === 'in_stock',
+  );
   const avgCost = inStock.length
     ? Math.round((inStock.reduce((sum, s) => sum + s.cost, 0) / inStock.length) * 10000) / 10000
     : product.avgCost;
@@ -1190,6 +2628,7 @@ function recordMovement(
   db.movements.push({
     id: db.nextMovementId++,
     productId: product.id,
+    branchId: stockBranch,
     date: new Date().toISOString(),
     type,
     qty,
@@ -1223,11 +2662,11 @@ function migrateCosting(db: MockDb): boolean {
       product = { ...p, avgCost: p.cost };
     }
     if (product.avgCost !== p.avgCost) changed = true;
-    if (product.stock > 0 && !db.movements.some((m) => m.productId === product.id)) {
+    const own = (x: { productId: number; branchId: number }) =>
+      x.productId === product.id && x.branchId === stockBranch;
+    if (product.stock > 0 && !db.movements.some(own)) {
       const serials = product.serialControl
-        ? db.serials
-            .filter((s) => s.productId === product.id && s.status === 'in_stock')
-            .map((s) => s.serial)
+        ? db.serials.filter((s) => own(s) && s.status === 'in_stock').map((s) => s.serial)
         : [];
       recordMovement(
         db,
@@ -1246,6 +2685,163 @@ function migrateCosting(db: MockDb): boolean {
   return changed;
 }
 
+/** The SKU as the request's branch sees it: that branch's stock fields (serial: its serials). */
+function atBranch(db: MockDb, product: Product): Product {
+  const row = db.branchStock.find((r) => r.productId === product.id && r.branchId === stockBranch);
+  const here = withBranchStock(product, row);
+  return withSerialStock(here, db);
+}
+
+/**
+ * Writes the products' stock fields back into the request branch's rows (a row is made only when
+ * something is set) and returns the products to store without them.
+ */
+function storeBranchStock(db: MockDb): Partial<Product>[] {
+  for (const p of db.products) {
+    const row = db.branchStock.find((r) => r.productId === p.id && r.branchId === stockBranch);
+    const fields = {
+      stock: p.stock,
+      avgCost: p.avgCost,
+      minStock: p.minStock,
+      maxStock: p.maxStock,
+    };
+    if (row) Object.assign(row, fields);
+    else if (Object.values(fields).some((v) => v !== 0)) {
+      db.branchStock.push({ branchId: stockBranch, productId: p.id, ...fields });
+    }
+  }
+  return db.products.map((p) => {
+    const stored: Partial<Product> = { ...p };
+    delete stored.stock;
+    delete stored.avgCost;
+    delete stored.minStock;
+    delete stored.maxStock;
+    return stored;
+  });
+}
+
+/**
+ * `GET /products/:id/branch-stock`: every active branch (no row = 0). Everyone sees quantities;
+ * the average cost goes to admins only (E14).
+ */
+function branchStockRows(db: MockDb, product: Product): BranchStockRow[] {
+  return db.branches
+    .filter((b) => b.active)
+    .map((b) => {
+      const row = db.branchStock.find((r) => r.productId === product.id && r.branchId === b.id);
+      const here = withSerialStock(withBranchStock(product, row), db, b.id);
+      return { branchId: b.id, stock: here.stock, avgCost: actorIsAdmin() ? here.avgCost : null };
+    });
+}
+
+/** ' (ระหว่างโอน TR-…)' when a transfer not yet received carries the SKU, else ''. */
+function inTransitNote(db: MockDb, productId: number): string {
+  const open = db.transfers.filter(
+    (t) => t.status === 'in_transit' && t.lines.some((l) => l.productId === productId),
+  );
+  return open.length ? ` (ระหว่างโอน ${open.map((t) => t.transferNo).join(', ')})` : '';
+}
+
+/** ' (สาขา HQ, BN)' when any branch still holds the SKU, else '' (E18). */
+function stockedBranches(db: MockDb, productId: number): string {
+  const codes = db.branches
+    .filter(
+      (b) =>
+        db.serials.some(
+          (s) => s.productId === productId && s.branchId === b.id && s.status === 'in_stock',
+        ) ||
+        db.branchStock.some((r) => r.productId === productId && r.branchId === b.id && r.stock > 0),
+    )
+    .map((b) => b.code);
+  return codes.length ? ` (สาขา ${codes.join(', ')})` : '';
+}
+
+/**
+ * Once per stored db (SaaS step 3): the single store-wide stock of older data becomes the first
+ * branch's — sample serials / costing as before, then stock / avgCost / min / max into
+ * `branchStock`, and serials, movements and documents without a branch get the first one. BN (seed
+ * branch 2) gets sample stock of its own.
+ */
+function migrateBranchStock(db: MockDb): boolean {
+  if (db.branchStockMigrated) return false;
+  const first = db.branches[0].id;
+  stockBranch = first;
+  for (const list of [db.serials, db.movements, db.sales, db.creditNotes, db.exchanges]) {
+    for (const x of list as { branchId?: number | null }[]) x.branchId ??= first;
+  }
+  // Serial SKUs with stock but no serials (seed / older data) get sample serials.
+  syncSerials(db);
+  migrateCosting(db);
+  for (const p of db.products) {
+    if (isService(p)) continue;
+    const fields = {
+      stock: p.stock,
+      avgCost: p.avgCost,
+      minStock: p.minStock,
+      maxStock: p.maxStock,
+    };
+    if (
+      Object.values(fields).some((v) => v !== 0) &&
+      !db.branchStock.some((r) => r.productId === p.id)
+    ) {
+      db.branchStock.push({ branchId: first, productId: p.id, ...fields });
+    }
+  }
+  seedBranchSample(db);
+  db.branchStockMigrated = true;
+  return true;
+}
+
+/** Sample stock for the seed branch BN: other costs than HQ (D1), a serial SKU, an opening line each. */
+function seedBranchSample(db: MockDb): void {
+  const bn = db.branches.find((b) => b.code === 'BN');
+  if (!bn || db.branchStock.some((r) => r.branchId === bn.id)) return;
+  stockBranch = bn.id;
+  const sample: [
+    sku: string,
+    stock: number,
+    avgCost: number,
+    minStock: number,
+    maxStock: number,
+  ][] = [
+    ['NB-001', 2, 20500, 1, 4],
+    ['MS-010', 8, 380, 5, 20],
+    ['KB-020', 4, 1600, 2, 8],
+  ];
+  for (const [sku, stock, avgCost, minStock, maxStock] of sample) {
+    const product = db.products.find((p) => p.sku === sku && !isService(p));
+    if (!product) continue;
+    db.branchStock.push({
+      branchId: bn.id,
+      productId: product.id,
+      stock,
+      avgCost,
+      minStock,
+      maxStock,
+    });
+    const here = atBranch(db, { ...product, avgCost });
+    // Serial SKU: the sample units (own cost each), like `syncSerials()` makes for HQ.
+    if (here.serialControl) syncSerials(db, [{ ...here, stock }]);
+    const view = atBranch(db, product);
+    const serials = view.serialControl
+      ? db.serials
+          .filter((s) => s.productId === product.id && s.branchId === bn.id)
+          .map((s) => s.serial)
+      : [];
+    recordMovement(
+      db,
+      view,
+      'opening',
+      view.stock,
+      view.avgCost,
+      costValue(view),
+      serials,
+      'ยอดยกมา',
+    );
+  }
+  stockBranch = db.branches[0].id;
+}
+
 /**
  * Receipt cost per base unit: required and not negative. It may have more than 2 decimals (a pack
  * cost ÷ its factor), so only those two `moneyProblem()` cases apply here.
@@ -1255,13 +2851,16 @@ function receiptCostError(cost: unknown): string | null {
   return problem && problem !== 'decimals' ? moneyProblemText(problem, 'ต้นทุน') : null;
 }
 
-/** Generates deterministic sample serials so serial SKUs always have stock = in-stock serials. */
-function syncSerials(db: MockDb): boolean {
+/**
+ * Generates deterministic sample serials (in the request's branch) so serial SKUs always have
+ * stock = in-stock serials.
+ */
+function syncSerials(db: MockDb, products: readonly Product[] = db.products): boolean {
   let changed = false;
-  for (const product of db.products) {
+  for (const product of products) {
     if (!product.serialControl) continue;
     const owned = db.serials.filter((s) => s.productId === product.id);
-    let inStock = owned.filter((s) => s.status === 'in_stock').length;
+    let inStock = owned.filter((s) => s.branchId === stockBranch && s.status === 'in_stock').length;
     let seq = owned.length;
     while (inStock < product.stock) {
       const serial = sampleSerial(product, ++seq);
@@ -1269,6 +2868,7 @@ function syncSerials(db: MockDb): boolean {
       db.serials.push({
         id: db.nextSerialId++,
         productId: product.id,
+        branchId: stockBranch,
         serial,
         status: 'in_stock',
         receivedAt: new Date().toISOString(),
@@ -1316,7 +2916,8 @@ function handleSerials(
   };
 
   if (!action && req.method === 'GET') {
-    return ok(db.serials.filter((s) => s.productId === productId));
+    // This branch's units: in stock here + removed here (history, E16).
+    return ok(db.serials.filter((s) => s.productId === productId && s.branchId === stockBranch));
   }
 
   if (!action && req.method === 'POST') {
@@ -1334,8 +2935,11 @@ function handleSerials(
       const formatError = serialFormatError(serial, product);
       if (formatError) problems.push(`${serial}: ${formatError}`);
       else if (serials.indexOf(serial) !== i) problems.push(`${serial}: ซ้ำในรายการ`);
-      else if (db.serials.some((s) => s.serial === serial && s.status === 'in_stock')) {
-        problems.push(`${serial}: มีอยู่ในคลังแล้ว`);
+      else {
+        // Serial numbers are unique company-wide: one in stock elsewhere is not received again (E16).
+        const held = db.serials.find((s) => s.serial === serial && s.status === 'in_stock');
+        if (held?.branchId === stockBranch) problems.push(`${serial}: มีอยู่ในคลังแล้ว`);
+        else if (held) problems.push(`${serial}: อยู่ในคลังสาขา ${branchCode(db, held.branchId)}`);
       }
     });
     if (problems.length) return error(400, `รับเข้าไม่ได้ — ${problems.join(', ')}`);
@@ -1352,6 +2956,13 @@ function handleSerials(
         : returning.length === serials.length
           ? 'รับคืนเข้าคลัง'
           : `รับคืนเข้าคลัง ${returning.join(', ')}`);
+    // E32: units last at another branch (the stop-gap move of E16) — the screen suggests a transfer.
+    const fromOtherBranch = serials.flatMap((serial) => {
+      const existing = db.serials.find((s) => s.serial === serial);
+      return existing && existing.branchId !== stockBranch
+        ? [{ serial, branchCode: branchCode(db, existing.branchId) }]
+        : [];
+    });
     const received = serials.map((serial) => {
       const existing = db.serials.find((s) => s.serial === serial);
       if (existing) {
@@ -1359,6 +2970,7 @@ function handleSerials(
         // its removal shows only in the stock movements (`serialMovements()`).
         Object.assign(existing, {
           productId,
+          branchId: stockBranch,
           status: 'in_stock',
           receivedAt: now,
           removedAt: null,
@@ -1370,6 +2982,7 @@ function handleSerials(
       const created: SerialNumber = {
         id: db.nextSerialId++,
         productId,
+        branchId: stockBranch,
         serial,
         status: 'in_stock',
         receivedAt: now,
@@ -1391,7 +3004,7 @@ function handleSerials(
       received.map((s) => s.serial),
       movementNote,
     );
-    const result: SerialReceiveResult = { product: updated, received };
+    const result: SerialReceiveResult = { product: updated, received, fromOtherBranch };
     return ok(result);
   }
 
@@ -1403,7 +3016,13 @@ function handleSerials(
     };
     if (!ids.length) return error(400, 'ไม่ได้เลือก Serial');
     const targets = ids.map((id) =>
-      db.serials.find((s) => s.id === id && s.productId === productId && s.status === 'in_stock'),
+      db.serials.find(
+        (s) =>
+          s.id === id &&
+          s.productId === productId &&
+          s.branchId === stockBranch &&
+          s.status === 'in_stock',
+      ),
     );
     if (targets.some((t) => !t)) return error(400, 'มี Serial ที่ไม่อยู่ในคลังแล้ว กรุณาโหลดใหม่');
     const now = new Date().toISOString();
@@ -1821,8 +3440,12 @@ function handlePromotions(
     products: db.products,
     categories: db.categories,
     promotions,
+    branches: db.branches,
     today: todayIso(),
   });
+  // D2 / E6: promotions limited to branches belong to company admins (403).
+  const scope = (p: PromotionPayload | null, existing: Promotion | null) =>
+    promotionBranchScopeError(p, existing, isCompanyAdmin(actor));
   const normalize = (p: PromotionPayload): PromotionPayload => ({
     ...PROMOTION_DEFAULTS,
     ...p,
@@ -1841,6 +3464,8 @@ function handlePromotions(
   }
   if (path === 'promotions' && req.method === 'POST') {
     const payload = normalize(req.body as PromotionPayload);
+    const forbidden = scope(payload, null);
+    if (forbidden) return error(403, forbidden);
     const problem = promotionError(payload, ctx());
     if (problem) return error(400, problem);
     const created: Promotion = { ...payload, id: db.nextPromotionId++ };
@@ -1857,17 +3482,22 @@ function handlePromotions(
         return ok(promotions[index]);
       case 'PUT': {
         const payload = normalize(req.body as PromotionPayload);
+        const forbidden = scope(payload, promotions[index]);
+        if (forbidden) return error(403, forbidden);
         const problem = promotionError(payload, ctx(), promotions[index]);
         if (problem) return error(400, problem);
         promotions[index] = { ...payload, id };
         return ok(promotions[index]);
       }
-      case 'DELETE':
+      case 'DELETE': {
+        const forbidden = scope(null, promotions[index]);
+        if (forbidden) return error(403, forbidden);
         if (hasStarted(promotions[index], todayIso())) {
           return error(400, 'โปรที่เริ่มแล้วลบไม่ได้ (ปิดใช้งานแทน)');
         }
         promotions.splice(index, 1);
         return ok(null);
+      }
     }
   }
   return notFound(req, path);
@@ -1980,8 +3610,11 @@ function handleSales(
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
     // Optional shift: bills sold or voided in it.
     const shiftId = Number(req.params.get('shiftId')) || null;
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
     return ok(
       sales
+        .filter(inScope)
         .filter((s) => (!from || saleDay(s) >= from) && (!to || saleDay(s) <= to))
         .filter((s) => !shiftId || s.shiftId === shiftId || s.voidShiftId === shiftId)
         .sort((a, b) => b.date.localeCompare(a.date))
@@ -2007,9 +3640,9 @@ function handleSales(
     let approver: string | null = null;
     if (!actorIsAdmin()) {
       if (!approval) return error(403, 'ยกเลิกบิลต้องให้ผู้ดูแลระบบอนุมัติ');
-      const found = checkCredentials(approval.username, approval.password, db.users);
+      const found = checkCredentials(approval.username, approval.password, db);
       if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
-      if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
+      if (!hasAdminRights(found)) return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
       approver = found.name;
     }
     return voidSale(sale, (reason ?? '').trim(), approver, db);
@@ -2069,7 +3702,12 @@ function handleSales(
  */
 function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknown>> {
   // The receipt needs this device's POS ID, so only a registered terminal sells (T2).
-  const terminalProblem = terminalError(terminalId, db.posTerminals);
+  const terminalProblem = terminalError(
+    terminalId,
+    db.posTerminals,
+    requestBranchId(),
+    db.branches,
+  );
   if (terminalProblem) return error(400, terminalProblem);
   const shift = moneyShift(db, 'sell');
   if (shift.problem) return error(400, shift.problem);
@@ -2082,6 +3720,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
       categories: db.categories,
       date: today,
       vatRegistered: db.storeInfo.vatRegistered,
+      branchId: requestBranchId(),
     },
     body.freeSerials ?? [],
     body.billManualDiscount ?? null,
@@ -2097,10 +3736,8 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   if (manualProblem) return error(400, manualProblem);
   for (const line of cart.lines) {
     if (!line.serial) continue;
-    const unit = db.serials.find((s) => s.serial === line.serial);
-    if (unit?.productId !== line.productId || unit.status !== 'in_stock') {
-      return error(400, `ซีเรียล ${line.serial} ไม่อยู่ในคลังของ ${line.sku}`);
-    }
+    const problem = serialHereProblem(db, line.serial, line.productId, line.sku, 'ขาย');
+    if (problem) return error(400, problem);
   }
   if (round2(body.expectedTotal) !== cart.total) {
     return error(400, 'ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง กรุณาตรวจสอบบิลอีกครั้ง');
@@ -2154,6 +3791,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     manualDiscountBy: cart.manualDiscount > 0 ? actorName() : '',
     shiftId: shift.shiftId,
     voidShiftId: null,
+    branchId: stockBranch,
     ...here,
     vatRegistered: db.storeInfo.vatRegistered,
   };
@@ -2165,12 +3803,84 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
 
 /** 'POS<terminal>-YYYYMMDD-NNNN', numbered continuously per terminal and day (T4). */
 function nextOrderNo(db: MockDb, today: string, terminal: number): string {
-  const prefix = terminalOrderPrefix(terminal, today);
-  const last = db.sales
-    .filter((s) => s.orderNo.startsWith(prefix))
-    .map((s) => Number(s.orderNo.slice(prefix.length)))
-    .reduce((max, n) => Math.max(max, n), 0);
-  return prefix + String(last + 1).padStart(4, '0');
+  const prefix = terminalOrderPrefix(branchCode(db, stockBranch), terminal, today);
+  return nextNumber(
+    db.sales.map((s) => s.orderNo),
+    prefix,
+    4,
+  );
+}
+
+/**
+ * Once (E20): documents from before step 3 all went to the first branch, but a bill / credit note /
+ * exchange / shift made at a terminal belongs to that terminal's branch; tax invoices follow their
+ * bill. Stock movements are left alone (that stock was taken from the single store-wide stock).
+ */
+function fixDocumentBranches(db: MockDb): boolean {
+  if (db.docBranchFixed) return false;
+  const first = db.branches[0].id;
+  const terminalBranch = (t: number | null | undefined) =>
+    db.posTerminals.find((x) => x.id === t)?.branchId;
+  for (const list of [db.sales, db.creditNotes, db.exchanges, db.shifts]) {
+    for (const doc of list as { terminalId?: number | null; branchId?: number | null }[]) {
+      doc.branchId = terminalBranch(doc.terminalId) ?? doc.branchId ?? first;
+    }
+  }
+  for (const invoice of db.taxInvoices) {
+    invoice.branchId = db.sales.find((s) => s.id === invoice.saleId)?.branchId ?? first;
+  }
+  db.docBranchFixed = true;
+  return true;
+}
+
+/**
+ * Branch filter of a list (E23): `?branchId=<id>|all`, missing = the request's branch; a list of one
+ * shift's documents takes that shift's branch. A string = why it is refused (400 / 403).
+ */
+function listScope(
+  req: HttpRequest<unknown>,
+  db: MockDb,
+): ((doc: { branchId?: number | null }) => boolean) | { status: number; message: string } {
+  const shiftId = Number(req.params.get('shiftId')) || null;
+  const shiftBranch = shiftId ? db.shifts.find((s) => s.id === shiftId)?.branchId : undefined;
+  const scope = shiftBranch
+    ? shiftBranch
+    : parseBranchScope(req.params.get('branchId'), stockBranch);
+  if (scope === null) return { status: 400, message: 'รหัสสาขาไม่ถูกต้อง' };
+  const refused = actor ? branchScopeError(scope, actor, db.branches) : 'ไม่มีสิทธิ์';
+  if (refused) return { status: 403, message: refused };
+  const first = db.branches[0].id;
+  return scope === 'all' ? () => true : (doc) => (doc.branchId ?? first) === scope;
+}
+
+/** The request's branch for the D3 rules (void / credit note / exchange only where sold, E12). */
+function branchHere(db: MockDb): BranchHere {
+  return { branchId: stockBranch, branches: db.branches };
+}
+
+/** Code of a branch for messages ('สาขา HQ'); an unknown id shows as its number. */
+function branchCode(db: MockDb, branchId: number): string {
+  return db.branches.find((b) => b.id === branchId)?.code ?? String(branchId);
+}
+
+/**
+ * Why `serial` cannot leave this branch's stock as a unit of `productId` (null = it can): it must be
+ * in stock here — one in another branch is sold / handed out only there (E16).
+ */
+function serialHereProblem(
+  db: MockDb,
+  serial: string,
+  productId: number,
+  sku: string,
+  what: string,
+): string | null {
+  const unit = db.serials.find((s) => s.serial === serial);
+  if (unit?.productId !== productId || unit.status !== 'in_stock') {
+    return `ซีเรียล ${serial} ไม่อยู่ในคลังของ ${sku}`;
+  }
+  return unit.branchId === stockBranch
+    ? null
+    : `ซีเรียล ${serial} อยู่ที่สาขา ${branchCode(db, unit.branchId)} — ${what}ที่สาขานี้ไม่ได้`;
 }
 
 /** Takes one sale line out of stock (stock card + serial status); returns its COGS. */
@@ -2199,8 +3909,11 @@ function listCreditNotes(req: HttpRequest<unknown>, db: MockDb): Observable<Http
   const day = (n: CreditNote) => saleDay(n);
   // Optional shift: the notes whose refund was paid from it.
   const shiftId = Number(req.params.get('shiftId')) || null;
+  const inScope = listScope(req, db);
+  if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
   return ok(
     db.creditNotes
+      .filter(inScope)
       .filter((n) => (!from || day(n) >= from) && (!to || day(n) <= to))
       .filter((n) => !shiftId || n.shiftId === shiftId)
       .sort((a, b) => b.date.localeCompare(a.date)),
@@ -2227,6 +3940,7 @@ function createCreditNote(
   };
   const exchanges = db.exchanges.filter((x) => x.saleId === sale.id);
   const problem = creditNoteError(sale, notes, payload, {
+    here: branchHere(db),
     promotions: db.promotions,
     methods: db.paymentMethods,
     today,
@@ -2248,11 +3962,11 @@ function createCreditNote(
   }
 
   const now = new Date();
-  const prefix = `CN-${today.replaceAll('-', '')}-`;
-  const last = db.creditNotes
-    .filter((n) => n.cnNo.startsWith(prefix))
-    .reduce((max, n) => Math.max(max, Number(n.cnNo.slice(prefix.length))), 0);
-  const cnNo = prefix + String(last + 1).padStart(4, '0');
+  const cnNo = nextNumber(
+    db.creditNotes.map((n) => n.cnNo),
+    branchDocPrefix('CN', branchCode(db, stockBranch), today),
+    4,
+  );
   const note = `ลดหนี้ ${cnNo} (บิล ${sale.orderNo})`;
 
   for (const line of draft.lines) {
@@ -2263,9 +3977,21 @@ function createCreditNote(
     if (unit) {
       Object.assign(
         unit,
+        // Back into (or written off at) the branch of the credit note (E16).
         line.restock
-          ? { status: 'in_stock', removedAt: null, receivedAt: now.toISOString(), note }
-          : { status: 'damaged', removedAt: now.toISOString(), note: `${note} · ไม่รับเข้าคลัง` },
+          ? {
+              branchId: stockBranch,
+              status: 'in_stock',
+              removedAt: null,
+              receivedAt: now.toISOString(),
+              note,
+            }
+          : {
+              branchId: stockBranch,
+              status: 'damaged',
+              removedAt: now.toISOString(),
+              note: `${note} · ไม่รับเข้าคลัง`,
+            },
       );
       if (line.restock) {
         db.products[index] = withSerialStock(product, db);
@@ -2312,6 +4038,7 @@ function createCreditNote(
     vat: draft.vat,
     refunds: toRefunds(payload.refunds, db.paymentMethods),
     shiftId: shift.shiftId,
+    branchId: stockBranch,
     ...terminalSnapshot(db),
     ...(soldWithVat(sale) ? {} : { vatRegistered: false }),
   };
@@ -2340,6 +4067,7 @@ function createExchange(
     reason: (body.reason ?? '').trim(),
   };
   const problem = exchangeError(sale, payload, {
+    here: branchHere(db),
     creditNotes: db.creditNotes.filter((n) => n.saleId === sale.id),
     exchanges,
     store: db.storeInfo,
@@ -2359,18 +4087,22 @@ function createExchange(
     if (oldUnit?.productId !== line.productId || oldUnit.status !== 'sold') {
       return error(400, `ซีเรียล ${old} ไม่อยู่ในสถานะขายแล้ว เปลี่ยนไม่ได้`);
     }
-    const newUnit = db.serials.find((s) => s.serial === input.newSerial);
-    if (newUnit?.productId !== line.productId || newUnit.status !== 'in_stock') {
-      return error(400, `ซีเรียล ${input.newSerial} ไม่อยู่ในคลังของ ${line.sku}`);
-    }
+    const newProblem = serialHereProblem(
+      db,
+      input.newSerial ?? '',
+      line.productId,
+      line.sku,
+      'เปลี่ยนให้ลูกค้า',
+    );
+    if (newProblem) return error(400, newProblem);
   }
 
   const now = new Date();
-  const prefix = `EX-${today.replaceAll('-', '')}-`;
-  const last = db.exchanges
-    .filter((x) => x.exNo.startsWith(prefix))
-    .reduce((max, x) => Math.max(max, Number(x.exNo.slice(prefix.length))), 0);
-  const exNo = prefix + String(last + 1).padStart(4, '0');
+  const exNo = nextNumber(
+    db.exchanges.map((x) => x.exNo),
+    branchDocPrefix('EX', branchCode(db, stockBranch), today),
+    4,
+  );
   const note = `เปลี่ยนสินค้า ${exNo} (บิล ${sale.orderNo})`;
 
   const lines: ExchangeLine[] = payload.lines.map((input) => {
@@ -2388,8 +4120,19 @@ function createExchange(
       Object.assign(
         unit,
         input.restock
-          ? { status: 'in_stock', removedAt: null, receivedAt: now.toISOString(), note }
-          : { status: 'damaged', removedAt: now.toISOString(), note: `${note} · ชำรุด` },
+          ? {
+              branchId: stockBranch,
+              status: 'in_stock',
+              removedAt: null,
+              receivedAt: now.toISOString(),
+              note,
+            }
+          : {
+              branchId: stockBranch,
+              status: 'damaged',
+              removedAt: now.toISOString(),
+              note: `${note} · ชำรุด`,
+            },
       );
       if (input.restock) {
         db.products[index] = withSerialStock(db.products[index], db);
@@ -2446,6 +4189,7 @@ function createExchange(
     lines,
     // No money moves, so no shift is required; an open one counts it in its report.
     shiftId: db.storeInfo.requireShift ? (openShiftOf(db, terminalId)?.id ?? null) : null,
+    branchId: stockBranch,
     ...terminalSnapshot(db),
   };
   db.exchanges.push(created);
@@ -2474,13 +4218,16 @@ function createTaxInvoice(
 ): TaxInvoice {
   // Dated and numbered on the day of sale, even when issued later (accountant's decision).
   const date = new Date(sale.date);
-  const prefix = `INV-${toIsoDate(date).replaceAll('-', '')}-`;
-  const last = db.taxInvoices
-    .filter((t) => t.invoiceNo.startsWith(prefix))
-    .reduce((max, t) => Math.max(max, Number(t.invoiceNo.slice(prefix.length))), 0);
+  // The bill's branch numbers it, even when issued at another one later (E21, E25).
+  const branchId = sale.branchId ?? stockBranch;
+  const invoiceNo = nextNumber(
+    db.taxInvoices.map((t) => t.invoiceNo),
+    branchDocPrefix('INV', branchCode(db, branchId), toIsoDate(date)),
+    4,
+  );
   const invoice: TaxInvoice = {
     id: Math.max(0, ...db.taxInvoices.map((t) => t.id)) + 1,
-    invoiceNo: prefix + String(last + 1).padStart(4, '0'),
+    invoiceNo,
     saleId: sale.id,
     orderNo: sale.orderNo,
     saleDate: sale.date,
@@ -2493,6 +4240,8 @@ function createTaxInvoice(
     replacesInvoiceNo: replaces?.invoiceNo ?? null,
     replacedByNo: null,
     atSale,
+    // The bill's branch is the seller's business place (E25).
+    branchId,
   };
   db.taxInvoices.push(invoice);
   sale.taxInvoiceNo = invoice.invoiceNo;
@@ -2509,7 +4258,7 @@ function voidSale(
   approvedBy: string | null,
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
-  const problem = voidError(sale, reason, todayIso());
+  const problem = voidError(sale, reason, todayIso(), branchHere(db));
   if (problem) return error(400, problem);
   // The money goes back out of the drawer of the shift the void is made in.
   const shift = moneyShift(db, 'void');
@@ -2536,7 +4285,13 @@ function voidSale(
     const serial = serialOf(i);
     if (serial) {
       const unit = db.serials.find((s) => s.serial === serial)!;
-      Object.assign(unit, { status: 'in_stock', removedAt: null, receivedAt: now, note });
+      Object.assign(unit, {
+        branchId: stockBranch,
+        status: 'in_stock',
+        removedAt: null,
+        receivedAt: now,
+        note,
+      });
       db.products[index] = withSerialStock(product, db);
       recordMovement(
         db,
@@ -2579,7 +4334,7 @@ function voidSale(
  */
 function enableShifts(db: MockDb): boolean {
   if (db.shiftsEnabled) return false;
-  db.storeInfo = { ...db.storeInfo, requireShift: true };
+  db.companyInfo = { ...db.companyInfo, requireShift: true };
   db.shiftsEnabled = true;
   return true;
 }
@@ -2602,10 +4357,10 @@ function migrateTerminals(db: MockDb, stored: Partial<MockDb> | null): boolean {
     id,
     name: `เครื่อง ${id}`,
     posId: id === 1 ? legacy : '',
+    branchId: db.branches[0].id,
     active: true,
   }));
   db.legacyPosId = legacy;
-  delete (db.storeInfo as { posId?: string }).posId;
   return true;
 }
 
@@ -2651,6 +4406,12 @@ function handlePosTerminals(
     return ok([...db.posTerminals].sort((a, b) => a.id - b.id));
   }
   if (!actorIsAdmin()) return error(403, 'แก้ทะเบียนเครื่อง POS ได้เฉพาะผู้ดูแลระบบ');
+  // A branch admin edits only terminals of their own branches (E6), in and out of a branch.
+  const notMine = (branchId: number) => {
+    const branch = db.branches.find((b) => b.id === branchId);
+    return !isCompanyAdmin(actor) && !!branch && !canWorkIn(actor as User, branch);
+  };
+  const BRANCH_ONLY = 'แก้เครื่อง POS ได้เฉพาะสาขาของตัวเอง';
   const normalize = (body: unknown, id?: number): PosTerminal =>
     normalizePosTerminal({
       ...POS_TERMINAL_DEFAULTS,
@@ -2659,8 +4420,11 @@ function handlePosTerminals(
     });
   if (path === 'pos-terminals' && req.method === 'POST') {
     const created = normalize(req.body);
-    const problem = posTerminalError(created, db.posTerminals);
+    if (notMine(created.branchId)) return error(403, BRANCH_ONLY);
+    const problem = posTerminalError(created, db.posTerminals, db.branches);
     if (problem) return error(400, problem);
+    const limit = limitError(db, 'terminals', created.active);
+    if (limit) return error(403, limit);
     db.posTerminals.push(created);
     return ok(created);
   }
@@ -2672,19 +4436,26 @@ function handlePosTerminals(
   switch (req.method) {
     case 'PUT': {
       // The terminal number never changes (documents and shifts refer to it).
-      const updated = normalize(req.body, id);
+      const updated = normalize({ ...db.posTerminals[index], ...(req.body as object) }, id);
+      if (notMine(db.posTerminals[index].branchId) || notMine(updated.branchId)) {
+        return error(403, BRANCH_ONLY);
+      }
       const problem = posTerminalError(
         updated,
         db.posTerminals.filter((t) => t.id !== id),
+        db.branches,
       );
       if (problem) return error(400, problem);
       if (!updated.active && openShiftOf(db, id)) {
         return error(400, `เครื่อง ${id} มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้`);
       }
+      const limit = limitError(db, 'terminals', updated.active, db.posTerminals[index].active);
+      if (limit) return error(403, limit);
       db.posTerminals[index] = updated;
       return ok(updated);
     }
     case 'DELETE': {
+      if (notMine(db.posTerminals[index].branchId)) return error(403, BRANCH_ONLY);
       const used =
         db.shifts.some((s) => s.terminalId === id) ||
         db.sales.some((s) => s.terminalId === id) ||
@@ -2734,13 +4505,299 @@ function moneyShift(
   return { problem, shiftId: shift?.id ?? null };
 }
 
-/** 'SH-YYYYMMDD-NN', numbered per opening day. */
+/**
+ * /transfers (SaaS step 5, E26–E29): list / read / create at the source / receive at the
+ * destination / cancel at the source. Every write moves stock of the request's branch only.
+ */
+function handleTransfers(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const visible = (t: Transfer) =>
+    !!actor &&
+    (branchScopeError(t.fromBranchId, actor, db.branches) === null ||
+      branchScopeError(t.toBranchId, actor, db.branches) === null);
+  if (path === 'transfers' && req.method === 'GET') {
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
+    const direction = req.params.get('direction');
+    const out = (t: Transfer) => inScope({ branchId: t.fromBranchId });
+    const into = (t: Transfer) => inScope({ branchId: t.toBranchId });
+    return ok(
+      db.transfers
+        .filter((t) =>
+          direction === 'out' ? out(t) : direction === 'in' ? into(t) : out(t) || into(t),
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    );
+  }
+  if (path === 'transfers' && req.method === 'POST') return createTransfer(req, db);
+
+  const match = /^transfers\/(\d+)(?:\/(receive|cancel))?$/.exec(path);
+  const transfer = match ? db.transfers.find((t) => t.id === Number(match[1])) : undefined;
+  if (!match || !transfer) return error(404, 'ไม่พบใบโอน');
+  if (!visible(transfer)) return error(403, 'ไม่มีสิทธิ์ดูใบโอนของสาขานี้');
+  const action = match[2];
+  if (!action && req.method === 'GET') return ok(transfer);
+  if (action === 'receive' && req.method === 'POST') {
+    return receiveTransfer(transfer, req.body as TransferReceivePayload, db);
+  }
+  if (action === 'cancel' && req.method === 'POST') {
+    if (!actorIsAdmin()) return error(403, 'ยกเลิกใบโอนได้เฉพาะผู้ดูแลระบบ');
+    const reason = String((req.body as { reason?: string } | null)?.reason ?? '').trim();
+    const problem = cancelTransferError(transfer, stockBranch, true, reason);
+    if (problem) return error(400, problem);
+    const note = `ยกเลิกใบโอน ${transfer.transferNo}`;
+    for (const line of transfer.lines) moveTransferLine(db, line, note);
+    Object.assign(transfer, {
+      status: 'cancelled',
+      cancelledAt: new Date().toISOString(),
+      cancelledBy: actorName(),
+      cancelReason: reason,
+    });
+    return ok(transfer);
+  }
+  return notFound(req, path);
+}
+
+/** POST /transfers at the source: goods leave at its cost, serials go `in_transit` (E26). */
+function createTransfer(req: HttpRequest<unknown>, db: MockDb): Observable<HttpResponse<unknown>> {
+  const body = (req.body ?? {}) as Partial<TransferPayload>;
+  const payload: TransferPayload = {
+    toBranchId: Number(body.toBranchId),
+    lines: (body.lines ?? []).map((l) => ({
+      productId: Number(l.productId),
+      qty: Number(l.qty),
+      serials: (l.serials ?? []).map((x) => x.trim().toUpperCase()),
+    })),
+    note: (body.note ?? '').trim(),
+  };
+  const problem = transferError(payload, {
+    fromBranchId: stockBranch,
+    branches: db.branches,
+    products: db.products,
+    serials: db.serials,
+  });
+  if (problem) return error(400, problem);
+  const now = new Date();
+  const transferNo = nextNumber(
+    db.transfers.map((t) => t.transferNo),
+    branchDocPrefix('TR', branchCode(db, stockBranch), todayIso()),
+    4,
+  );
+  const note = `โอนไปสาขา ${branchCode(db, payload.toBranchId)} ${transferNo}`;
+  const lines: TransferLine[] = payload.lines.map((input) => {
+    const index = db.products.findIndex((p) => p.id === input.productId);
+    const product = db.products[index];
+    let unitCost: number;
+    if (product.serialControl) {
+      const units = input.serials.map((x) => db.serials.find((s) => s.serial === x)!);
+      for (const unit of units) {
+        Object.assign(unit, { status: 'in_transit', removedAt: now.toISOString(), note });
+      }
+      const total = units.reduce((sum, u) => sum + u.cost, 0);
+      unitCost = total / units.length;
+      db.products[index] = withSerialStock(product, db);
+      recordMovement(
+        db,
+        db.products[index],
+        'transfer_out',
+        -units.length,
+        unitCost,
+        -total,
+        input.serials,
+        note,
+      );
+    } else {
+      // Out at the current average, which stays unchanged (like any issue).
+      unitCost = product.avgCost;
+      db.products[index] = { ...product, stock: product.stock - input.qty };
+      recordMovement(
+        db,
+        db.products[index],
+        'transfer_out',
+        -input.qty,
+        unitCost,
+        -input.qty * unitCost,
+        [],
+        note,
+      );
+    }
+    return {
+      productId: product.id,
+      sku: product.sku,
+      name: product.name,
+      unit: product.unit,
+      qty: input.qty,
+      serials: input.serials,
+      unitCost: Math.round(unitCost * 10000) / 10000,
+      receivedQty: null,
+      receivedSerials: [],
+    };
+  });
+  const transfer: Transfer = {
+    id: Math.max(0, ...db.transfers.map((t) => t.id)) + 1,
+    transferNo,
+    fromBranchId: stockBranch,
+    toBranchId: payload.toBranchId,
+    status: 'in_transit',
+    createdAt: now.toISOString(),
+    createdBy: actorName(),
+    note: payload.note,
+    lines,
+    receivedAt: null,
+    receivedBy: null,
+    shortReason: '',
+    cancelledAt: null,
+    cancelledBy: null,
+    cancelReason: '',
+  };
+  db.transfers.push(transfer);
+  return ok(transfer);
+}
+
+/**
+ * POST /transfers/:id/receive at the destination (E27 / E28): everything sent comes in at the
+ * transfer cost, then what did not arrive is written off there (serials → damaged).
+ */
+function receiveTransfer(
+  transfer: Transfer,
+  body: TransferReceivePayload,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const payload: TransferReceivePayload = {
+    lines: (body?.lines ?? []).map((l) => ({
+      productId: Number(l.productId),
+      receivedQty: Number(l.receivedQty),
+      receivedSerials: l.receivedSerials ?? [],
+    })),
+    shortReason: (body?.shortReason ?? '').trim(),
+  };
+  const problem = receiveTransferError(transfer, payload, stockBranch);
+  if (problem) return error(400, problem);
+  const now = new Date().toISOString();
+  const note = `รับโอนจากสาขา ${branchCode(db, transfer.fromBranchId)} ${transfer.transferNo}`;
+  const shortNote = `ขาด/เสียหายจากการโอน ${transfer.transferNo} · ${payload.shortReason}`;
+  for (const line of transfer.lines) {
+    const got = payload.lines.find((l) => l.productId === line.productId)!;
+    moveTransferLine(db, line, note);
+    const index = db.products.findIndex((p) => p.id === line.productId);
+    const missing = line.qty - got.receivedQty;
+    if (line.serials.length) {
+      const lost = line.serials.filter((x) => !got.receivedSerials.includes(x));
+      if (lost.length) {
+        const units = lost.map((x) => db.serials.find((s) => s.serial === x)!);
+        for (const unit of units) {
+          Object.assign(unit, { status: 'damaged', removedAt: now, note: shortNote });
+        }
+        const total = units.reduce((sum, u) => sum + u.cost, 0);
+        db.products[index] = withSerialStock(db.products[index], db);
+        recordMovement(
+          db,
+          db.products[index],
+          'issue',
+          -lost.length,
+          total / lost.length,
+          -total,
+          lost,
+          shortNote,
+        );
+      }
+    } else if (missing > 0) {
+      const product = db.products[index];
+      db.products[index] = { ...product, stock: product.stock - missing };
+      recordMovement(
+        db,
+        db.products[index],
+        'issue',
+        -missing,
+        product.avgCost,
+        -missing * product.avgCost,
+        [],
+        shortNote,
+      );
+    }
+    Object.assign(line, {
+      receivedQty: got.receivedQty,
+      receivedSerials: line.serials.length ? got.receivedSerials : [],
+    });
+  }
+  Object.assign(transfer, {
+    status: 'received',
+    receivedAt: now,
+    receivedBy: actorName(),
+    shortReason: payload.shortReason,
+  });
+  return ok(transfer);
+}
+
+/**
+ * Brings a transfer line into the request's branch at the transfer cost: `in` at the destination,
+ * `back` at the source when cancelled. Serials become in stock there; others re-average.
+ */
+function moveTransferLine(db: MockDb, line: TransferLine, note: string): void {
+  const serials = line.serials;
+  const index = db.products.findIndex((p) => p.id === line.productId);
+  if (index < 0) return;
+  const product = db.products[index];
+  if (serials.length) {
+    const units = serials.map((x) => db.serials.find((s) => s.serial === x)!);
+    for (const unit of units) {
+      Object.assign(unit, {
+        branchId: stockBranch,
+        status: 'in_stock',
+        removedAt: null,
+        receivedAt: new Date().toISOString(),
+        note,
+      });
+    }
+    const total = units.reduce((sum, u) => sum + u.cost, 0);
+    db.products[index] = withSerialStock(product, db);
+    recordMovement(
+      db,
+      db.products[index],
+      'transfer_in',
+      units.length,
+      total / units.length,
+      total,
+      [...serials],
+      note,
+    );
+    return;
+  }
+  db.products[index] = {
+    ...product,
+    stock: product.stock + line.qty,
+    avgCost: movingAverage(product.stock, product.avgCost, line.qty, line.unitCost),
+  };
+  recordMovement(
+    db,
+    db.products[index],
+    'transfer_in',
+    line.qty,
+    line.unitCost,
+    line.qty * line.unitCost,
+    [],
+    note,
+  );
+}
+
+/** 'SH-<branch>-YYYYMMDD-NN', numbered per branch and opening day (E21). */
 function nextShiftNo(db: MockDb, day: string): string {
-  const prefix = `SH-${day.replaceAll('-', '')}-`;
-  const last = db.shifts
-    .filter((s) => s.shiftNo.startsWith(prefix))
-    .reduce((max, s) => Math.max(max, Number(s.shiftNo.slice(prefix.length))), 0);
-  return `${prefix}${String(last + 1).padStart(2, '0')}`;
+  return nextNumber(
+    db.shifts.map((s) => s.shiftNo),
+    branchDocPrefix('SH', branchCode(db, stockBranch), day),
+    2,
+  );
+}
+
+/** `prefix` + the next running number after the highest one already issued with it. */
+function nextNumber(issued: readonly string[], prefix: string, width: number): string {
+  const last = issued
+    .filter((no) => no.startsWith(prefix))
+    .reduce((max, no) => Math.max(max, Number(no.slice(prefix.length))), 0);
+  return prefix + String(last + 1).padStart(width, '0');
 }
 
 /**
@@ -2759,7 +4816,12 @@ function handleShifts(
   }
   if (path === 'shifts/open' && req.method === 'POST') {
     // The drawer is this device's registered terminal; the body may only repeat it (T2).
-    const terminalProblem = terminalError(terminalId, db.posTerminals);
+    const terminalProblem = terminalError(
+      terminalId,
+      db.posTerminals,
+      requestBranchId(),
+      db.branches,
+    );
     if (terminalProblem) return error(400, terminalProblem);
     const body = (req.body ?? {}) as Partial<ShiftOpenPayload>;
     if (body.terminalId !== undefined && body.terminalId !== terminalId) {
@@ -2780,6 +4842,8 @@ function handleShifts(
       id: Math.max(0, ...db.shifts.map((s) => s.id)) + 1,
       shiftNo: nextShiftNo(db, toIsoDate(now)),
       terminalId: payload.terminalId,
+      // The terminal stands in the request's branch (`terminalError()`, E8).
+      branchId: stockBranch,
       posId: terminalSnapshot(db).posId,
       cashier: user,
       status: 'open',
@@ -2807,9 +4871,12 @@ function handleShifts(
     const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
     if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
     if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    const inScope = listScope(req, db);
+    if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
     // Non-admins see only their own shifts (P6).
     const inRange = db.shifts.filter(
       (s) =>
+        inScope(s) &&
         (isAdmin || s.cashier === user) &&
         (!from || shiftDay(s) >= from) &&
         (!to || shiftDay(s) <= to),
@@ -2965,13 +5032,9 @@ function handleShifts(
     // terminal; otherwise a variance above the limit waits as `pending`.
     let approver: string | null = isAdmin ? user : null;
     if (!approver && payload.approval) {
-      const found = checkCredentials(
-        payload.approval.username,
-        payload.approval.password,
-        db.users,
-      );
+      const found = checkCredentials(payload.approval.username, payload.approval.password, db);
       if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
-      if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
+      if (!hasAdminRights(found)) return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
       approver = found.name;
     }
     const counts = buildShiftCounts(expected, payload.counts, user);
@@ -3026,70 +5089,295 @@ function handleStoreInfo(
   path: string,
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
-  if (req.method === 'GET') return ok(db.storeInfo);
+  // Kept during the move to /settings/company + /settings/branch: the request's branch with its
+  // company (E11). A write changes both parts, so it needs a company admin.
+  if (req.method === 'GET') {
+    // A document made at another branch prints that branch's details (E22).
+    const asked = req.params.get('branchId');
+    if (!asked) return ok(db.storeInfo);
+    const branch = db.branches.find((b) => String(b.id) === asked);
+    return branch ? ok(storeInfoOf(db.companyInfo, branch)) : error(404, 'ไม่พบสาขา');
+  }
   if (req.method === 'PUT') {
+    if (!isCompanyAdmin(actor)) return error(403, COMPANY_ADMIN_ONLY);
     const payload = normalizeStoreInfo(req.body as StoreInfo);
-    const problem =
-      storeInfoError(payload) ??
-      requireShiftChangeError(
-        db.storeInfo.requireShift,
-        payload.requireShift,
-        db.shifts.filter((s) => s.status === 'open').length,
-      );
+    const problem = storeInfoError(payload) ?? requireShiftProblem(db, payload.requireShift);
     if (problem) return error(400, problem);
-    db.storeInfo = payload;
+    db.companyInfo = companyInfoOf(payload);
+    const branch = requestBranch(db);
+    Object.assign(branch, {
+      name: payload.placeName || branch.name,
+      address: payload.address,
+      phone: payload.phone,
+      receiptFooter: payload.receiptFooter,
+    });
+    db.storeInfo = storeInfoOf(db.companyInfo, branch);
     return ok(db.storeInfo);
   }
   return notFound(req, path);
 }
 
-/**
- * Mock logins: `admin` / `admin` (the first user), or any other user by e-mail (or the part before
- * @) with `MOCK_USER_PASSWORD`; inactive users are refused. The token names the user so later
- * requests know who is calling (`requestUser()`).
- */
-function login(
-  { username, password }: LoginRequest,
-  users: User[],
-): Observable<HttpResponse<LoginResponse>> {
-  const user = checkCredentials(username, password, users);
-  if (typeof user === 'string') return error(401, user);
-  const token = user.id === users[0]?.id ? ADMIN_TOKEN : `${ADMIN_TOKEN}.u${user.id}`;
-  return ok({ token, user });
+const COMPANY_ADMIN_ONLY = 'ทำได้เฉพาะผู้ดูแลระบบระดับบริษัท (ทุกสาขา)';
+
+/** `requireShift` cannot be switched off while any shift is open (`requireShiftChangeError()`). */
+function requireShiftProblem(db: MockDb, next: boolean): string | null {
+  return requireShiftChangeError(
+    db.companyInfo.requireShift,
+    next,
+    db.shifts.filter((s) => s.status === 'open').length,
+  );
 }
 
-/** The user a mock login names, or the Thai reason it is refused (login + `auth/verify`). */
+/**
+ * Company settings (E11): GET for everyone, PUT company admin (E6) — `companyInfoError()`.
+ * GET/PUT /settings/branch: details of the request's branch, PUT by an admin of that branch.
+ */
+function handleCompanySettings(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  if (path === 'settings/company') {
+    if (req.method === 'GET') return ok(db.companyInfo);
+    if (req.method === 'PUT') {
+      if (!isCompanyAdmin(actor)) return error(403, COMPANY_ADMIN_ONLY);
+      const payload = normalizeCompanyInfo(req.body as CompanyInfo);
+      const problem = companyInfoError(payload) ?? requireShiftProblem(db, payload.requireShift);
+      if (problem) return error(400, problem);
+      db.companyInfo = payload;
+      return ok(db.companyInfo);
+    }
+  }
+  if (path === 'settings/branch') {
+    const branch = requestBranch(db);
+    if (req.method === 'GET') return ok(branch);
+    if (req.method === 'PUT') {
+      // `handle()` already refused a branch the admin may not work in (403).
+      const body = normalizeBranch((req.body ?? {}) as Partial<BranchDetails>);
+      const next: Branch = {
+        ...branch,
+        name: body.name ?? branch.name,
+        address: body.address ?? branch.address,
+        phone: body.phone ?? branch.phone,
+        receiptFooter: body.receiptFooter ?? branch.receiptFooter,
+      };
+      const problem = branchDetailsError(next);
+      if (problem) return error(400, problem);
+      Object.assign(branch, next);
+      return ok(branch);
+    }
+  }
+  return notFound(req, path);
+}
+
+/**
+ * GET/POST /branches, GET/PUT /branches/:id — reads for everyone, writes by a company admin (E6).
+ * No delete: a branch is deactivated (`branchError()` keeps one active).
+ */
+function handleBranches(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  if (path === 'branches' && req.method === 'GET') return ok(db.branches);
+  if (req.method !== 'GET' && !isCompanyAdmin(actor)) return error(403, COMPANY_ADMIN_ONLY);
+  if (path === 'branches' && req.method === 'POST') {
+    // An `id` in the body is never taken: the server numbers branches.
+    const payload = normalizeBranch({ ...BRANCH_DEFAULTS, ...(req.body as BranchPayload) });
+    delete (payload as Partial<Branch>).id;
+    const problem = branchError(payload, db.branches);
+    if (problem) return error(400, problem);
+    const limit = limitError(db, 'branches', payload.active);
+    if (limit) return error(403, limit);
+    const branch: Branch = { ...payload, id: db.nextBranchId++ };
+    db.branches.push(branch);
+    return ok(branch);
+  }
+  const idMatch = /^branches\/(\d+)$/.exec(path);
+  const index = idMatch ? db.branches.findIndex((b) => b.id === Number(idMatch[1])) : -1;
+  if (idMatch && index < 0) return error(404, 'ไม่พบสาขา');
+  if (idMatch && req.method === 'GET') return ok(db.branches[index]);
+  if (idMatch && req.method === 'PUT') {
+    const current = db.branches[index];
+    const payload = normalizeBranch({ ...current, ...(req.body as Partial<BranchPayload>) });
+    const problem = branchError(payload, db.branches);
+    if (problem) return error(400, problem);
+    const openHere = db.posTerminals.some(
+      (t) => t.branchId === current.id && openShiftOf(db, t.id),
+    );
+    if (!payload.active && openHere) {
+      return error(400, `สาขา ${current.code} มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้`);
+    }
+    const limit = limitError(db, 'branches', payload.active, current.active);
+    if (limit) return error(403, limit);
+    db.branches[index] = { ...payload, id: current.id };
+    return ok(db.branches[index]);
+  }
+  return notFound(req, path);
+}
+
+/**
+ * Mock logins (D4): company code `DEMO` + username — `admin` / `admin` (the first user), any other
+ * user with `MOCK_USER_PASSWORD`. Every failure gives the same message (E3) so nobody learns which
+ * companies or users exist; only a suspended company is told after a correct password. The token
+ * names the company and the user so later requests know who is calling (`requestUser()`).
+ */
+function login(
+  { companyCode, username, password }: Partial<LoginRequest>,
+  db: MockDb,
+): Observable<HttpResponse<LoginResponse>> {
+  // `requestCompany()` already found the company by its code (none → `noTenant()`).
+  const company = tenant;
+  if (company.code !== normalizeCompanyCode(companyCode ?? ''))
+    return error(401, WRONG_COMPANY_LOGIN);
+  const user = checkCredentials(username, password, db);
+  if (typeof user === 'string') {
+    // Logged with the name typed (no user id: it may not exist — the message stays the same, E3).
+    pushAudit(
+      db,
+      { action: 'login_failed', ref: null, detail: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' },
+      { id: null, name: normalizeUsername(username ?? '') },
+    );
+    return error(401, WRONG_COMPANY_LOGIN);
+  }
+  const ownerDeleting = company.suspendedReason === 'deletion' && isOwner(user);
+  if (!company.active && !ownerDeleting) {
+    return error(401, SUSPENDED_MESSAGE[company.suspendedReason ?? 'platform']);
+  }
+  pushAudit(db, { action: 'login', ref: null, detail: '' }, user);
+  return ok({ token: mockToken(company.id, user.id), ...companySession(db, user) });
+}
+
+const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+/** Told only after a correct login (E3), by why the company is suspended. */
+const SUSPENDED_MESSAGE: Record<CompanySuspendReason, string> = {
+  platform: 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท',
+  overdue:
+    'บริษัทนี้ถูกระงับการใช้งานเพราะค้างชำระค่าบริการ — เจ้าของบริษัทติดต่อผู้ให้บริการเพื่อชำระเงิน',
+  deletion: 'บริษัทนี้อยู่ระหว่างรอลบข้อมูล — ติดต่อเจ้าของบริษัท',
+};
+const WRONG_COMPANY_LOGIN = 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
+const SESSION_EXPIRED = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
+
+/**
+ * The active user a login names, or `WRONG_LOGIN` (login + `auth/verify` + approvals) — a
+ * deactivated user gets the same message as a wrong password (E3).
+ */
 function checkCredentials(
   username: string | undefined,
   password: string | undefined,
-  users: User[],
+  db: MockDb,
 ): User | string {
-  if (username === 'admin' && password === 'admin' && users[0]) return users[0];
-  const name = (username ?? '').trim().toLowerCase();
-  const user = users.find(
-    (u) =>
-      u.id !== users[0]?.id && (u.email.toLowerCase() === name || u.email.split('@')[0] === name),
-  );
-  if (!user || password !== MOCK_USER_PASSWORD) return 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
-  if (!user.active) return 'บัญชีนี้ถูกปิดใช้งาน';
+  const name = normalizeUsername(username ?? '');
+  const user = db.users.find((u) => normalizeUsername(u.username) === name);
+  if (!user || !user.active || password !== passwordOf(db, user.id)) return WRONG_LOGIN;
   return user;
 }
 
-const ADMIN_TOKEN = 'mock-jwt-token';
-/** Password of every non-admin mock user. */
+/** Password of every non-admin mock user that never got one of their own. */
 const MOCK_USER_PASSWORD = '1234';
 
-/**
- * Who sent the request: the active user the token names (`ADMIN_TOKEN` = the first user,
- * `ADMIN_TOKEN.u<id>` = that user). Missing / unknown token or an inactive user → undefined (401).
- */
-function requestUser(req: HttpRequest<unknown>, users: User[]): User | undefined {
+/** A user's password: the stored one, else `admin` for the first user and `1234` for the rest. */
+function passwordOf(db: MockDb, userId: number): string {
+  return db.passwords[userId] ?? (userId === db.users[0]?.id ? 'admin' : MOCK_USER_PASSWORD);
+}
+
+/** A fake token naming tenant + user (a real one is a signed JWT with these claims). Specs use it. */
+export const mockToken = (companyId: number, userId: number): string =>
+  `mock-jwt-token.t${companyId}.u${userId}`;
+
+/** Company and user id a mock token names; undefined = missing / malformed / pre-SaaS (E1). */
+function tokenIds(req: HttpRequest<unknown>): { companyId: number; userId: number } | undefined {
   const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
-  const user =
-    token === ADMIN_TOKEN
-      ? users[0]
-      : users.find((u) => token === `${ADMIN_TOKEN}.u${u.id}` && u.id !== users[0]?.id);
+  const match = /^mock-jwt-token\.t(\d+)\.u(\d+)$/.exec(token);
+  return match ? { companyId: Number(match[1]), userId: Number(match[2]) } : undefined;
+}
+
+/**
+ * Who sent the request: the active user the token names in its company (`db` is that company's
+ * data — `requestCompany()`). A suspended company or an inactive user → undefined (401); a token
+ * of another company never reaches this db.
+ */
+function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
+  const ids = tokenIds(req);
+  if (!ids || ids.companyId !== tenant.id) return undefined;
+  // Waiting for deletion (E39): only the owner still gets in, to download or cancel.
+  const deleting = tenant.suspendedReason === 'deletion';
+  if (!tenant.active && !deleting) return undefined;
+  const user = db.users.find((u) => u.id === ids.userId);
+  if (deleting && !isOwner(user)) return undefined;
   return user?.active ? user : undefined;
+}
+
+/** Company + the branches the user may work in (`canWorkIn()`: active, theirs or all). */
+function companySession(db: MockDb, user: User): MeResponse {
+  const { id, code, active } = tenant;
+  return {
+    user,
+    company: {
+      id,
+      code,
+      active,
+      name: db.companyInfo.name,
+      taxId: db.companyInfo.taxId,
+      deletionPurgeAfter: tenant.deletion?.purgeAfter ?? null,
+    },
+    branches: db.branches.filter((b) => canWorkIn(user, b)),
+    // The banner of trial / invoices / overdue (E35) is for the owner and admins only.
+    billing: hasAdminRights(user)
+      ? billingNotice(tenant.subscription, invoicesOf(platform, tenant.id), todayIso())
+      : null,
+  };
+}
+
+/** The branch an `X-Branch-Id` names when the user may work in it; undefined → 403. */
+function allowedBranch(db: MockDb, user: User, header: string): Branch | undefined {
+  return companySession(db, user).branches.find((b) => String(b.id) === header.trim());
+}
+
+/**
+ * Stored dbs from before E11 kept one `storeInfo`: its company part becomes `companyInfo`, and the
+ * branches (step 1 made one, older data none) get its address / phone / receipt footer. Once.
+ */
+function splitStoreInfo(db: MockDb, stored: Partial<MockDb> | null): boolean {
+  if (!stored || stored.companyInfo) return false;
+  const legacy: StoreInfo = { ...STORE_INFO_DEFAULTS, ...SEED_STORE_INFO, ...stored.storeInfo };
+  db.companyInfo = companyInfoOf(legacy);
+  const branches: Partial<Branch>[] = stored.branches?.length
+    ? stored.branches
+    : [
+        {
+          id: 1,
+          code: 'HQ',
+          name: legacy.placeName || 'สำนักงานใหญ่',
+          branchNo:
+            legacy.branchType === 'branch' && legacy.branchNo
+              ? legacy.branchNo
+              : HEAD_OFFICE_BRANCH_NO,
+        },
+      ];
+  db.branches = branches.map(
+    (b) =>
+      ({
+        address: legacy.address,
+        phone: legacy.phone,
+        receiptFooter: legacy.receiptFooter,
+        active: true,
+        ...b,
+      }) as Branch,
+  );
+  db.nextBranchId = Math.max(...db.branches.map((b) => b.id)) + 1;
+  return true;
+}
+
+/** `X-Branch-Id` as a number; null when not sent (step 1–2 still serve it, E2). */
+function requestBranchId(): number | null {
+  return branchHeader === null ? null : Number(branchHeader);
+}
+
+/** The branch of the request (`X-Branch-Id`; none / unknown = the first, the request may still be refused). */
+function requestBranch(db: MockDb): Branch {
+  return db.branches.find((b) => String(b.id) === branchHeader?.trim()) ?? db.branches[0];
 }
 
 function ok<T>(body: T): Observable<HttpResponse<T>> {

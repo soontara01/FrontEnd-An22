@@ -56,12 +56,15 @@ export async function inventoryXlsx(
   products: readonly Product[],
   serials: readonly SerialNumber[] = [],
   at = new Date(),
+  /** Branch the figures belong to, e.g. 'สาขา HQ' (stock is per branch, D1) */
+  branch = '',
 ): Promise<Blob> {
   const ExcelJS = await loadExcel();
   const book = new ExcelJS.Workbook();
-  const when = new Intl.DateTimeFormat('th-TH', { dateStyle: 'long', timeStyle: 'short' }).format(
+  const date = new Intl.DateTimeFormat('th-TH', { dateStyle: 'long', timeStyle: 'short' }).format(
     at,
   );
+  const when = `${branch ? `${branch} ` : ''}ณ ${date}`;
   addStockSheet(book, products, when);
   const inStock = serials.filter((s) => s.status === 'in_stock');
   if (inStock.length) addSerialSheet(book, products, inStock, when);
@@ -71,7 +74,7 @@ export async function inventoryXlsx(
 function addStockSheet(book: Workbook, products: readonly Product[], when: string): void {
   const sheet = book.addWorksheet('คลังสินค้า');
   sheet.columns = COLUMNS.map((c) => ({ width: c.width }));
-  sheet.addRow([`สต็อกคงเหลือ ณ ${when}`]).font = { bold: true, size: 14 };
+  sheet.addRow([`สต็อกคงเหลือ ${when}`]).font = { bold: true, size: 14 };
   sheet.addRow([]);
   const headerRow = sheet.addRow(COLUMNS.map((c) => c.header));
   styleHeaderRow(sheet, new Set(), headerRow.number);
@@ -139,7 +142,7 @@ function addSerialSheet(
 
   const sheet = book.addWorksheet('Serial');
   sheet.columns = SERIAL_COLUMNS.map((c) => ({ width: c.width }));
-  sheet.addRow([`Serial คงคลัง ณ ${when}`]).font = { bold: true, size: 14 };
+  sheet.addRow([`Serial คงคลัง ${when}`]).font = { bold: true, size: 14 };
   sheet.addRow([]);
   const headerRow = sheet.addRow(SERIAL_COLUMNS.map((c) => c.header));
   styleHeaderRow(sheet, new Set(), headerRow.number);

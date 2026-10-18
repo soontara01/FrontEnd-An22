@@ -25,8 +25,26 @@
   background: var(--mat-sys-surface-container);
 }
 
-.spacer {
+.tenant {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface-variant);
+
+  .switch {
+    max-width: 100%;
+    color: inherit;
+    font: inherit;
+  }
+
+  .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .progress {
@@ -39,5 +57,31 @@
 
   @media (max-width: 599px) {
     padding: 16px;
+  }
+}
+
+// Trial ending / invoice waiting / overdue (E35), owner + admins only (server decides).
+.billing-notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+
+  &.warn {
+    background: var(--mat-sys-tertiary-container);
+    color: var(--mat-sys-on-tertiary-container);
+  }
+  &.error {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+  a {
+    color: inherit;
+    font-weight: 500;
   }
 }

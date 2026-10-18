@@ -6,10 +6,12 @@ import type { Promotion } from './promotion.model';
 import type { TaxInvoiceBuyer } from './tax-invoice.model';
 import type { Exchange } from './exchange.model';
 import {
+  BranchHere,
   PaymentInput,
   Sale,
   SaleLine,
   SalePayment,
+  branchMismatchError,
   currentSerial,
   isFreeLine,
   saleDay,
@@ -66,7 +68,7 @@ export interface CreditNoteDeduction {
 
 export interface CreditNote {
   id: number;
-  /** 'CN-YYYYMMDD-NNNN', issued by the server */
+  /** 'CN-<branch>-YYYYMMDD-NNNN' (E21; older 'CN-YYYYMMDD-NNNN'), issued by the server */
   cnNo: string;
   saleId: number;
   orderNo: string;
@@ -92,6 +94,8 @@ export interface CreditNote {
   refunds: SalePayment[];
   /** Shift the refund was paid from (server-set; missing / null = no shift) */
   shiftId?: number | null;
+  /** Branch it was issued at (server-set, E12) — goods come back into its stock; = the bill's for now (D3) */
+  branchId?: number | null;
   /** Terminal it was issued at + its POS ID (server-set snapshot) */
   terminalId?: number | null;
   posId?: string;
@@ -330,11 +334,15 @@ export function creditNoteError(
     methods: readonly PaymentMethod[];
     today: string;
     exchanges?: readonly Exchange[];
+    /** The working branch (server + form); the sale branch must match (D3) */
+    here?: BranchHere;
   },
 ): string | null {
   if (sale.status !== 'paid' || !sale.lines.length) {
     return 'ออกใบลดหนี้ได้เฉพาะบิลขายหน้าร้านที่ชำระแล้ว';
   }
+  const elsewhere = ctx.here && branchMismatchError(sale, ctx.here, 'ออกใบลดหนี้');
+  if (elsewhere) return elsewhere;
   if (saleDay(sale) === ctx.today) return 'บิลของวันนี้ให้ยกเลิกบิลแทนการออกใบลดหนี้';
   const draft = draftCreditNote(sale, notes, payload.lines, ctx.promotions, ctx.exchanges);
   if (draft.error) return draft.error;

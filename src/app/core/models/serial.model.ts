@@ -1,14 +1,22 @@
 import type { StockMovement } from './costing.model';
 import { Product } from './product.model';
 
-/** `in_stock` = in the warehouse; the others are "removed" states kept as history. */
-export type SerialStatus = 'in_stock' | 'sold' | 'damaged' | 'other';
-export type SerialRemoveStatus = Exclude<SerialStatus, 'in_stock'>;
+/**
+ * `in_stock` = in the warehouse; `in_transit` = on a transfer between branches (sold by neither,
+ * SaaS step 5); the others are "removed" states kept as history.
+ */
+export type SerialStatus = 'in_stock' | 'in_transit' | 'sold' | 'damaged' | 'other';
+export type SerialRemoveStatus = Exclude<SerialStatus, 'in_stock' | 'in_transit'>;
 
 /** One physical unit of a serial-controlled SKU. Never deleted; removal changes `status`. */
 export interface SerialNumber {
   id: number;
   productId: number;
+  /**
+   * Branch the unit is in (in stock) or was last in (removed); it is sold / issued only there (E16).
+   * A removed unit received at another branch moves with its record.
+   */
+  branchId: number;
   serial: string;
   status: SerialStatus;
   receivedAt: string;
@@ -21,10 +29,16 @@ export interface SerialNumber {
 export interface SerialReceiveResult {
   product: Product;
   received: SerialNumber[];
+  /**
+   * Units last at another branch (removed there, received here): the stop-gap move of E16 — a
+   * transfer is the way to move goods (E32; server-set, missing = none)
+   */
+  fromOtherBranch?: { serial: string; branchCode: string }[];
 }
 
 export const SERIAL_STATUS_LABEL: Record<SerialStatus, string> = {
   in_stock: 'คงคลัง',
+  in_transit: 'ระหว่างโอน',
   sold: 'ขายแล้ว',
   damaged: 'ชำรุด/เสียหาย',
   other: 'อื่นๆ',

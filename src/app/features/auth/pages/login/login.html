@@ -1,11 +1,39 @@
 <mat-card class="card" appearance="outlined">
   <mat-card-header>
     <mat-card-title>เข้าสู่ระบบ</mat-card-title>
-    <mat-card-subtitle> ทดลองใช้: admin / admin · พนักงาน: somchai / 1234 </mat-card-subtitle>
+    <mat-card-subtitle>
+      ทดลองใช้: บริษัท DEMO · admin / admin · พนักงาน: somchai / 1234
+    </mat-card-subtitle>
   </mat-card-header>
 
   <form [formGroup]="form" (ngSubmit)="submit()">
     <mat-card-content>
+      @if (editCompany()) {
+        <mat-form-field appearance="outline">
+          <mat-label>รหัสบริษัท</mat-label>
+          <input
+            matInput
+            appAutofocus
+            formControlName="companyCode"
+            autocomplete="organization"
+            autocapitalize="characters"
+            spellcheck="false"
+          />
+          <mat-icon matPrefix>domain</mat-icon>
+          @if (form.controls.companyCode.hasError('required')) {
+            <mat-error>กรุณากรอกรหัสบริษัท</mat-error>
+          }
+        </mat-form-field>
+      } @else {
+        <div class="company">
+          <mat-icon>domain</mat-icon>
+          <span>
+            บริษัท: <strong>{{ auth.companyCode() }}</strong>
+          </span>
+          <button mat-button type="button" (click)="changeCompany()">เปลี่ยน</button>
+        </div>
+      }
+
       <mat-form-field appearance="outline">
         <mat-label>ชื่อผู้ใช้</mat-label>
         <input matInput formControlName="username" autocomplete="username" />
@@ -19,7 +47,7 @@
         <mat-label>รหัสผ่าน</mat-label>
         <input
           matInput
-          appAutofocus
+          [appAutofocus]="!editCompany()"
           formControlName="password"
           autocomplete="current-password"
           [type]="hidePassword() ? 'password' : 'text'"
@@ -48,6 +76,10 @@
           เข้าสู่ระบบ
         }
       </button>
+      <div class="links">
+        <a mat-button routerLink="/auth/forgot-password">ลืมรหัสผ่าน (เจ้าของบริษัท)</a>
+        <a mat-button routerLink="/auth/signup">สมัครใช้งานบริษัทใหม่</a>
+      </div>
     </mat-card-actions>
   </form>
 </mat-card>

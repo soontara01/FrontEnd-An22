@@ -1,0 +1,111 @@
+<app-page-header
+  title="สร้างใบโอน"
+  [subtitle]="
+    'โอนจากสาขา ' + (here()?.code ?? '') + ' — สินค้าออกจากสต็อกสาขานี้ทันที ที่ทุนของสาขานี้'
+  "
+>
+  <a mat-button routerLink="/transfers">
+    <mat-icon>arrow_back</mat-icon>
+    ใบโอนสินค้า
+  </a>
+</app-page-header>
+
+@if (productsRes.hasValue()) {
+  <div class="filter-row">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>โอนไปสาขา</mat-label>
+      <mat-select [value]="toBranchId()" (selectionChange)="toBranchId.set($event.value)">
+        @for (b of destinations(); track b.id) {
+          <mat-option [value]="b.id">{{ b.code }} {{ b.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="reason">
+      <mat-label>หมายเหตุ</mat-label>
+      <input matInput [value]="note()" (input)="note.set($any($event.target).value)" />
+    </mat-form-field>
+  </div>
+
+  <div class="table-wrap">
+    <table class="list">
+      <thead>
+        <tr>
+          <th>SKU</th>
+          <th>รายการ</th>
+          <th class="num">คงเหลือที่นี่</th>
+          <th class="num">โอน</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (l of lines(); track l.productId) {
+          @let p = product(l.productId);
+          <tr>
+            <td class="mono">{{ p?.sku }}</td>
+            <td>
+              {{ p?.name }}
+              @if (p?.serialControl) {
+                <div class="serials small">
+                  @for (s of serialsOf().get(l.productId) ?? []; track s.id) {
+                    <mat-checkbox
+                      [checked]="l.serials.includes(s.serial)"
+                      (change)="toggleSerial(l.productId, s.serial, $event.checked)"
+                      >{{ s.serial }}</mat-checkbox
+                    >
+                  }
+                </div>
+              }
+            </td>
+            <td class="num">{{ p?.stock }} {{ p?.unit }}</td>
+            <td class="num">
+              @if (p?.serialControl) {
+                {{ l.qty }}
+              } @else {
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="qty">
+                  <input
+                    matInput
+                    type="number"
+                    min="1"
+                    [max]="p?.stock ?? 0"
+                    [value]="l.qty"
+                    (input)="setQty(l.productId, $any($event.target).value)"
+                  />
+                </mat-form-field>
+              }
+            </td>
+            <td>
+              <button mat-icon-button matTooltip="เอาออก" (click)="remove(l.productId)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="actions">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="reason">
+      <mat-label>เพิ่มสินค้า</mat-label>
+      <mat-select [value]="null" (selectionChange)="add($event.value)">
+        @for (p of addable(); track p.id) {
+          <mat-option [value]="p.id"
+            >{{ p.sku }} — {{ p.name }} ({{ p.stock }} {{ p.unit }})</mat-option
+          >
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <div class="actions">
+    <button mat-flat-button [disabled]="!!problem() || saving()" (click)="save()">
+      <mat-icon>local_shipping</mat-icon>
+      สร้างใบโอน
+    </button>
+    @if (problem(); as p) {
+      <span class="problem">{{ p }}</span>
+    }
+  </div>
+} @else if (productsRes.isLoading()) {
+  <app-loading-spinner />
+}

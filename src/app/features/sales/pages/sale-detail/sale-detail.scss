@@ -132,3 +132,11 @@ table.lines .num {
   padding-left: 8px;
   border-left: 2px solid var(--mat-sys-outline-variant);
 }
+
+.other-branch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 16px;
+  color: var(--mat-sys-on-surface-variant);
+}

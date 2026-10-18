@@ -23,6 +23,7 @@ type HistoryFilter = 'all' | 'in_stock' | 'removed';
 
 const STATUS_BADGE: Record<SerialStatus, string> = {
   in_stock: 'badge-success',
+  in_transit: 'badge-warn',
   sold: '',
   damaged: 'badge-error',
   other: 'badge-warn',

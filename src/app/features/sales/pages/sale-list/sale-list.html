@@ -24,6 +24,7 @@
 </app-page-header>
 
 <div class="filter-row">
+  <app-branch-scope-select [value]="scope()" (changed)="selectBranch($event)" />
   <mat-form-field appearance="outline" subscriptSizing="dynamic" class="range">
     <mat-label>ช่วงวันที่</mat-label>
     <mat-date-range-input [formGroup]="rangeForm" [rangePicker]="picker">
@@ -167,6 +168,11 @@
         </td>
       </ng-container>
 
+      <ng-container matColumnDef="branch">
+        <th mat-header-cell *matHeaderCellDef>สาขา</th>
+        <td mat-cell *matCellDef="let s">{{ branchCode(s) }}</td>
+      </ng-container>
+
       <ng-container matColumnDef="date">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>วันที่</th>
         <td mat-cell *matCellDef="let s">{{ s.date | thaiDate: 'datetime' }}</td>
@@ -242,14 +248,14 @@
         </td>
       </ng-container>
 
-      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-header-row *matHeaderRowDef="columns()"></tr>
       <tr
         mat-row
-        *matRowDef="let row; columns: columns"
+        *matRowDef="let row; columns: columns()"
         [class.cancelled]="row.status === 'cancelled'"
       ></tr>
       <tr class="mat-row" *matNoDataRow>
-        <td class="mat-cell no-data" [attr.colspan]="columns.length">ไม่พบบิลที่ตรงเงื่อนไข</td>
+        <td class="mat-cell no-data" [attr.colspan]="columns().length">ไม่พบบิลที่ตรงเงื่อนไข</td>
       </tr>
     </table>
     <mat-paginator [pageSizeOptions]="[10, 25, 50]" [pageSize]="25" showFirstLastButtons />

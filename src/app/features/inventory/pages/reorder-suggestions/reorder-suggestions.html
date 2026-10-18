@@ -1,6 +1,6 @@
 <app-page-header
-  title="แนะนำสั่งซื้อ"
-  subtitle="สินค้าที่ถึงจุดสั่งซื้อ แยกตามผู้จำหน่ายหลัก (ราคาไม่รวม VAT)"
+  [title]="'แนะนำสั่งซื้อ · สาขา ' + (workingBranch()?.code ?? '-')"
+  subtitle="สินค้าที่ถึงจุดสั่งซื้อของสาขานี้ แยกตามผู้จำหน่ายหลัก (ราคาไม่รวม VAT)"
 >
   <a mat-button routerLink="/inventory" class="no-print">
     <mat-icon>arrow_back</mat-icon>
