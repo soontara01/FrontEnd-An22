@@ -25,19 +25,21 @@
         <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
       }
     </div>
-    <div>
-      <div class="text-muted">ต้นทุนเฉลี่ย (ไม่รวม VAT)</div>
-      <div class="value">
-        {{ effectiveCost(r.product) | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+    @if (canSeeCost()) {
+      <div>
+        <div class="text-muted">ต้นทุนเฉลี่ย (ไม่รวม VAT)</div>
+        <div class="value">
+          {{ effectiveCost(r.product) | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+        </div>
+        <div class="text-muted small">
+          มาตรฐาน {{ r.product.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+        </div>
       </div>
-      <div class="text-muted small">
-        มาตรฐาน {{ r.product.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+      <div>
+        <div class="text-muted">กำไรขั้นต้นวันนี้</div>
+        <div class="value">{{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}</div>
       </div>
-    </div>
-    <div>
-      <div class="text-muted">กำไรขั้นต้นวันนี้</div>
-      <div class="value">{{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}</div>
-    </div>
+    }
     <div>
       <div class="text-muted">ราคาถัดไป</div>
       @if (r.next) {

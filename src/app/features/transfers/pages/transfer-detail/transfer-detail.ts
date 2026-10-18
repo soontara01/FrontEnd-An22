@@ -73,8 +73,8 @@ export default class TransferDetail {
     params: () => Number(this.id()),
     stream: ({ params }) => this.store.get(params),
   });
-  /** Costs are for admins (another branch's cost, E14) */
-  protected readonly showCost = this.auth.isAdmin;
+  /** Costs only for who may see cost (E14 → E43; the server sends `unitCost: null` otherwise) */
+  protected readonly showCost = this.auth.canSeeCost;
   protected readonly company = computed(() => this.auth.company()?.name ?? '');
   private readonly here = computed(() => this.auth.currentBranch()?.id ?? null);
 

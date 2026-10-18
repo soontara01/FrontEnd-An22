@@ -107,8 +107,10 @@
                   <th class="num">ราคา/หน่วย</th>
                   <th class="num">ส่วนลด</th>
                   <th class="num">ยอดสุทธิ</th>
-                  <th class="num">ต้นทุน</th>
-                  <th class="num">กำไรขั้นต้น</th>
+                  @if (canSeeCost()) {
+                    <th class="num">ต้นทุน</th>
+                    <th class="num">กำไรขั้นต้น</th>
+                  }
                 </tr>
               </thead>
               <tbody>
@@ -155,10 +157,12 @@
                       }
                     </td>
                     <td class="num">{{ l.amount | number: '1.2-2' }}</td>
-                    <td class="num">{{ l.cogs | number: '1.2-2' }}</td>
-                    <td class="num" [class.loss]="lineProfit(l) < 0">
-                      {{ lineProfit(l) | number: '1.2-2' }}
-                    </td>
+                    @if (canSeeCost()) {
+                      <td class="num">{{ l.cogs | number: '1.2-2' }}</td>
+                      <td class="num" [class.loss]="lineProfit(l) < 0">
+                        {{ lineProfit(l) | number: '1.2-2' }}
+                      </td>
+                    }
                   </tr>
                 }
               </tbody>
@@ -201,12 +205,14 @@
               <div class="text-muted">
                 <span>ยอดก่อน VAT</span><span>{{ s.total - s.vat | number: '1.2-2' }}</span>
               </div>
-              <div class="text-muted">
-                <span>ต้นทุนขาย</span><span>{{ cogs() | number: '1.2-2' }}</span>
-              </div>
-              <div [class.loss]="profit() < 0">
-                <span>กำไรขั้นต้น</span><span>{{ profit() | number: '1.2-2' }}</span>
-              </div>
+              @if (canSeeCost()) {
+                <div class="text-muted">
+                  <span>ต้นทุนขาย</span><span>{{ cogs() | number: '1.2-2' }}</span>
+                </div>
+                <div [class.loss]="profit() < 0">
+                  <span>กำไรขั้นต้น</span><span>{{ profit() | number: '1.2-2' }}</span>
+                </div>
+              }
             </mat-card-content>
           </mat-card>
 

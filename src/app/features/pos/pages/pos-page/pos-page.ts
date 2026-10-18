@@ -139,7 +139,7 @@ export default class PosPage {
 
   protected readonly cart = this.store.cart;
   protected readonly blocking = computed(() => this.cart().issues.filter((i) => i.blocking));
-  protected readonly warnings = computed(() => this.cart().issues.filter((i) => !i.blocking));
+  protected readonly warnings = this.store.warnings;
 
   constructor() {
     this.store.load();

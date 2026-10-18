@@ -81,6 +81,7 @@ describe('PosStore', () => {
       paymentMethods: vi.fn(() => of(methods)),
       serials: vi.fn(() => of([])),
       checkout: vi.fn(() => of(sale)),
+      costCheck: vi.fn(() => of([])),
       // Selling itself is tested with shifts off; the shift tests below turn them on.
       storeInfo: vi.fn(() => of({ ...STORE_INFO_DEFAULTS, requireShift: false })),
       posTerminals: vi.fn(() =>
@@ -181,6 +182,49 @@ describe('PosStore', () => {
     expect(store.lastSale()).toBe(sale);
     expect(store.items()).toEqual([]);
     expect(api.products).toHaveBeenCalledTimes(2); // stock reloaded
+  });
+
+  it('asks the server whether a manual discount goes below cost when cost is hidden (E45)', () => {
+    vi.useFakeTimers();
+    try {
+      const below = {
+        cartIndex: 0,
+        productId: 1,
+        message: 'P1 ขายต่ำกว่าทุนหลังส่วนลดพิเศษ',
+        blocking: false,
+      };
+      api.costCheck.mockReturnValue(of([below]));
+      store.add(1);
+      TestBed.tick();
+      vi.advanceTimersByTime(500);
+      expect(api.costCheck).not.toHaveBeenCalled(); // no manual discount: nothing to check
+
+      store.setLineDiscount(0, { kind: 'percent', value: 5 });
+      TestBed.tick();
+      expect(store.warnings()).toEqual([]); // not answered yet
+      vi.advanceTimersByTime(500);
+      TestBed.tick();
+      expect(api.costCheck).toHaveBeenCalledWith({
+        items: [
+          {
+            productId: 1,
+            factor: 1,
+            qty: 1,
+            serial: null,
+            manualDiscount: { kind: 'percent', value: 5 },
+          },
+        ],
+        freeSerials: [],
+        billManualDiscount: null,
+      });
+      expect(store.warnings()).toEqual([below]);
+
+      store.setLineDiscount(0, null); // the answer belonged to the old cart
+      TestBed.tick();
+      expect(store.warnings()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('applies manual discounts within the staff ceiling and keeps them when parked', () => {

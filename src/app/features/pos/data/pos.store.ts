@@ -1,7 +1,20 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, finalize, forkJoin, map, tap, throwError } from 'rxjs';
+import { toObservable, toSignal } from '@angular/core/rxjs-interop';
+import {
+  Observable,
+  catchError,
+  debounceTime,
+  finalize,
+  forkJoin,
+  map,
+  of,
+  switchMap,
+  tap,
+  throwError,
+} from 'rxjs';
 import {
   ApprovalCredentials,
+  CartIssue,
   CartItem,
   CashMovement,
   CashMovementPayload,
@@ -41,7 +54,7 @@ import { AuthService } from '@core/auth/auth.service';
 import { StorageService } from '@core/services/storage.service';
 import { TerminalService } from '@core/services/terminal.service';
 import { httpErrorShown } from '@core/http/http-error-shown';
-import { PosApi } from './pos-api.service';
+import { CostCheckPayload, PosApi } from './pos-api.service';
 
 /** A parked bill, kept in localStorage so it survives reloads and menu switches. */
 export interface HeldBill {
@@ -147,6 +160,42 @@ export class PosStore {
       this._billManual(),
     ),
   );
+
+  /**
+   * Cart sent to `POST /sales/cost-check` (E45): only for who cannot see cost — their products
+   * arrive without cost, so `priceCart()` here cannot tell — and only while a manual discount is
+   * given (nothing else can go below cost). null = no check.
+   */
+  private readonly costCheckRequest = computed<CostCheckPayload | null>(() => {
+    if (this.auth.canSeeCost()) return null;
+    const items = this._items();
+    const billManualDiscount = this._billManual();
+    if (!billManualDiscount && !items.some((i) => i.manualDiscount)) return null;
+    return { items, freeSerials: this._freeSerials(), billManualDiscount };
+  });
+  /** The server's answer and the request it answers (an older answer is never shown). */
+  private readonly costCheck = toSignal(
+    toObservable(this.costCheckRequest).pipe(
+      debounceTime(300),
+      switchMap((request) =>
+        request
+          ? this.api.costCheck(request).pipe(
+              map((issues) => ({ request, issues })),
+              // The error toast is shown already; the warning just stays away.
+              catchError(() => of({ request, issues: [] as CartIssue[] })),
+            )
+          : of({ request, issues: [] as CartIssue[] }),
+      ),
+    ),
+    { initialValue: { request: null, issues: [] as CartIssue[] } },
+  );
+  /** Warnings of the cart (non-blocking), incl. the server's below-cost ones (E45). */
+  readonly warnings = computed(() => {
+    const own = this.cart().issues.filter((i) => !i.blocking);
+    const check = this.costCheck();
+    const current = this.costCheckRequest();
+    return current && check.request === current ? [...own, ...check.issues] : own;
+  });
 
   /** Reason / staff-ceiling problem of the manual discounts (null = fine or none). */
   readonly manualProblem = computed(() =>

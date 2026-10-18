@@ -111,17 +111,17 @@
         </td>
       </ng-container>
 
-      <tr mat-header-row *matHeaderRowDef="columns"></tr>
+      <tr mat-header-row *matHeaderRowDef="columns()"></tr>
       <tr
         mat-row
-        *matRowDef="let row; columns: columns"
+        *matRowDef="let row; columns: columns()"
         class="clickable"
         tabindex="0"
         (click)="open(row)"
         (keydown.enter)="open(row)"
       ></tr>
       <tr class="mat-row" *matNoDataRow>
-        <td class="mat-cell no-data" [attr.colspan]="columns.length">ไม่พบ SKU ที่ตรงเงื่อนไข</td>
+        <td class="mat-cell no-data" [attr.colspan]="columns().length">ไม่พบ SKU ที่ตรงเงื่อนไข</td>
       </tr>
     </table>
     <mat-paginator [pageSizeOptions]="[10, 25, 50]" [pageSize]="10" showFirstLastButtons />

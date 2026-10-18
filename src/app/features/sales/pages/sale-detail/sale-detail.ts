@@ -120,6 +120,8 @@ export default class SaleDetail {
     this.notes.hasValue() ? this.notes.value() : [],
   );
   protected readonly isAdmin = this.auth.isAdmin;
+  /** Cost and gross profit only for who may see cost (E43). */
+  protected readonly canSeeCost = this.auth.canSeeCost;
   /** The working branch: void / credit note / exchange only at the branch of sale (D3, E12). */
   private readonly here = computed<BranchHere>(() => ({
     branchId: this.auth.currentBranch()?.id ?? null,

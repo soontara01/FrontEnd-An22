@@ -3,6 +3,7 @@ import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
   ApprovalCredentials,
+  CartIssue,
   CashMovement,
   CashMovementPayload,
   Category,
@@ -75,6 +76,16 @@ export class PosApi {
     return this.api.get<TaxInvoiceBuyer | null>('tax-invoices/buyer', { taxId });
   }
 
+  /**
+   * Below-cost warnings of manual discounts, worked out by the server with the real costs — for
+   * who cannot see cost (E45); the answer carries no numbers.
+   */
+  costCheck(payload: CostCheckPayload): Observable<CartIssue[]> {
+    return this.api
+      .post<{ issues: CartIssue[] }>('sales/cost-check', payload)
+      .pipe(map((r) => r.issues));
+  }
+
   checkout(payload: SalePayload): Observable<Sale> {
     return this.api.post<Sale>('sales', payload).pipe(map(normalizeSale));
   }
@@ -135,3 +146,6 @@ export class PosApi {
     return this.api.post<{ user: User }>('auth/verify', credentials);
   }
 }
+
+/** `POST /sales/cost-check`: the cart part of a `SalePayload` (E45). */
+export type CostCheckPayload = Pick<SalePayload, 'items' | 'freeSerials' | 'billManualDiscount'>;

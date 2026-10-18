@@ -53,7 +53,13 @@ export default class PriceOverview {
   protected readonly isAdmin = inject(AuthService).isAdmin;
 
   protected readonly expiringDays = EXPIRING_DAYS;
-  protected readonly columns = ['sku', 'name', 'cost', 'current', 'margin', 'period', 'next'];
+  /** Cost and margin columns only for who may see cost (E43). */
+  private readonly canSeeCost = inject(AuthService).canSeeCost;
+  protected readonly columns = computed(() =>
+    ['sku', 'name', 'cost', 'current', 'margin', 'period', 'next'].filter(
+      (c) => this.canSeeCost() || (c !== 'cost' && c !== 'margin'),
+    ),
+  );
   protected readonly dataSource = new MatTableDataSource<PriceRow>([]);
   protected readonly filterText = signal('');
   protected readonly rowFilter = signal<RowFilter>('all');
