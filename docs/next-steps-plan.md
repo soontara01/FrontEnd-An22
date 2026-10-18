@@ -1,6 +1,6 @@
 # แผนงานถัดไปหลัง SaaS ขั้น 6 (เริ่ม 2026-10-18)
 
-สถานะ: **กำลังทำ A** (2026-10-18: A1 เสร็จ, A2 เสร็จ — E42, A3 ทดสอบแล้วบางส่วน — ผลใน `saas-plan.md` หัวข้อ 9 ขั้น 6) — SaaS ขั้น 1–6 เสร็จฝั่งหน้าบ้าน + mock แล้ว (`docs/saas-plan.md` หัวข้อ 9, ข้อตัดสินใจถึง E41)
+สถานะ: **กำลังทำ A** (2026-10-18: A1 เสร็จ, A2 เสร็จ — E42, A3 เสร็จ — ผลใน `saas-plan.md` หัวข้อ 9 ขั้น 6; A4 เปิด PR เข้า `main`) — SaaS ขั้น 1–6 เสร็จฝั่งหน้าบ้าน + mock แล้ว (`docs/saas-plan.md` หัวข้อ 9, ข้อตัดสินใจถึง E41)
 งานในไฟล์นี้: **A** ปิดงานค้างของขั้น 6 → **B** ซ่อนทุน / กำไรจาก role user (P5) → **C** ส่งต่อหลังบ้าน
 แต่ละขั้นย่อย build + test + lint ผ่าน → prettier เฉพาะไฟล์ที่แก้ (อย่าให้โดน `docs/test-data`) → อัปเดต docs → commit
 
@@ -23,14 +23,14 @@
 - ระวัง bundle: `TerminalService` อยู่ใน initial bundle (ใช้ใน `terminalInterceptor`) — อ่าน company id จาก `AuthService` (inject) ห้าม import model / barrel
 - spec: `terminal.service` + `terminal.interceptor.spec.ts`; docs: CLAUDE.md หัวข้อ POS terminals ("localStorage `pos.terminal`"), `docs/terminal-plan.md` (T2)
 
-### A3. ทดสอบบนหน้าจอส่วนที่ยังมีแค่ spec — บางส่วน 2026-10-18 (เหลือ: โอนความเป็นเจ้าของ, platform ตั้งรหัส owner / ระงับ / เปิดกลับ)
+### A3. ทดสอบบนหน้าจอส่วนที่ยังมีแค่ spec — ✅ 2026-10-18
 
 owner เปลี่ยนแพ็กเกจ (tab แพ็กเกจ) · โอนความเป็นเจ้าของ (รายการผู้ใช้ → ปุ่ม workspace_premium, ผู้รับต้องมีอีเมล → หน้า reload) ·
 admin สาขา (สร้างผู้ใช้ admin สาขา BN) เห็น audit เฉพาะ BN · ชนเพดานผู้ใช้ / เครื่อง POS (เปลี่ยน DEMO เป็น Starter ชั่วคราว แล้วคืนเป็น Pro) ·
 platform: ตั้งรหัส owner, ระงับ / เปิดกลับ (ต้องมีเหตุผล)
 — บันทึกผลต่อท้ายความคืบหน้าขั้น 6 ใน `docs/saas-plan.md`; หมายเหตุ: เครื่องมือคลิกของเบราว์เซอร์ไม่ส่งคลิกบางปุ่ม ใช้ `javascript_tool` คลิก / กรอก (dispatch `input`) แทน; stub `window.print`
 
-### A4. รวม branch
+### A4. รวม branch — PR เข้า `main` (2026-10-18); หัวข้อ B ทำบน branch ใหม่
 
 `feature/step5` มี commit ขั้น 5 + ขั้น 6 (6.1–6.9) — **ถามผู้ใช้** ว่าจะเปิด PR เข้า `main` หรือ merge เอง (อย่า push / merge เองโดยไม่ถาม)
 
