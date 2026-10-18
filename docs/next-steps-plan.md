@@ -1,6 +1,6 @@
 # แผนงานถัดไปหลัง SaaS ขั้น 6 (เริ่ม 2026-10-18)
 
-สถานะ: **กำลังทำ A** (2026-10-18: A1 restart dev server แล้ว, A2 เสร็จ — E42) — SaaS ขั้น 1–6 เสร็จฝั่งหน้าบ้าน + mock แล้ว (`docs/saas-plan.md` หัวข้อ 9, ข้อตัดสินใจถึง E41)
+สถานะ: **กำลังทำ A** (2026-10-18: A1 เสร็จ, A2 เสร็จ — E42, A3 ทดสอบแล้วบางส่วน — ผลใน `saas-plan.md` หัวข้อ 9 ขั้น 6) — SaaS ขั้น 1–6 เสร็จฝั่งหน้าบ้าน + mock แล้ว (`docs/saas-plan.md` หัวข้อ 9, ข้อตัดสินใจถึง E41)
 งานในไฟล์นี้: **A** ปิดงานค้างของขั้น 6 → **B** ซ่อนทุน / กำไรจาก role user (P5) → **C** ส่งต่อหลังบ้าน
 แต่ละขั้นย่อย build + test + lint ผ่าน → prettier เฉพาะไฟล์ที่แก้ (อย่าให้โดน `docs/test-data`) → อัปเดต docs → commit
 
@@ -8,7 +8,7 @@
 
 ## A. ปิดงานค้างของขั้น 6 (เล็ก)
 
-### A1. dev server + ข้อมูลทดสอบ
+### A1. dev server + ข้อมูลทดสอบ — ✅ 2026-10-18 (restart `ng serve`, ลบ ACME, ปิดกะค้างทั้ง 2 กะ)
 
 - dev server เดิมที่ `:4200` (รันตั้งแต่ 2026-10-15) **ไม่ rebuild chunk หน้า platform แล้ว** — ถามผู้ใช้ก่อน แล้วให้ผู้ใช้ restart `ng serve` เอง (เป็น process ของผู้ใช้)
 - mock db บน `:4200` มีบริษัททดสอบ `ACME` (id 2) ค้างสถานะ "รอลบข้อมูล" — **ถามผู้ใช้ก่อนลบ**; วิธีลบ: คืน `an22.mock.platform` จาก localStorage key `backup-before-step6.9`
@@ -23,7 +23,7 @@
 - ระวัง bundle: `TerminalService` อยู่ใน initial bundle (ใช้ใน `terminalInterceptor`) — อ่าน company id จาก `AuthService` (inject) ห้าม import model / barrel
 - spec: `terminal.service` + `terminal.interceptor.spec.ts`; docs: CLAUDE.md หัวข้อ POS terminals ("localStorage `pos.terminal`"), `docs/terminal-plan.md` (T2)
 
-### A3. ทดสอบบนหน้าจอส่วนที่ยังมีแค่ spec
+### A3. ทดสอบบนหน้าจอส่วนที่ยังมีแค่ spec — บางส่วน 2026-10-18 (เหลือ: โอนความเป็นเจ้าของ, platform ตั้งรหัส owner / ระงับ / เปิดกลับ)
 
 owner เปลี่ยนแพ็กเกจ (tab แพ็กเกจ) · โอนความเป็นเจ้าของ (รายการผู้ใช้ → ปุ่ม workspace_premium, ผู้รับต้องมีอีเมล → หน้า reload) ·
 admin สาขา (สร้างผู้ใช้ admin สาขา BN) เห็น audit เฉพาะ BN · ชนเพดานผู้ใช้ / เครื่อง POS (เปลี่ยน DEMO เป็น Starter ชั่วคราว แล้วคืนเป็น Pro) ·
