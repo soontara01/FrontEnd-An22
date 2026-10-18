@@ -18,13 +18,14 @@ describe('auth guards', () => {
   const isLoggedIn = signal(false);
   const isAdmin = signal(false);
   const currentBranch = signal<{ id: number } | null>(null);
+  const company = signal<{ deletionPurgeAfter?: string | null } | null>(null);
   const notify = { error: vi.fn() };
 
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
-        { provide: AuthService, useValue: { isLoggedIn, isAdmin, currentBranch } },
+        { provide: AuthService, useValue: { isLoggedIn, isAdmin, currentBranch, company } },
         { provide: NotificationService, useValue: notify },
         {
           provide: MenuAccessService,
@@ -88,5 +89,13 @@ describe('auth guards', () => {
     const hidden = run(menuGuard('inventory')) as Observable<boolean | UrlTree>;
     expect(String(await firstValueFrom(hidden))).toBe('/pos');
     expect(notify.error).toHaveBeenCalledWith('ไม่มีสิทธิ์เข้าเมนูคลังสินค้า');
+  });
+
+  it('menuGuard keeps a company waiting for deletion on its data page (E39)', () => {
+    isAdmin.set(true);
+    company.set({ deletionPurgeAfter: '2026-11-17' });
+    expect(String(run(menuGuard('dashboard')))).toBe('/account/data');
+    expect(run(menuGuard('account'))).toBe(true);
+    company.set(null);
   });
 });

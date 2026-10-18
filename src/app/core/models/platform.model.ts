@@ -1,4 +1,5 @@
 import { PlanId, PlanUsage } from './plan.model';
+import { CompanyDeletion } from './company-data.model';
 import {
   BillingInvoice,
   CompanySuspendReason,
@@ -43,6 +44,8 @@ export interface PlatformCompanyRow {
   openAmount: number;
   /** Its data was deleted (E39); the row stays so the code is never reused */
   deletedAt: string | null;
+  /** The owner's pending deletion request (E39) */
+  deletion: CompanyDeletion | null;
 }
 
 /** `GET /platform/companies/:id`: the row + its invoices, owner and suspension note. */

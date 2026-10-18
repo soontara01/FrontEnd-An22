@@ -37,6 +37,9 @@ import {
   TaxInvoice,
   Transfer,
   AuditEvent,
+  CompanyDeletion,
+  CompanyExport,
+  DeletionRequest,
   PlatformCompanyDetail,
   PlatformCompanyRow,
   PlatformLoginResponse,
@@ -3771,5 +3774,137 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
         'user_password',
       ]),
     );
+  });
+});
+
+describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const login = (username: string, password: string) =>
+    firstValueFrom(
+      http.post<LoginResponse>('/api/auth/login', { companyCode: 'DEMO', username, password }),
+    );
+  const platformToken = async () =>
+    (
+      await firstValueFrom(
+        http.post<PlatformLoginResponse>('/api/platform/auth/login', {
+          username: 'platform',
+          password: 'platform',
+        }),
+      )
+    ).token;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('exports every collection for the owner only, without passwords, and logs it', async () => {
+    expect((await failure(call('GET', 'company/export', undefined, STAFF)))?.[0]).toBe(403);
+    const dump = await call<CompanyExport>('GET', 'company/export');
+    expect(dump).toMatchObject({ schemaVersion: 1, company: { id: 1, code: 'DEMO' } });
+    expect(Object.keys(dump.data)).toEqual(
+      expect.arrayContaining(['products', 'branchStock', 'sales', 'users', 'shifts', 'auditLog']),
+    );
+    expect(dump.data['passwords']).toBeUndefined();
+    expect(dump.data['nextId']).toBeUndefined();
+    const events = await call<AuditEvent[]>('GET', 'audit-log?action=company_export');
+    expect(events).toHaveLength(1);
+  });
+
+  it('suspends everyone but the owner, who may only download or cancel', async () => {
+    const ask = (body: Partial<DeletionRequest>) =>
+      call<CompanyDeletion>('POST', 'company/deletion', {
+        companyCode: 'DEMO',
+        password: 'admin',
+        reason: 'เลิกกิจการ',
+        ...body,
+      });
+    expect(await failure(ask({ companyCode: 'X' }))).toEqual([
+      400,
+      'พิมพ์รหัสบริษัทให้ตรงเพื่อยืนยัน',
+    ]);
+    expect(await failure(ask({ password: 'wrong' }))).toEqual([400, 'รหัสผ่านไม่ถูกต้อง']);
+    await ask({});
+    // staff are logged out at once
+    expect(await failure(call('GET', 'products', undefined, STAFF))).toEqual([
+      401,
+      'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+    ]);
+    const pending = await call<CompanyDeletion | null>('GET', 'company/deletion');
+    expect(pending?.purgeAfter).toBe(addDaysIso(todayIso(), 30));
+    expect((await failure(login('somchai', '1234')))?.[1]).toBe(
+      'บริษัทนี้อยู่ระหว่างรอลบข้อมูล — ติดต่อเจ้าของบริษัท',
+    );
+    const session = await login('admin', 'admin');
+    expect(session.company.deletionPurgeAfter).toBe(pending?.purgeAfter);
+    expect((await failure(call('GET', 'products')))?.[0]).toBe(403);
+    expect((await call<CompanyExport>('GET', 'company/export')).schemaVersion).toBe(1);
+    // cancelled: back to normal for everyone
+    await call('DELETE', 'company/deletion');
+    expect((await call<Product[]>('GET', 'products', undefined, STAFF)).length).toBeGreaterThan(0);
+    const actions = (await call<AuditEvent[]>('GET', 'audit-log')).map((e) => e.action);
+    expect(actions).toEqual(expect.arrayContaining(['deletion_request', 'deletion_cancel']));
+  });
+
+  it('lets the platform delete the data once due; the code stays taken', async () => {
+    await call('POST', 'company/deletion', { companyCode: 'DEMO', password: 'admin', reason: '' });
+    const token = await platformToken();
+    const purge = () =>
+      firstValueFrom(
+        http.post<PlatformCompanyDetail>(
+          '/api/platform/companies/1/purge',
+          {},
+          { headers: { Authorization: `Bearer ${token}` } },
+        ),
+      );
+    expect((await failure(purge()))?.[1]).toContain('ลบข้อมูลได้ตั้งแต่วันที่');
+    const platform = JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
+    platform.companies[0].deletion.purgeAfter = todayIso();
+    localStorage.setItem('an22.mock.platform', JSON.stringify(platform));
+    const gone = await purge();
+    expect(gone.deletedAt).not.toBeNull();
+    expect(gone.name).toBe(SEED_STORE_INFO.name);
+    expect(localStorage.getItem('an22.mock.db')).toBeNull();
+    expect((await failure(login('admin', 'admin')))?.[1]).toBe(
+      'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง',
+    );
+    expect((await failure(call('GET', 'me')))?.[0]).toBe(401);
+    const signup = await failure(
+      firstValueFrom(
+        http.post('/api/auth/signup', {
+          companyCode: 'DEMO',
+          companyName: 'ใหม่',
+          taxId: '0105550123451',
+          vatRegistered: true,
+          branch: {
+            code: 'HQ',
+            name: 'สำนักงานใหญ่',
+            branchNo: '00000',
+            address: 'กรุงเทพฯ',
+            phone: '',
+          },
+          owner: { name: 'x', username: 'boss', email: 'b@x.test', password: 'secret' },
+          planId: 'starter',
+        }),
+      ),
+    );
+    expect(signup).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
   });
 });

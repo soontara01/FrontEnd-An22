@@ -123,6 +123,19 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 | `POST /auth/reset-password`  | `{ token, password }` → `null`           | token ผิด / หมดอายุ / ใช้แล้ว → 400 "ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่"; `passwordError()` → 400; audit `password_reset`                                                                                                                                                                                           |
 | `GET /company/onboarding`    | → `OnboardingCounts`                     | admin; จำนวนเครื่อง POS / หมวด / SKU / ช่วงราคา / ผู้ใช้ — หน้าบ้านทำ checklist ด้วย `onboardingSteps()`                                                                                                                                                                                                                                         |
 
+### ข้อมูลบริษัท: export / ลบ (SaaS ขั้น 6.8, E38 / E39, owner เท่านั้น — อื่น → 403)
+
+| endpoint                             | body → ตอบ                                                              | หมายเหตุ                                                                                                                                                                                                |
+| ------------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /company/export`                | → `CompanyExport`                                                       | JSON ทุก collection ของบริษัทตามที่เก็บ (`schemaVersion: 1`), **ไม่มีรหัสผ่าน / token**; audit `company_export` — บริษัทใหญ่ควรทำเป็น job + ลิงก์ดาวน์โหลด (หลังบ้านเลือก)                              |
+| `GET /company/deletion`              | → `CompanyDeletion \| null`                                             | คำขอที่ค้างอยู่                                                                                                                                                                                         |
+| `POST /company/deletion`             | `DeletionRequest { companyCode, password, reason }` → `CompanyDeletion` | `deletionRequestError()` → 400, รหัสผ่านผิด → 400 "รหัสผ่านไม่ถูกต้อง", มีคำขออยู่แล้ว → 400; บริษัทถูกระงับทันที (`suspendedReason: 'deletion'`), `purgeAfter` = วันนี้ + 30; audit `deletion_request` |
+| `DELETE /company/deletion`           | → `null`                                                                | ยกเลิก: เปิดใช้งานกลับ (ถ้าค้างชำระเกินผ่อนผันจะถูกระงับอีกตามกฎ billing); audit `deletion_cancel`                                                                                                      |
+| `POST /platform/companies/:id/purge` | → `PlatformCompanyDetail`                                               | platform: `purgeError()` (ต้องมีคำขอและถึง `purgeAfter`); ลบข้อมูลทุกตารางของ tenant ถาวร, ทะเบียนบริษัทคง `deleted_at` + ชื่อ, รหัสบริษัทห้ามสมัครซ้ำ, login / token เดิม → เหมือนไม่มีบริษัท          |
+
+ระหว่างรอลบ: login ได้เฉพาะ owner (คนอื่น → 401 "บริษัทนี้อยู่ระหว่างรอลบข้อมูล — ติดต่อเจ้าของบริษัท"), `Company.deletionPurgeAfter` ใน login / `me`;
+ทุก endpoint นอก `me`, `company/*`, `audit-log` → 403 — หน้าบ้านพา owner ไป `/account/data` (`menuGuard`). **ระยะเก็บเอกสารภาษีก่อนลบ (5 ปี?) รอนักบัญชียืนยัน**
+
 ### Platform admin (SaaS ขั้น 6.7, E36 — ผู้ให้บริการ SaaS)
 
 token แยก (mock `mock-platform-token.p<id>`): token ของ platform ใช้กับ endpoint ของบริษัทไม่ได้ และกลับกัน (→ 401); หน้าบ้านส่ง token นี้เฉพาะ `/platform/…` และไม่ส่ง `X-Branch-Id` / `X-Terminal-Id`;

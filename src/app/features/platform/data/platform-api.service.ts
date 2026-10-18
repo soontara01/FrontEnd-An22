@@ -36,6 +36,11 @@ export class PlatformApi {
     return this.api.post<PlatformCompanyDetail>(`platform/invoices/${invoiceId}/pay`, {});
   }
 
+  /** Deletes a company's data for good once its deletion request is due (E39). */
+  purge(id: number): Observable<PlatformCompanyDetail> {
+    return this.api.post<PlatformCompanyDetail>(`platform/companies/${id}/purge`, {});
+  }
+
   outbox(): Observable<PlatformEmail[]> {
     return this.api.get<PlatformEmail[]>('platform/outbox');
   }

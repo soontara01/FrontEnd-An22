@@ -15,6 +15,8 @@ import {
   SUSPEND_REASON_LABEL,
   passwordError,
   payInvoiceError,
+  purgeError,
+  todayIso,
   planOf,
   reactivateCompanyError,
   suspendCompanyError,
@@ -87,6 +89,10 @@ export default class CompanyDetail {
     return c ? reactivateCompanyError(c) : null;
   });
   protected readonly passwordProblem = computed(() => passwordError(this.password()));
+  protected readonly purgeProblem = computed(() => {
+    const c = this.company();
+    return c ? purgeError(c.deletion, todayIso()) : null;
+  });
 
   protected statusText(c: PlatformCompanyDetail): string {
     if (c.deletedAt) return 'ลบข้อมูลแล้ว';
@@ -134,6 +140,16 @@ export default class CompanyDetail {
       `รับชำระ ${invoice.invoiceNo}`,
       `ยืนยันว่าได้รับเงิน ฿${invoice.amount.toLocaleString('th-TH')} แล้ว`,
       () => this.api.payInvoice(invoice.id),
+    );
+  }
+
+  protected purge(): void {
+    const c = this.company();
+    if (!c || this.purgeProblem()) return;
+    this.confirmThen(
+      `ลบข้อมูลบริษัท ${c.code} ถาวร`,
+      'ข้อมูลทั้งหมดของบริษัทจะถูกลบและกู้คืนไม่ได้ รหัสบริษัทจะใช้ซ้ำไม่ได้',
+      () => this.api.purge(c.id),
     );
   }
 

@@ -25,6 +25,9 @@ export type AuditAction =
   | 'company_suspend'
   | 'company_reactivate'
   | 'invoice_paid'
+  | 'company_export'
+  | 'deletion_request'
+  | 'deletion_cancel'
   | 'password_reset'
   | 'menu_access'
   | 'company_settings'
@@ -55,6 +58,9 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   company_suspend: 'ระงับบริษัท',
   company_reactivate: 'เปิดใช้งานบริษัทอีกครั้ง',
   invoice_paid: 'รับชำระค่าบริการ',
+  company_export: 'ดาวน์โหลดข้อมูลทั้งบริษัท',
+  deletion_request: 'ขอลบข้อมูลบริษัท',
+  deletion_cancel: 'ยกเลิกคำขอลบข้อมูล',
   password_reset: 'ตั้งรหัสผ่านใหม่ (ลิงก์อีเมล)',
   menu_access: 'แก้สิทธิ์เมนู',
   company_settings: 'แก้ตั้งค่าบริษัท',

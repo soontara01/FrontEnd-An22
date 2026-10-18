@@ -49,5 +49,6 @@ export default class AccountShell {
   protected readonly tabs: AccountTab[] = [
     { label: 'แพ็กเกจ', icon: 'workspace_premium', path: 'subscription' },
     { label: 'ประวัติการใช้งาน', icon: 'history', path: 'audit-log' },
+    { label: 'ข้อมูลบริษัท', icon: 'database', path: 'data' },
   ];
 }

@@ -25,12 +25,18 @@ export const adminGuard: CanMatchFn = adminGuardTo('/');
 
 /**
  * A menu the `user` role may not see (`MenuAccess`): a snackbar, then the first menu they see.
- * Admins always pass. Hides the route only — data rights are checked by the server.
+ * Admins always pass. Hides the route only — data rights are checked by the server. While the
+ * company waits for deletion (E39) only its owner is logged in, and only บัญชีบริษัท → ข้อมูลบริษัท
+ * works.
  */
 export const menuGuard =
   (path: string): CanMatchFn =>
   () => {
-    if (inject(AuthService).isAdmin()) return true;
+    const auth = inject(AuthService);
+    if (auth.company()?.deletionPurgeAfter && path !== 'account') {
+      return inject(Router).parseUrl('/account/data');
+    }
+    if (auth.isAdmin()) return true;
     const menus = inject(MenuAccessService);
     const router = inject(Router);
     const notify = inject(NotificationService);

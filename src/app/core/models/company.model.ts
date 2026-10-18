@@ -15,6 +15,11 @@ export interface Company {
   taxId: string;
   /** false = suspended (unpaid etc.): nobody of the company can log in */
   active: boolean;
+  /**
+   * The owner asked for the company's data to be deleted (E39): first day it may be deleted. Only
+   * the owner logs in meanwhile, limited to บัญชีบริษัท → ข้อมูลบริษัท. Missing / null = none.
+   */
+  deletionPurgeAfter?: string | null;
 }
 
 export interface Branch {

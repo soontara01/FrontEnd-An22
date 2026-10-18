@@ -40,6 +40,35 @@
       </mat-card-content>
     </mat-card>
 
+    @if (c.deletion; as d) {
+      <mat-card appearance="outlined" class="deletion">
+        <mat-card-header><mat-card-title>คำขอลบข้อมูล</mat-card-title></mat-card-header>
+        <mat-card-content class="stack">
+          <p>
+            ขอเมื่อ {{ d.requestedAt | thaiDate: 'datetime' }} โดย {{ d.requestedBy }}
+            @if (d.reason) {
+              — {{ d.reason }}
+            }
+          </p>
+          @if (c.deletedAt) {
+            <p>ลบข้อมูลแล้วเมื่อ {{ c.deletedAt | thaiDate: 'datetime' }}</p>
+          } @else {
+            <p>ลบได้ตั้งแต่วันที่ {{ d.purgeAfter | thaiDate }}</p>
+            <span [matTooltip]="purgeProblem() ?? ''">
+              <button
+                mat-stroked-button
+                class="danger"
+                [disabled]="busy() || !!purgeProblem()"
+                (click)="purge()"
+              >
+                ลบข้อมูลถาวร
+              </button>
+            </span>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+
     @if (!c.deletedAt) {
       <mat-card appearance="outlined">
         <mat-card-header><mat-card-title>แพ็กเกจ</mat-card-title></mat-card-header>

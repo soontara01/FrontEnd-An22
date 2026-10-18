@@ -50,3 +50,7 @@ dd {
 .empty {
   padding: 0 16px;
 }
+
+.deletion {
+  border-color: var(--mat-sys-error);
+}

@@ -1,0 +1,84 @@
+@if (!isOwner()) {
+  <app-admin-only-note message="ดาวน์โหลดข้อมูลทั้งบริษัทและขอลบข้อมูลได้เฉพาะเจ้าของบริษัท" />
+} @else {
+  <mat-card appearance="outlined" class="section">
+    <mat-card-header>
+      <mat-card-title>ดาวน์โหลดข้อมูลทั้งบริษัท</mat-card-title>
+      <mat-card-subtitle>ไฟล์ JSON ไฟล์เดียว — ทุกสาขา ทุกเอกสาร (ไม่มีรหัสผ่าน)</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p>
+        สินค้า ราคา สต็อก บิลขาย ใบกำกับภาษี ใบลดหนี้ กะ ใบโอน ผู้ใช้ และประวัติการใช้งาน
+        ตามรูปแบบที่ระบบเก็บ ใช้สำรองข้อมูลหรือย้ายระบบ
+      </p>
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-flat-button [disabled]="busy()" (click)="download()">
+        <mat-icon>download</mat-icon>
+        ดาวน์โหลด JSON
+      </button>
+    </mat-card-actions>
+  </mat-card>
+
+  <mat-card appearance="outlined" class="section danger-zone">
+    <mat-card-header>
+      <mat-card-title>ลบข้อมูลบริษัท (เลิกใช้บริการ)</mat-card-title>
+    </mat-card-header>
+    @if (pending(); as d) {
+      <mat-card-content>
+        <p class="warn">
+          ขอลบข้อมูลแล้วเมื่อ {{ d.requestedAt | thaiDate: 'datetime' }} โดย {{ d.requestedBy }} —
+          ข้อมูลจะถูกลบได้ตั้งแต่วันที่ {{ d.purgeAfter | thaiDate }}
+        </p>
+        <p>ระหว่างนี้มีเพียงเจ้าของบริษัทที่เข้าระบบได้ เพื่อดาวน์โหลดข้อมูลหรือยกเลิกคำขอ</p>
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-flat-button [disabled]="busy()" (click)="cancelDeletion()">
+          ยกเลิกคำขอลบ และกลับมาใช้งาน
+        </button>
+      </mat-card-actions>
+    } @else {
+      <mat-card-content class="stack">
+        <p>
+          เมื่อขอลบ ผู้ใช้ทุกคนจะเข้าระบบไม่ได้ทันที ข้อมูลทั้งหมดจะถูกลบถาวรหลัง {{ waitDays }} วัน
+          (ยกเลิกได้ก่อนครบกำหนด) และรหัสบริษัท {{ code }} จะใช้สมัครใหม่ไม่ได้
+        </p>
+        <p class="warn">
+          ใบกำกับภาษีและรายงานภาษีต้องเก็บตามกฎหมาย (โดยทั่วไป 5 ปี) —
+          ดาวน์โหลดข้อมูลเก็บไว้ก่อนขอลบ
+        </p>
+        <mat-form-field appearance="outline">
+          <mat-label>เหตุผล (ไม่บังคับ)</mat-label>
+          <input matInput [value]="reason()" (input)="reason.set($any($event.target).value)" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>พิมพ์รหัสบริษัท {{ code }} เพื่อยืนยัน</mat-label>
+          <input
+            matInput
+            autocomplete="off"
+            [value]="confirmCode()"
+            (input)="confirmCode.set($any($event.target).value)"
+          />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>รหัสผ่านของคุณ</mat-label>
+          <input
+            matInput
+            type="password"
+            autocomplete="current-password"
+            [value]="password()"
+            (input)="password.set($any($event.target).value)"
+          />
+        </mat-form-field>
+        @if (touched() && problem(); as p) {
+          <p class="field-error">{{ p }}</p>
+        }
+      </mat-card-content>
+      <mat-card-actions>
+        <button mat-stroked-button class="danger" [disabled]="busy()" (click)="requestDeletion()">
+          ขอลบข้อมูลบริษัท
+        </button>
+      </mat-card-actions>
+    }
+  </mat-card>
+}

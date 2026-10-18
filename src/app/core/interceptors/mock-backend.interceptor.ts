@@ -94,6 +94,13 @@ import {
   hasAdminRights,
   isOwner,
   ROLE_LABEL,
+  CompanyDeletion,
+  CompanyExport,
+  DELETION_WAIT_DAYS,
+  DeletionRequest,
+  EXPORT_SCHEMA_VERSION,
+  deletionRequestError,
+  purgeError,
   AuditActorKind,
   PlatformAdmin,
   PlatformEmail,
@@ -323,6 +330,10 @@ type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & {
   deletedAt?: string | null;
   /** Why the platform admin suspended it (`suspendedReason: 'platform'`) */
   suspendNote?: string;
+  /** The owner's deletion request (E39; `suspendedReason: 'deletion'` while pending) */
+  deletion?: CompanyDeletion | null;
+  /** Name when its data was deleted (the registry keeps no other data of it) */
+  deletedName?: string;
 };
 
 /**
@@ -1295,10 +1306,11 @@ function requestCompany(
     const code = normalizeCompanyCode(
       (req.body as Partial<LoginRequest> | null)?.companyCode ?? '',
     );
-    return registry.companies.find((c) => c.code === code);
+    return registry.companies.find((c) => c.code === code && !c.deletedAt);
   }
+  // A deleted company (E39) has no data left: its code and tokens lead nowhere.
   const id = tokenIds(req)?.companyId;
-  return registry.companies.find((c) => c.id === id);
+  return registry.companies.find((c) => c.id === id && !c.deletedAt);
 }
 
 /**
@@ -1580,6 +1592,22 @@ function platformResponse(
     record({ action: 'company_reactivate', ref, detail: '' });
     return ok(platformDetail(company, storage));
   }
+  if (action === 'purge' && req.method === 'POST') {
+    const problem = purgeError(company.deletion, today);
+    if (problem) return error(400, problem);
+    // The data goes for good (E39); the registry entry stays, so the code is never reused.
+    const { db } = loadTenantDb(storage, company.id);
+    storage.remove(tenantKey(company.id));
+    platform.resetTokens = platform.resetTokens.filter((t) => t.companyId !== company.id);
+    Object.assign(company, {
+      deletedAt: new Date().toISOString(),
+      deletedName: db.companyInfo.name,
+      active: false,
+      suspendedReason: 'deletion',
+    });
+    platformChanged = true;
+    return ok(platformDetail(company, storage));
+  }
   if (action === 'owner-password' && req.method === 'PUT') {
     const password = String(body['password'] ?? '');
     const problem = passwordError(password);
@@ -1626,7 +1654,7 @@ function platformRow(company: StoredCompany, storage: StorageService): PlatformC
   return {
     id: company.id,
     code: company.code,
-    name: db?.companyInfo.name ?? '',
+    name: db?.companyInfo.name ?? company.deletedName ?? '',
     taxId: db?.companyInfo.taxId ?? '',
     planId: company.planId,
     active: company.active,
@@ -1636,6 +1664,7 @@ function platformRow(company: StoredCompany, storage: StorageService): PlatformC
     subscription: company.subscription,
     openAmount: invoices.filter((i) => i.status === 'open').reduce((sum, i) => sum + i.amount, 0),
     deletedAt,
+    deletion: company.deletion ?? null,
   };
 }
 
@@ -1681,11 +1710,14 @@ function tenantResponse(
   // A deleted record's label is read before the handler removes it.
   const deleted = req.method === 'DELETE' ? deletedLabel(path, db) : '';
   const response$ = handle(req, path, db);
-  if (req.method !== 'GET' && actor) {
+  // Writes, plus the one read that is an event of its own: downloading all the data (E38).
+  if ((req.method !== 'GET' || path === 'company/export') && actor) {
     const done = syncResult(response$);
     if (done) recordAudit(req, path, db, done.body, deleted);
   }
-  if (changed || req.method !== 'GET') saveTenantDb(storage, company.id, db);
+  if (changed || req.method !== 'GET' || path === 'company/export') {
+    saveTenantDb(storage, company.id, db);
+  }
   return response$;
 }
 
@@ -1875,6 +1907,24 @@ function recordAudit(
       ref: { kind: 'company', id: tenant.id, label: tenant.code },
       detail: `เปลี่ยนเป็นแพ็กเกจ ${plan.name} (฿${plan.monthlyPrice} / เดือน)`,
     });
+  } else if (path === 'company/export') {
+    add({
+      action: 'company_export',
+      ref: { kind: 'company', id: tenant.id, label: tenant.code },
+      detail: 'ดาวน์โหลดข้อมูลทั้งบริษัท (JSON)',
+    });
+  } else if (path === 'company/deletion') {
+    const ref: AuditRef = { kind: 'company', id: tenant.id, label: tenant.code };
+    if (req.method === 'POST') {
+      const d = body as CompanyDeletion;
+      add({
+        action: 'deletion_request',
+        ref,
+        detail: `ลบได้ตั้งแต่ ${d.purgeAfter}${d.reason ? ` — ${d.reason}` : ''}`,
+      });
+    } else if (req.method === 'DELETE') {
+      add({ action: 'deletion_cancel', ref, detail: '' });
+    }
   } else if (path === 'company/owner') {
     const owner = (body as User[]).find((u) => isOwner(u));
     add({
@@ -1979,6 +2029,16 @@ function handle(
   // `/me` answers whatever branch the client remembers, so a stale one can be corrected (step 2).
   if (path === 'me' && req.method === 'GET') {
     return ok(companySession(db, actor));
+  }
+  if (
+    tenant.suspendedReason === 'deletion' &&
+    !path.startsWith('company/') &&
+    path !== 'audit-log'
+  ) {
+    return error(
+      403,
+      'บริษัทอยู่ระหว่างรอลบข้อมูล — ดาวน์โหลดข้อมูลหรือยกเลิกคำขอลบได้ที่เมนูบัญชีบริษัท',
+    );
   }
   if (branchHeader !== null && !allowedBranch(db, actor, branchHeader)) {
     return error(403, 'ไม่มีสิทธิ์ทำงานในสาขานี้');
@@ -2251,6 +2311,44 @@ function handleCompany(
     platformChanged = true;
     return ok(subscriptionInfo(db));
   }
+  if (path === 'company/export' && req.method === 'GET') {
+    if (!isOwner(caller)) return error(403, 'ดาวน์โหลดข้อมูลทั้งบริษัทได้เฉพาะเจ้าของบริษัท');
+    return ok(companyExport(db));
+  }
+  if (path === 'company/deletion') {
+    if (!isOwner(caller)) return error(403, 'ขอลบข้อมูลบริษัทได้เฉพาะเจ้าของบริษัท');
+    if (req.method === 'GET') return ok(tenant.deletion ?? null);
+    if (req.method === 'POST') {
+      const p = {
+        companyCode: '',
+        password: '',
+        reason: '',
+        ...(req.body as Partial<DeletionRequest>),
+      };
+      const problem = deletionRequestError(p, tenant.code);
+      if (problem) return error(400, problem);
+      if (p.password !== passwordOf(db, caller.id)) return error(400, 'รหัสผ่านไม่ถูกต้อง');
+      if (tenant.deletion) return error(400, 'ขอลบข้อมูลไว้แล้ว');
+      tenant.deletion = {
+        requestedAt: new Date().toISOString(),
+        requestedBy: caller.name,
+        reason: p.reason.trim(),
+        purgeAfter: addDaysIso(todayIso(), DELETION_WAIT_DAYS),
+      };
+      // Suspended at once for everyone but the owner (E39); an earlier suspension is replaced.
+      Object.assign(tenant, { active: false, suspendedReason: 'deletion' });
+      platformChanged = true;
+      return ok(tenant.deletion);
+    }
+    if (req.method === 'DELETE') {
+      if (!tenant.deletion) return error(400, 'ไม่มีคำขอลบข้อมูล');
+      Object.assign(tenant, { deletion: null, active: true, suspendedReason: null });
+      // Billing decides again: an overdue company is suspended again right away.
+      refreshBilling(platform, tenant, todayIso());
+      platformChanged = true;
+      return ok(null);
+    }
+  }
   if (path === 'company/owner' && req.method === 'POST') {
     const { userId, password } = (req.body ?? {}) as { userId?: number; password?: string };
     const problem = ownerTransferError(db.users, caller, Number(userId));
@@ -2265,6 +2363,27 @@ function handleCompany(
     return ok([...db.users]);
   }
   return notFound(req, path);
+}
+
+/** Every collection of the company as stored, never a password (E38). */
+function companyExport(db: MockDb): CompanyExport {
+  const stored: Record<string, unknown> = { ...db, products: storeBranchStock(db) };
+  for (const key of ['passwords', 'storeInfo', 'legacyPosId'] as const) delete stored[key];
+  for (const key of Object.keys(stored)) {
+    // Counters and one-time migration flags are the mock's own bookkeeping.
+    if (/^next[A-Z]/.test(key) || /(Migrated|Fixed|Enabled)$/.test(key)) delete stored[key];
+  }
+  return {
+    schemaVersion: EXPORT_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    company: {
+      id: tenant.id,
+      code: tenant.code,
+      name: db.companyInfo.name,
+      taxId: db.companyInfo.taxId,
+    },
+    data: stored,
+  };
 }
 
 /** The request company's package and what it uses (E34). */
@@ -5119,7 +5238,10 @@ function login(
     );
     return error(401, WRONG_COMPANY_LOGIN);
   }
-  if (!company.active) return error(401, SUSPENDED_MESSAGE[company.suspendedReason ?? 'platform']);
+  const ownerDeleting = company.suspendedReason === 'deletion' && isOwner(user);
+  if (!company.active && !ownerDeleting) {
+    return error(401, SUSPENDED_MESSAGE[company.suspendedReason ?? 'platform']);
+  }
   pushAudit(db, { action: 'login', ref: null, detail: '' }, user);
   return ok({ token: mockToken(company.id, user.id), ...companySession(db, user) });
 }
@@ -5130,7 +5252,7 @@ const SUSPENDED_MESSAGE: Record<CompanySuspendReason, string> = {
   platform: 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท',
   overdue:
     'บริษัทนี้ถูกระงับการใช้งานเพราะค้างชำระค่าบริการ — เจ้าของบริษัทติดต่อผู้ให้บริการเพื่อชำระเงิน',
-  deletion: 'บริษัทนี้อยู่ระหว่างรอลบข้อมูล',
+  deletion: 'บริษัทนี้อยู่ระหว่างรอลบข้อมูล — ติดต่อเจ้าของบริษัท',
 };
 const WRONG_COMPANY_LOGIN = 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
 const SESSION_EXPIRED = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
@@ -5176,8 +5298,12 @@ function tokenIds(req: HttpRequest<unknown>): { companyId: number; userId: numbe
  */
 function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
   const ids = tokenIds(req);
-  if (!ids || ids.companyId !== tenant.id || !tenant.active) return undefined;
+  if (!ids || ids.companyId !== tenant.id) return undefined;
+  // Waiting for deletion (E39): only the owner still gets in, to download or cancel.
+  const deleting = tenant.suspendedReason === 'deletion';
+  if (!tenant.active && !deleting) return undefined;
   const user = db.users.find((u) => u.id === ids.userId);
+  if (deleting && !isOwner(user)) return undefined;
   return user?.active ? user : undefined;
 }
 
@@ -5186,7 +5312,14 @@ function companySession(db: MockDb, user: User): MeResponse {
   const { id, code, active } = tenant;
   return {
     user,
-    company: { id, code, active, name: db.companyInfo.name, taxId: db.companyInfo.taxId },
+    company: {
+      id,
+      code,
+      active,
+      name: db.companyInfo.name,
+      taxId: db.companyInfo.taxId,
+      deletionPurgeAfter: tenant.deletion?.purgeAfter ?? null,
+    },
     branches: db.branches.filter((b) => canWorkIn(user, b)),
     // The banner of trial / invoices / overdue (E35) is for the owner and admins only.
     billing: hasAdminRights(user)
