@@ -1,0 +1,1 @@
+{"companies":[{"id":1,"code":"DEMO","active":true,"planId":"pro","subscription":{"trialEndsOn":null,"nextInvoiceOn":"2026-11-01"},"suspendedReason":null,"suspendNote":""}],"nextCompanyId":2,"invoices":[],"nextInvoiceId":1,"resetTokens":[],"outbox":[],"nextEmailId":1,"platformAdmins":[{"id":1,"username":"platform","name":"ผู้ดูแลแพลตฟอร์ม"}],"platformPasswords":{}}
