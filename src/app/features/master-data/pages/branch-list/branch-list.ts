@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, Injector, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, computed, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
+import { SubscriptionService } from '@core/services/subscription.service';
 import { AuthService } from '@core/auth/auth.service';
 import { Branch, isHeadOffice } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
@@ -33,10 +34,17 @@ export default class BranchList {
   private readonly notify = inject(NotificationService);
   protected readonly auth = inject(AuthService);
 
+  private readonly subscription = inject(SubscriptionService);
+
   protected readonly columns = ['code', 'branchNo', 'name', 'address', 'status', 'actions'];
+  /** Why another branch does not fit the package ('' = it does, E34) */
+  protected readonly limitProblem = computed(() =>
+    this.subscription.limitProblem('branches', this.store.activeCount()),
+  );
 
   constructor() {
     this.store.load();
+    if (this.auth.isCompanyAdmin()) this.subscription.load();
   }
 
   protected branchNoText(b: Branch): string {

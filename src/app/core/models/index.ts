@@ -23,3 +23,4 @@ export * from './tax-invoice.model';
 export * from './transfer.model';
 export * from './user.model';
 export * from './audit.model';
+export * from './plan.model';

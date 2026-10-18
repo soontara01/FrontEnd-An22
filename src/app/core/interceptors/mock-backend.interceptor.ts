@@ -94,6 +94,14 @@ import {
   hasAdminRights,
   isOwner,
   ROLE_LABEL,
+  LimitKind,
+  PLANS,
+  PlanId,
+  PlanUsage,
+  SubscriptionInfo,
+  planLimitError,
+  planOf,
+  planUsage,
   AuditEvent,
   AuditRef,
   filterAuditEvents,
@@ -277,8 +285,11 @@ interface MockDb {
   nextAuditId: number;
 }
 
-/** A tenant in the platform registry; name and tax ID come from the tenant's own `companyInfo`. */
-type StoredCompany = Pick<Company, 'id' | 'code' | 'active'>;
+/**
+ * A tenant in the platform registry with its package (E34); name and tax ID come from the
+ * tenant's own `companyInfo`.
+ */
+type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & { planId: PlanId };
 
 /**
  * Platform-level data (SaaS step 6): the registry of every company. Each company's own data is a
@@ -291,7 +302,7 @@ interface MockPlatform {
 }
 
 /** The seed company; its data stays under the pre-SaaS key `mock.db` (older stored data). */
-const DEMO_COMPANY: StoredCompany = { id: 1, code: 'DEMO', active: true };
+const DEMO_COMPANY: StoredCompany = { id: 1, code: 'DEMO', active: true, planId: 'pro' };
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
 const DB_KEY = 'mock.db';
@@ -997,13 +1008,17 @@ const blankDb = (): MockDb => ({
  */
 function loadPlatform(storage: StorageService): { platform: MockPlatform; changed: boolean } {
   const stored = storage.get<Partial<MockPlatform>>(PLATFORM_KEY);
+  // Companies registered before packages (step 6.4): DEMO gets Pro, any other the smallest.
+  const withPlan = (c: Partial<StoredCompany> & Pick<StoredCompany, 'id'>): StoredCompany =>
+    ({ ...c, planId: c.planId ?? (c.id === DEMO_COMPANY.id ? 'pro' : 'starter') }) as StoredCompany;
   if (stored?.companies) {
-    const companies = stored.companies;
+    const companies = stored.companies.map(withPlan);
     const nextCompanyId = stored.nextCompanyId ?? Math.max(0, ...companies.map((c) => c.id)) + 1;
-    return { platform: { companies, nextCompanyId }, changed: false };
+    const changed = stored.companies.some((c) => !c.planId);
+    return { platform: { companies, nextCompanyId }, changed };
   }
   const legacy = storage.get<{ companies?: StoredCompany[] }>(DB_KEY)?.companies;
-  const companies = legacy?.length ? legacy : [{ ...DEMO_COMPANY }];
+  const companies = (legacy?.length ? legacy : [{ ...DEMO_COMPANY }]).map(withPlan);
   const nextCompanyId = Math.max(...companies.map((c) => c.id)) + 1;
   return { platform: { companies, nextCompanyId }, changed: true };
 }
@@ -1079,8 +1094,12 @@ function saveTenantDb(storage: StorageService, companyId: number, db: MockDb): v
 
 const LATENCY_MS = 300;
 
-/** The company of the request being handled (set before `handle()`, like `actor`). */
+/**
+ * The company of the request being handled (set before `handle()`, like `actor`): the registry's
+ * own record, so a handler changes it in place and sets `platformChanged` to have it saved.
+ */
 let tenant: StoredCompany = DEMO_COMPANY;
+let platformChanged = false;
 /** The user of the request being handled (set by the interceptor before `handle()`). */
 let actor: User | undefined;
 /** Name recorded as cashier / issuer on documents. */
@@ -1118,9 +1137,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const storage = inject(StorageService);
   const path = req.url.slice(base.length + 1);
   const { platform, changed: registryMoved } = loadPlatform(storage);
-  if (registryMoved) storage.set(PLATFORM_KEY, platform);
+  platformChanged = false;
   const company = requestCompany(req, path, platform);
   const response$ = company ? tenantResponse(req, path, company, storage) : noTenant(req, path);
+  // A handler that changed the request's company (package …) sets `platformChanged`.
+  if (registryMoved || platformChanged) storage.set(PLATFORM_KEY, platform);
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
 };
 
@@ -1356,6 +1377,13 @@ function recordAudit(
         label: user?.username ?? deleted,
       },
       detail: user ? `${verb}ผู้ใช้ — ${rights}` : 'ลบผู้ใช้',
+    });
+  } else if (path === 'company/plan') {
+    const plan = planOf((body as SubscriptionInfo).planId);
+    add({
+      action: 'plan_change',
+      ref: { kind: 'company', id: tenant.id, label: tenant.code },
+      detail: `เปลี่ยนเป็นแพ็กเกจ ${plan.name} (฿${plan.monthlyPrice} / เดือน)`,
     });
   } else if (path === 'company/owner') {
     const owner = (body as User[]).find((u) => isOwner(u));
@@ -1617,6 +1645,8 @@ function handleUsers(
       userBranchError(body, db.branches) ??
       passwordError(password ?? '');
     if (problem) return error(400, problem);
+    const limit = limitError(db, 'users', body.active);
+    if (limit) return error(403, limit);
     const user: User = { ...body, id: db.nextId++, createdAt: new Date().toISOString() };
     users.push(user);
     db.passwords[user.id] = password;
@@ -1656,6 +1686,8 @@ function handleUsers(
           actor?.id ?? null,
         );
         if (problem) return error(400, problem);
+        const limit = limitError(db, 'users', payload.active, users[index].active);
+        if (limit) return error(403, limit);
         users[index] = payload;
         return ok(users[index]);
       }
@@ -1705,6 +1737,20 @@ function handleCompany(
   db: MockDb,
 ): Observable<HttpResponse<unknown>> {
   const caller = actor as User;
+  if (path === 'company/subscription' && req.method === 'GET') {
+    if (!hasAdminRights(caller)) return error(403, 'ดูแพ็กเกจได้เฉพาะผู้ดูแลระบบ');
+    return ok(subscriptionInfo(db));
+  }
+  if (path === 'company/plan' && req.method === 'PUT') {
+    if (!isOwner(caller)) return error(403, 'เปลี่ยนแพ็กเกจได้เฉพาะเจ้าของบริษัท');
+    const planId = (req.body as { planId?: string } | null)?.planId;
+    const plan = PLANS.find((p) => p.id === planId);
+    if (!plan) return error(400, 'ไม่มีแพ็กเกจนี้');
+    // A downgrade is allowed even when over its limits: only adding more is blocked (E34).
+    tenant.planId = plan.id;
+    platformChanged = true;
+    return ok(subscriptionInfo(db));
+  }
   if (path === 'company/owner' && req.method === 'POST') {
     const { userId, password } = (req.body ?? {}) as { userId?: number; password?: string };
     const problem = ownerTransferError(db.users, caller, Number(userId));
@@ -1719,6 +1765,28 @@ function handleCompany(
     return ok([...db.users]);
   }
   return notFound(req, path);
+}
+
+/** The request company's package and what it uses (E34). */
+function subscriptionInfo(db: MockDb): SubscriptionInfo {
+  return { planId: tenant.planId, usage: usageOf(db) };
+}
+
+const usageOf = (db: MockDb): PlanUsage =>
+  planUsage({ branches: db.branches, users: db.users, terminals: db.posTerminals });
+
+/**
+ * One more active branch / user / POS terminal must fit the package (E34) — checked when adding
+ * one or turning one back on (`wasActive` false); a record staying active never counts as new.
+ */
+function limitError(
+  db: MockDb,
+  kind: LimitKind,
+  active: boolean,
+  wasActive = false,
+): string | null {
+  if (!active || wasActive) return null;
+  return planLimitError(kind, planOf(tenant.planId), usageOf(db));
 }
 
 /**
@@ -3727,6 +3795,8 @@ function handlePosTerminals(
     if (notMine(created.branchId)) return error(403, BRANCH_ONLY);
     const problem = posTerminalError(created, db.posTerminals, db.branches);
     if (problem) return error(400, problem);
+    const limit = limitError(db, 'terminals', created.active);
+    if (limit) return error(403, limit);
     db.posTerminals.push(created);
     return ok(created);
   }
@@ -3751,6 +3821,8 @@ function handlePosTerminals(
       if (!updated.active && openShiftOf(db, id)) {
         return error(400, `เครื่อง ${id} มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้`);
       }
+      const limit = limitError(db, 'terminals', updated.active, db.posTerminals[index].active);
+      if (limit) return error(403, limit);
       db.posTerminals[index] = updated;
       return ok(updated);
     }
@@ -4487,6 +4559,8 @@ function handleBranches(
     delete (payload as Partial<Branch>).id;
     const problem = branchError(payload, db.branches);
     if (problem) return error(400, problem);
+    const limit = limitError(db, 'branches', payload.active);
+    if (limit) return error(403, limit);
     const branch: Branch = { ...payload, id: db.nextBranchId++ };
     db.branches.push(branch);
     return ok(branch);
@@ -4506,6 +4580,8 @@ function handleBranches(
     if (!payload.active && openHere) {
       return error(400, `สาขา ${current.code} มีกะที่เปิดอยู่ ปิดใช้งานไม่ได้`);
     }
+    const limit = limitError(db, 'branches', payload.active, current.active);
+    if (limit) return error(403, limit);
     db.branches[index] = { ...payload, id: current.id };
     return ok(db.branches[index]);
   }
@@ -4595,8 +4671,9 @@ function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
 
 /** Company + the branches the user may work in (`canWorkIn()`: active, theirs or all). */
 function companySession(db: MockDb, user: User): { company: Company; branches: Branch[] } {
+  const { id, code, active } = tenant;
   return {
-    company: { ...tenant, name: db.companyInfo.name, taxId: db.companyInfo.taxId },
+    company: { id, code, active, name: db.companyInfo.name, taxId: db.companyInfo.taxId },
     branches: db.branches.filter((b) => canWorkIn(user, b)),
   };
 }

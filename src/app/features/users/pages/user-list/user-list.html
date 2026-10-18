@@ -6,10 +6,12 @@
     <mat-icon>visibility</mat-icon>
     สิทธิ์เมนู
   </a>
-  <a mat-flat-button routerLink="new">
-    <mat-icon>add</mat-icon>
-    เพิ่มผู้ใช้
-  </a>
+  <span [matTooltip]="limitProblem()">
+    <a mat-flat-button routerLink="new" [disabled]="!!limitProblem()">
+      <mat-icon>add</mat-icon>
+      เพิ่มผู้ใช้
+    </a>
+  </span>
 </app-page-header>
 
 <mat-form-field appearance="outline" class="search" subscriptSizing="dynamic">

@@ -1,0 +1,41 @@
+.usage {
+  margin-bottom: 16px;
+}
+
+.usage-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 80px;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+
+  .count {
+    text-align: right;
+  }
+}
+
+.warn {
+  color: var(--mat-sys-error);
+}
+
+.plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.plan.current {
+  border-color: var(--mat-sys-primary);
+  border-width: 2px;
+}
+
+@media (max-width: 600px) {
+  .usage-row {
+    grid-template-columns: 1fr 64px;
+
+    mat-progress-bar {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+  }
+}

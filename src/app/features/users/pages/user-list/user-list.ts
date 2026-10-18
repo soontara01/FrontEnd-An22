@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  computed,
   effect,
   inject,
   signal,
@@ -13,6 +14,7 @@ import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
+import { SubscriptionService } from '@core/services/subscription.service';
 import { AuthService } from '@core/auth/auth.service';
 import {
   ROLE_LABEL,
@@ -73,8 +75,15 @@ export default class UserList {
   private readonly paginator = viewChild(MatPaginator);
   private readonly sort = viewChild(MatSort);
 
+  private readonly subscription = inject(SubscriptionService);
+  /** Why another active user does not fit the package ('' = it does, E34) */
+  protected readonly limitProblem = computed(() =>
+    this.subscription.limitProblem('users', this.store.users().filter((u) => u.active).length),
+  );
+
   constructor() {
     this.store.load();
+    this.subscription.load();
 
     effect(() => {
       this.dataSource.data = this.store.users();

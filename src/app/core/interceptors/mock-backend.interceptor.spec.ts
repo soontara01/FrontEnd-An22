@@ -36,6 +36,7 @@ import {
   TaxInvoice,
   Transfer,
   AuditEvent,
+  SubscriptionInfo,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
@@ -3030,7 +3031,7 @@ describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
     );
     expect(await statusOf(call('GET', 'products', undefined, DEMO_ADMIN))).toBe(200);
     expect(stored('an22.mock.platform')).toEqual({
-      companies: [{ id: 1, code: 'DEMO', active: true }],
+      companies: [{ id: 1, code: 'DEMO', active: true, planId: 'pro' }],
       nextCompanyId: 2,
     });
     await call(
@@ -3314,5 +3315,113 @@ describe('mockBackendInterceptor – audit log (E40)', () => {
       '2',
     );
     expect(seen.map((e) => [e.action, e.branchId])).toEqual([['branch_settings', 2]]);
+  });
+});
+
+describe('mockBackendInterceptor – packages (E34)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const newUser = (username: string, active = true) => ({
+    username,
+    name: username,
+    email: '',
+    role: 'user',
+    active,
+    allBranches: false,
+    branchIds: [1],
+    password: '1234',
+  });
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('gives DEMO the Pro package and counts active branches / users / terminals', async () => {
+    expect(await call<SubscriptionInfo>('GET', 'company/subscription')).toEqual({
+      planId: 'pro',
+      usage: { branches: 2, users: 3, terminals: 3 },
+    });
+    expect(await failure(call('GET', 'company/subscription', undefined, STAFF))).toEqual([
+      403,
+      'ดูแพ็กเกจได้เฉพาะผู้ดูแลระบบ',
+    ]);
+  });
+
+  it('lets only the owner change the package; a downgrade keeps what is over the limit', async () => {
+    expect(await failure(call('PUT', 'company/plan', { planId: 'starter' }, STAFF))).toEqual([
+      403,
+      'เปลี่ยนแพ็กเกจได้เฉพาะเจ้าของบริษัท',
+    ]);
+    expect(await failure(call('PUT', 'company/plan', { planId: 'gold' }))).toEqual([
+      400,
+      'ไม่มีแพ็กเกจนี้',
+    ]);
+    const info = await call<SubscriptionInfo>('PUT', 'company/plan', { planId: 'starter' });
+    expect(info.planId).toBe('starter');
+    expect(JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}').companies[0].planId).toBe(
+      'starter',
+    );
+    // 2 branches / 3 terminals stay usable, adding is blocked
+    const branches = await call<Branch[]>('GET', 'branches');
+    expect(branches.filter((b) => b.active)).toHaveLength(2);
+    expect(
+      await failure(
+        call('POST', 'branches', {
+          code: 'CM',
+          name: 'เชียงใหม่',
+          branchNo: '00002',
+          address: 'เชียงใหม่',
+          phone: '',
+          receiptFooter: '',
+          active: true,
+        }),
+      ),
+    ).toEqual([403, 'แพ็กเกจ Starter ใช้สาขาได้ 1 สาขา — เปลี่ยนแพ็กเกจได้ที่เมนูบัญชีบริษัท']);
+    expect(
+      (
+        await failure(
+          call('POST', 'pos-terminals', { id: 9, name: 'x', posId: '', branchId: 1, active: true }),
+        )
+      )?.[1],
+    ).toBe(
+      'แพ็กเกจ Starter ใช้เครื่อง POS ที่ใช้งานได้ 2 เครื่อง — เปลี่ยนแพ็กเกจได้ที่เมนูบัญชีบริษัท',
+    );
+    const events = await call<AuditEvent[]>('GET', 'audit-log?action=plan_change');
+    expect(events[0].detail).toBe('เปลี่ยนเป็นแพ็กเกจ Starter (฿590 / เดือน)');
+  });
+
+  it('counts only active users: an inactive one may be added, turning one on needs room', async () => {
+    await call('PUT', 'company/plan', { planId: 'starter' }); // 5 users; DEMO has 3 active
+    await call('POST', 'users', newUser('user4'));
+    await call('POST', 'users', newUser('user5'));
+    expect((await failure(call('POST', 'users', newUser('user6'))))?.[0]).toBe(403);
+    const off = await call<User>('POST', 'users', newUser('user7', false));
+    expect((await failure(call('PUT', `users/${off.id}`, { ...off, active: true })))?.[1]).toBe(
+      'แพ็กเกจ Starter ใช้ผู้ใช้ที่ใช้งานได้ 5 คน — เปลี่ยนแพ็กเกจได้ที่เมนูบัญชีบริษัท',
+    );
+    // an edit of an active user is not "one more"
+    const users = await call<User[]>('GET', 'users');
+    const u4 = users.find((u) => u.username === 'user4') as User;
+    expect(await call<User>('PUT', `users/${u4.id}`, { ...u4, name: 'สี่' })).toMatchObject({
+      name: 'สี่',
+    });
   });
 });

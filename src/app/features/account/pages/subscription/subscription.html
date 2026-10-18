@@ -1,0 +1,57 @@
+@if (!isOwner()) {
+  <app-admin-only-note message="เฉพาะเจ้าของบริษัทเปลี่ยนแพ็กเกจได้ — ดูได้อย่างเดียว" />
+}
+
+@if (!info()) {
+  <app-loading-spinner />
+} @else {
+  <mat-card appearance="outlined" class="usage">
+    <mat-card-header>
+      <mat-card-title>แพ็กเกจปัจจุบัน: {{ current().name }}</mat-card-title>
+      <mat-card-subtitle>
+        ฿{{ current().monthlyPrice | number }} / เดือน (รวม VAT)
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      @for (kind of kinds; track kind) {
+        <div class="usage-row">
+          <span>{{ label(kind) }}</span>
+          <mat-progress-bar mode="determinate" [value]="usagePercent(kind)" />
+          <span class="count">{{ usageText(kind) }}</span>
+        </div>
+      }
+      @if (overText()) {
+        <p class="warn">
+          ใช้เกินแพ็กเกจอยู่ ({{ overText() }}) — ของเดิมใช้ต่อได้ แต่เพิ่มใหม่ไม่ได้
+        </p>
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <div class="plans">
+    @for (plan of plans; track plan.id) {
+      <mat-card appearance="outlined" class="plan" [class.current]="plan.id === current().id">
+        <mat-card-header>
+          <mat-card-title>{{ plan.name }}</mat-card-title>
+          <mat-card-subtitle>฿{{ plan.monthlyPrice | number }} / เดือน</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <ul>
+            @for (kind of kinds; track kind) {
+              <li>{{ label(kind) }}: {{ limitText(plan, kind) }}</li>
+            }
+          </ul>
+        </mat-card-content>
+        <mat-card-actions>
+          @if (plan.id === current().id) {
+            <span class="badge badge-success">ใช้อยู่</span>
+          } @else if (isOwner()) {
+            <button mat-stroked-button [disabled]="saving()" (click)="choose(plan)">
+              เปลี่ยนเป็นแพ็กเกจนี้
+            </button>
+          }
+        </mat-card-actions>
+      </mat-card>
+    }
+  </div>
+}

@@ -98,6 +98,13 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 ไม่ใช่ owner → **403** "โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท"; `ownerTransferError()` อื่น → 400; รหัสผ่านผิด → 400 "รหัสผ่านไม่ถูกต้อง" (ห้าม 401);
 ผู้รับ → `owner` + `allBranches`, owner เดิม → `admin` + `allBranches` (หน้าบ้าน reload เพราะสิทธิ์ตัวเองเปลี่ยน)
 
+### แพ็กเกจ (SaaS ขั้น 6.4, E34)
+
+- `GET /company/subscription` → `SubscriptionInfo { planId, usage }` — admin (user → 403 "ดูแพ็กเกจได้เฉพาะผู้ดูแลระบบ"); `usage` = จำนวน**ที่ใช้งานอยู่** (`planUsage()`)
+- `PUT /company/plan { planId }` → `SubscriptionInfo` — owner เท่านั้น (อื่น → 403 "เปลี่ยนแพ็กเกจได้เฉพาะเจ้าของบริษัท"), ไม่มีแพ็กเกจนี้ → 400; ลดแพ็กเกจได้แม้ใช้เกิน (ของเดิมใช้ต่อ เพิ่มไม่ได้)
+- จำกัดจำนวน: `POST /branches`, `POST /users`, `POST /pos-terminals` ที่ `active: true` และ `PUT` ที่เปลี่ยน `active` false → true เกินแพ็กเกจ → **403** `planLimitError()`
+  (ตรวจหลังกฎอื่นของ endpoint นั้นผ่านแล้ว); แก้ record ที่ active อยู่แล้วไม่นับเป็นการเพิ่ม
+
 ### Audit log (SaaS ขั้น 6.3, E40)
 
 `GET /audit-log?from=&to=&action=&userId=&branchId=` → `AuditEvent[]` ใหม่สุดก่อน — admin เท่านั้น (user → **403** "ดูประวัติการใช้งานได้เฉพาะผู้ดูแลระบบ");

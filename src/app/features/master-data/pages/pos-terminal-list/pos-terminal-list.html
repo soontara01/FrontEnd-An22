@@ -21,10 +21,12 @@
     <mat-icon>refresh</mat-icon>
   </button>
   @if (isAdmin()) {
-    <button mat-flat-button (click)="openForm()">
-      <mat-icon>add</mat-icon>
-      เพิ่มเครื่อง POS
-    </button>
+    <span [matTooltip]="limitProblem()">
+      <button mat-flat-button [disabled]="!!limitProblem()" (click)="openForm()">
+        <mat-icon>add</mat-icon>
+        เพิ่มเครื่อง POS
+      </button>
+    </span>
   }
 </div>
 

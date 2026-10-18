@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, Injector, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, computed, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
 import { filter, switchMap } from 'rxjs';
+import { SubscriptionService } from '@core/services/subscription.service';
 import { AuthService } from '@core/auth/auth.service';
 import { PosTerminal, missingPosId } from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
@@ -40,9 +41,15 @@ export default class PosTerminalList {
 
   protected readonly isAdmin = this.auth.isAdmin;
   protected readonly columns = ['id', 'branch', 'name', 'posId', 'status', 'actions'];
+  private readonly subscription = inject(SubscriptionService);
+  /** Why another active terminal does not fit the package ('' = it does, E34) */
+  protected readonly limitProblem = computed(() =>
+    this.subscription.limitProblem('terminals', this.store.activeCount()),
+  );
 
   constructor() {
     this.store.load();
+    if (this.isAdmin()) this.subscription.load();
   }
 
   protected branchCode(t: PosTerminal): string {
