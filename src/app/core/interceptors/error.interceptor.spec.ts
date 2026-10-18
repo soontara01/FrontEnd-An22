@@ -78,4 +78,12 @@ describe('errorInterceptor', () => {
     expect(loggedOut()).toBe(false);
     expect(localStorage.getItem('an22.token')).not.toBeNull();
   });
+
+  it('ends only the platform admin session on a 401 of the platform API (E36)', async () => {
+    localStorage.setItem('an22.platformToken', JSON.stringify('mock-platform-token.p1'));
+    expect(await fail('GET', '/api/platform/companies', 401, 'หมดอายุ')).toBe(401);
+    expect(assign).toHaveBeenCalledWith('/platform/login');
+    expect(localStorage.getItem('an22.platformToken')).toBeNull();
+    expect(localStorage.getItem('an22.token')).not.toBeNull();
+  });
 });

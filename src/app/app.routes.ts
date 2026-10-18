@@ -10,6 +10,11 @@ export const routes: Routes = [
     loadChildren: () => import('@features/auth/auth.routes'),
   },
   {
+    // The SaaS operator's pages (E36): own login, token and layout, one lazy chunk; not a MENU entry.
+    path: 'platform',
+    loadChildren: () => import('@features/platform/platform.routes'),
+  },
+  {
     path: '',
     loadComponent: () => import('@layout/main-layout/main-layout').then((m) => m.MainLayout),
     canMatch: [authGuard, branchGuard],

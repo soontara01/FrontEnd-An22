@@ -123,6 +123,23 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 | `POST /auth/reset-password`  | `{ token, password }` → `null`           | token ผิด / หมดอายุ / ใช้แล้ว → 400 "ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่"; `passwordError()` → 400; audit `password_reset`                                                                                                                                                                                           |
 | `GET /company/onboarding`    | → `OnboardingCounts`                     | admin; จำนวนเครื่อง POS / หมวด / SKU / ช่วงราคา / ผู้ใช้ — หน้าบ้านทำ checklist ด้วย `onboardingSteps()`                                                                                                                                                                                                                                         |
 
+### Platform admin (SaaS ขั้น 6.7, E36 — ผู้ให้บริการ SaaS)
+
+token แยก (mock `mock-platform-token.p<id>`): token ของ platform ใช้กับ endpoint ของบริษัทไม่ได้ และกลับกัน (→ 401); หน้าบ้านส่ง token นี้เฉพาะ `/platform/…` และไม่ส่ง `X-Branch-Id` / `X-Terminal-Id`;
+401 ของ `/platform/…` → หน้าบ้านจบเฉพาะ session platform (`/platform/login`). ฝั่ง api ใช้ DB role แยกที่ข้าม RLS ได้ (saas-plan หัวข้อ 16) — ทุกการกระทำบันทึกใน audit log ของบริษัทนั้น `actorKind: 'platform'`
+
+| endpoint                                     | body → ตอบ                                         | หมายเหตุ                                                                                                                  |
+| -------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `POST /platform/auth/login`                  | `{ username, password }` → `PlatformLoginResponse` | ผิด → 401 "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง" (ไม่ใช่ผู้ใช้ของบริษัทใด, mock: `platform` / `platform`)                     |
+| `GET /platform/companies`                    | → `PlatformCompanyRow[]`                           | ทุกบริษัท (รวมที่ลบแล้ว): แพ็กเกจ, สถานะ, การใช้งาน, ยอดค้าง                                                              |
+| `GET /platform/companies/:id`                | → `PlatformCompanyDetail`                          | + ใบแจ้งหนี้, owner, เหตุผลที่ระงับ                                                                                       |
+| `PUT /platform/companies/:id/plan`           | `{ planId }` → detail                              | audit `plan_change`                                                                                                       |
+| `POST /platform/companies/:id/suspend`       | `{ note }` → detail                                | `suspendCompanyError()`; `suspendedReason: 'platform'`; audit `company_suspend`                                           |
+| `POST /platform/companies/:id/reactivate`    | → detail                                           | `reactivateCompanyError()`: เฉพาะที่ platform ระงับ (ค้างชำระ → รับชำระ, รอลบ → owner ยกเลิก); audit `company_reactivate` |
+| `PUT /platform/companies/:id/owner-password` | `{ password }` → `null`                            | `passwordError()`; audit `user_password`                                                                                  |
+| `POST /platform/invoices/:id/pay`            | → detail                                           | `payInvoiceError()`; ถ้าระงับเพราะค้างและไม่เหลือใบเกินผ่อนผัน → เปิดใช้งานเอง; audit `invoice_paid`                      |
+| `GET /platform/outbox`                       | → `PlatformEmail[]`                                | **mock เท่านั้น** (อีเมลที่ระบบจะส่ง — ลิงก์ตั้งรหัสผ่าน E41); api จริงส่งอีเมลแทน                                        |
+
 ### Audit log (SaaS ขั้น 6.3, E40)
 
 `GET /audit-log?from=&to=&action=&userId=&branchId=` → `AuditEvent[]` ใหม่สุดก่อน — admin เท่านั้น (user → **403** "ดูประวัติการใช้งานได้เฉพาะผู้ดูแลระบบ");

@@ -26,3 +26,4 @@ export * from './audit.model';
 export * from './plan.model';
 export * from './subscription.model';
 export * from './signup.model';
+export * from './platform.model';

@@ -37,6 +37,9 @@ import {
   TaxInvoice,
   Transfer,
   AuditEvent,
+  PlatformCompanyDetail,
+  PlatformCompanyRow,
+  PlatformLoginResponse,
   SubscriptionInfo,
   SerialNumber,
   SerialReceiveResult,
@@ -3631,5 +3634,142 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
       password: 'new-pass',
     });
     expect(login.user.role).toBe('owner');
+  });
+});
+
+describe('mockBackendInterceptor – platform admin (E36)', () => {
+  let http: HttpClient;
+  const call = <T>(method: string, url: string, body?: unknown, token?: string) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const loginPlatform = async () =>
+    (
+      await call<PlatformLoginResponse>('POST', 'platform/auth/login', {
+        username: 'platform',
+        password: 'platform',
+      })
+    ).token;
+  const plantOverdue = () =>
+    localStorage.setItem(
+      'an22.mock.platform',
+      JSON.stringify({
+        companies: [
+          {
+            id: 1,
+            code: 'DEMO',
+            active: true,
+            planId: 'pro',
+            subscription: { trialEndsOn: null, nextInvoiceOn: addDaysIso(todayIso(), -20) },
+            suspendedReason: null,
+          },
+        ],
+        nextCompanyId: 2,
+      }),
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('logs in apart from the companies; tokens of one side never pass on the other', async () => {
+    expect(
+      await failure(call('POST', 'platform/auth/login', { username: 'platform', password: 'x' })),
+    ).toEqual([401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง']);
+    const token = await loginPlatform();
+    expect(token).toBe('mock-platform-token.p1');
+    expect(
+      (await failure(call('GET', 'platform/companies', undefined, mockToken(1, 1))))?.[0],
+    ).toBe(401);
+    expect((await failure(call('GET', 'products', undefined, token)))?.[0]).toBe(401);
+    const rows = await call<PlatformCompanyRow[]>('GET', 'platform/companies', undefined, token);
+    expect(rows.map((r) => [r.code, r.planId, r.status])).toEqual([['DEMO', 'pro', 'active']]);
+    expect(rows[0].name).toBe(SEED_STORE_INFO.name);
+  });
+
+  it('marks an overdue invoice paid and the company comes back on by itself', async () => {
+    plantOverdue();
+    const token = await loginPlatform();
+    const detail = await call<PlatformCompanyDetail>(
+      'GET',
+      'platform/companies/1',
+      undefined,
+      token,
+    );
+    expect([detail.active, detail.suspendedReason]).toEqual([false, 'overdue']);
+    expect(await failure(call('POST', 'platform/companies/1/reactivate', {}, token))).toEqual([
+      400,
+      'บริษัทค้างชำระ — บันทึกรับชำระใบแจ้งหนี้แทน',
+    ]);
+    const paid = await call<PlatformCompanyDetail>(
+      'POST',
+      `platform/invoices/${detail.invoices[0].id}/pay`,
+      {},
+      token,
+    );
+    expect([paid.active, paid.suspendedReason, paid.invoices[0].status]).toEqual([
+      true,
+      null,
+      'paid',
+    ]);
+    const events = await call<AuditEvent[]>('GET', 'audit-log', undefined, mockToken(1, 1));
+    expect(events[0]).toMatchObject({
+      action: 'invoice_paid',
+      actorKind: 'platform',
+      userId: null,
+    });
+  });
+
+  it('suspends with a reason, turns back on, changes the package and the owner password', async () => {
+    const token = await loginPlatform();
+    expect(
+      (await failure(call('POST', 'platform/companies/1/suspend', { note: '' }, token)))?.[1],
+    ).toBe('กรุณากรอกเหตุผลที่ระงับ');
+    const suspended = await call<PlatformCompanyDetail>(
+      'POST',
+      'platform/companies/1/suspend',
+      { note: 'ทดสอบ' },
+      token,
+    );
+    expect([suspended.active, suspended.suspendNote]).toEqual([false, 'ทดสอบ']);
+    expect((await failure(call('GET', 'products', undefined, mockToken(1, 1))))?.[0]).toBe(401);
+    await call('POST', 'platform/companies/1/reactivate', {}, token);
+    const changed = await call<PlatformCompanyDetail>(
+      'PUT',
+      'platform/companies/1/plan',
+      { planId: 'standard' },
+      token,
+    );
+    expect(changed.planId).toBe('standard');
+    await call('PUT', 'platform/companies/1/owner-password', { password: 'owner-new' }, token);
+    const login = await call<LoginResponse>('POST', 'auth/login', {
+      companyCode: 'DEMO',
+      username: 'admin',
+      password: 'owner-new',
+    });
+    expect(login.user.role).toBe('owner');
+    const actions = (await call<AuditEvent[]>('GET', 'audit-log', undefined, login.token)).map(
+      (e) => e.action,
+    );
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'company_suspend',
+        'company_reactivate',
+        'plan_change',
+        'user_password',
+      ]),
+    );
   });
 });

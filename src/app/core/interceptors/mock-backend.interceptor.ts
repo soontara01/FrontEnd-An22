@@ -94,6 +94,15 @@ import {
   hasAdminRights,
   isOwner,
   ROLE_LABEL,
+  AuditActorKind,
+  PlatformAdmin,
+  PlatformEmail,
+  PlatformCompanyDetail,
+  PlatformCompanyRow,
+  PlatformLoginResponse,
+  payInvoiceError,
+  reactivateCompanyError,
+  suspendCompanyError,
   FORGOT_PASSWORD_ANSWER,
   OnboardingCounts,
   RESET_LINK_MINUTES,
@@ -312,6 +321,8 @@ type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & {
   suspendedReason: CompanySuspendReason | null;
   /** Its data was deleted (E39): the entry stays so the code is never reused */
   deletedAt?: string | null;
+  /** Why the platform admin suspended it (`suspendedReason: 'platform'`) */
+  suspendNote?: string;
 };
 
 /**
@@ -328,8 +339,12 @@ interface MockPlatform {
   /** Password reset links of owners (E41): single use, `RESET_LINK_MINUTES` */
   resetTokens: ResetToken[];
   /** E-mails the platform "sent" (the mock sends none — read on the platform pages) */
-  outbox: MockEmail[];
+  outbox: PlatformEmail[];
   nextEmailId: number;
+  /** The SaaS operator's admins (E36) — not users of any company */
+  platformAdmins: PlatformAdmin[];
+  /** Passwords by platform admin id; none = `platform` */
+  platformPasswords: Record<number, string>;
 }
 
 interface ResetToken {
@@ -339,16 +354,6 @@ interface ResetToken {
   /** ISO time */
   expiresAt: string;
   usedAt: string | null;
-}
-
-/** An e-mail the platform would send (E41). */
-export interface MockEmail {
-  id: number;
-  at: string;
-  companyId: number;
-  to: string;
-  subject: string;
-  body: string;
 }
 
 /** The seed company; its data stays under the pre-SaaS key `mock.db` (older stored data). */
@@ -1090,6 +1095,10 @@ function loadPlatform(storage: StorageService): { platform: MockPlatform; change
       resetTokens: stored?.resetTokens ?? [],
       outbox: stored?.outbox ?? [],
       nextEmailId: stored?.nextEmailId ?? 1,
+      platformAdmins: stored?.platformAdmins ?? [
+        { id: 1, username: 'platform', name: 'ผู้ให้บริการระบบ' },
+      ],
+      platformPasswords: stored?.platformPasswords ?? {},
     },
     changed: !stored?.companies || raw.some((c) => !c.subscription || !c.planId),
   };
@@ -1217,6 +1226,8 @@ let platform: MockPlatform = {
   resetTokens: [],
   outbox: [],
   nextEmailId: 1,
+  platformAdmins: [],
+  platformPasswords: {},
 };
 let platformChanged = false;
 /** The user of the request being handled (set by the interceptor before `handle()`). */
@@ -1262,8 +1273,10 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const company = requestCompany(req, path, platform);
   if (company && refreshBilling(platform, company, todayIso())) platformChanged = true;
   const response$ =
-    publicResponse(req, path, storage) ??
-    (company ? tenantResponse(req, path, company, storage) : noTenant(req, path));
+    path === 'platform' || path.startsWith('platform/')
+      ? platformResponse(req, path, storage)
+      : (publicResponse(req, path, storage) ??
+        (company ? tenantResponse(req, path, company, storage) : noTenant(req, path)));
   // A handler that changed the request's company (package …) sets `platformChanged`.
   if (registryMoved || platformChanged) storage.set(PLATFORM_KEY, platform);
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
@@ -1454,6 +1467,193 @@ function resetPassword(body: unknown, storage: StorageService): Observable<HttpR
   return ok(null);
 }
 
+/** A fake platform admin token (E36): another shape than a shop token, so neither passes for the other. */
+export const mockPlatformToken = (adminId: number): string => `mock-platform-token.p${adminId}`;
+
+/**
+ * The SaaS operator's API (E36): `POST /platform/auth/login`, then with a platform token —
+ * companies (list / detail / package / suspend / reactivate / owner password), invoices (paid)
+ * and the mock outbox. Every action is written to the company's own audit log as `platform`.
+ */
+function platformResponse(
+  req: HttpRequest<unknown>,
+  path: string,
+  storage: StorageService,
+): Observable<HttpResponse<unknown>> {
+  terminalId = null;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (path === 'platform/auth/login' && req.method === 'POST') {
+    const name = normalizeUsername(String(body['username'] ?? ''));
+    const admin = platform.platformAdmins.find((a) => a.username === name);
+    const password = admin ? (platform.platformPasswords[admin.id] ?? 'platform') : null;
+    if (!admin || body['password'] !== password) return error(401, WRONG_LOGIN);
+    return ok({ token: mockPlatformToken(admin.id), admin } satisfies PlatformLoginResponse);
+  }
+  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
+  const match = /^mock-platform-token\.p(\d+)$/.exec(token);
+  const admin = match && platform.platformAdmins.find((a) => a.id === Number(match[1]));
+  if (!admin) return error(401, 'เซสชันผู้ให้บริการหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  const by = { id: null, name: admin.name, kind: 'platform' as const };
+  const today = todayIso();
+  for (const c of platform.companies) {
+    if (!c.deletedAt && refreshBilling(platform, c, today)) platformChanged = true;
+  }
+
+  if (path === 'platform/me' && req.method === 'GET') return ok(admin);
+  if (path === 'platform/outbox' && req.method === 'GET') {
+    return ok([...platform.outbox].sort((a, b) => b.id - a.id));
+  }
+  if (path === 'platform/companies' && req.method === 'GET') {
+    return ok(platform.companies.map((c) => platformRow(c, storage)));
+  }
+  const payMatch = /^platform\/invoices\/(\d+)\/pay$/.exec(path);
+  if (payMatch && req.method === 'POST') {
+    const invoice = platform.invoices.find((i) => i.id === Number(payMatch[1]));
+    if (!invoice) return error(404, 'ไม่พบใบแจ้งหนี้');
+    const problem = payInvoiceError(invoice);
+    if (problem) return error(400, problem);
+    invoice.status = 'paid';
+    invoice.paidAt = new Date().toISOString();
+    const company = platform.companies.find((c) => c.id === invoice.companyId) as StoredCompany;
+    // Paid off: an overdue suspension ends by itself (E35).
+    const status = subscriptionStatus(
+      company.subscription,
+      invoicesOf(platform, company.id),
+      today,
+    );
+    if (company.suspendedReason === 'overdue' && status !== 'suspended') {
+      company.active = true;
+      company.suspendedReason = null;
+    }
+    platformChanged = true;
+    withTenantDb(storage, company, (db) =>
+      pushAudit(
+        db,
+        {
+          action: 'invoice_paid',
+          ref: { kind: 'company', id: company.id, label: invoice.invoiceNo },
+          detail: `฿${invoice.amount}`,
+        },
+        by,
+      ),
+    );
+    return ok(platformDetail(company, storage));
+  }
+  const m = /^platform\/companies\/(\d+)(?:\/([\w-]+))?$/.exec(path);
+  const company = m ? platform.companies.find((c) => c.id === Number(m[1])) : undefined;
+  if (!m || !company) return error(404, 'ไม่พบบริษัท');
+  const action = m[2];
+  if (!action && req.method === 'GET') return ok(platformDetail(company, storage));
+  if (company.deletedAt) return error(400, 'บริษัทนี้ถูกลบข้อมูลแล้ว');
+  const record = (entry: AuditEntry) =>
+    withTenantDb(storage, company, (db) => pushAudit(db, entry, by));
+  const ref: AuditRef = { kind: 'company', id: company.id, label: company.code };
+  if (action === 'plan' && req.method === 'PUT') {
+    const plan = PLANS.find((p) => p.id === body['planId']);
+    if (!plan) return error(400, 'ไม่มีแพ็กเกจนี้');
+    company.planId = plan.id;
+    platformChanged = true;
+    record({ action: 'plan_change', ref, detail: `ผู้ให้บริการเปลี่ยนเป็นแพ็กเกจ ${plan.name}` });
+    return ok(platformDetail(company, storage));
+  }
+  if (action === 'suspend' && req.method === 'POST') {
+    const note = String(body['note'] ?? '').trim();
+    const problem = suspendCompanyError(
+      { active: company.active, deletedAt: company.deletedAt ?? null },
+      note,
+    );
+    if (problem) return error(400, problem);
+    Object.assign(company, { active: false, suspendedReason: 'platform', suspendNote: note });
+    platformChanged = true;
+    record({ action: 'company_suspend', ref, detail: note });
+    return ok(platformDetail(company, storage));
+  }
+  if (action === 'reactivate' && req.method === 'POST') {
+    const problem = reactivateCompanyError({
+      active: company.active,
+      suspendedReason: company.suspendedReason,
+      deletedAt: company.deletedAt ?? null,
+    });
+    if (problem) return error(400, problem);
+    Object.assign(company, { active: true, suspendedReason: null, suspendNote: '' });
+    platformChanged = true;
+    record({ action: 'company_reactivate', ref, detail: '' });
+    return ok(platformDetail(company, storage));
+  }
+  if (action === 'owner-password' && req.method === 'PUT') {
+    const password = String(body['password'] ?? '');
+    const problem = passwordError(password);
+    if (problem) return error(400, problem);
+    let owner: User | undefined;
+    withTenantDb(storage, company, (db) => {
+      owner = db.users.find((u) => isOwner(u));
+      if (!owner) return;
+      db.passwords[owner.id] = password;
+      pushAudit(
+        db,
+        {
+          action: 'user_password',
+          ref: { kind: 'user', id: owner.id, label: owner.username },
+          detail: 'ผู้ให้บริการตั้งรหัสผ่านใหม่ให้เจ้าของบริษัท',
+        },
+        by,
+      );
+    });
+    if (!owner) return error(400, 'บริษัทนี้ไม่มีเจ้าของบริษัท');
+    return ok(null);
+  }
+  return notFound(req, path);
+}
+
+/** Loads a company's data, lets `change` edit it and saves it back. */
+function withTenantDb(
+  storage: StorageService,
+  company: StoredCompany,
+  change: (db: MockDb) => void,
+): void {
+  const { db } = loadTenantDb(storage, company.id);
+  const before = tenant;
+  tenant = company;
+  change(db);
+  saveTenantDb(storage, company.id, db);
+  tenant = before;
+}
+
+function platformRow(company: StoredCompany, storage: StorageService): PlatformCompanyRow {
+  const invoices = invoicesOf(platform, company.id);
+  const deletedAt = company.deletedAt ?? null;
+  const db = deletedAt ? null : loadTenantDb(storage, company.id).db;
+  return {
+    id: company.id,
+    code: company.code,
+    name: db?.companyInfo.name ?? '',
+    taxId: db?.companyInfo.taxId ?? '',
+    planId: company.planId,
+    active: company.active,
+    suspendedReason: company.suspendedReason,
+    status: subscriptionStatus(company.subscription, invoices, todayIso()),
+    usage: db ? usageOf(db) : { branches: 0, users: 0, terminals: 0 },
+    subscription: company.subscription,
+    openAmount: invoices.filter((i) => i.status === 'open').reduce((sum, i) => sum + i.amount, 0),
+    deletedAt,
+  };
+}
+
+function platformDetail(company: StoredCompany, storage: StorageService): PlatformCompanyDetail {
+  const row = platformRow(company, storage);
+  const owner = row.deletedAt
+    ? undefined
+    : loadTenantDb(storage, company.id).db.users.find((u) => isOwner(u));
+  return {
+    ...row,
+    invoices: invoicesOf(platform, company.id).sort((a, b) => b.id - a.id),
+    owner: owner
+      ? { id: owner.id, name: owner.name, username: owner.username, email: owner.email }
+      : null,
+    suspendNote: company.suspendNote ?? '',
+  };
+}
+
 /** Answer when no company is known: the same messages as a wrong login / an expired session. */
 function noTenant(req: HttpRequest<unknown>, path: string): Observable<never> {
   if (path === 'auth/login' && req.method === 'POST') return error(401, WRONG_COMPANY_LOGIN);
@@ -1503,12 +1703,12 @@ type AuditEntry = Pick<AuditEvent, 'action' | 'ref' | 'detail'> & { branchId?: n
 function pushAudit(
   db: MockDb,
   entry: AuditEntry,
-  by: { id: number | null; name: string } | null = actor ?? null,
+  by: { id: number | null; name: string; kind?: AuditActorKind } | null = actor ?? null,
 ): void {
   db.auditLog.push({
     id: db.nextAuditId++,
     at: new Date().toISOString(),
-    actorKind: 'user',
+    actorKind: by?.kind ?? 'user',
     userId: by?.id ?? null,
     userName: by?.name ?? '',
     branchId: entry.branchId === undefined ? null : entry.branchId,

@@ -36,4 +36,17 @@ describe('branchInterceptor', () => {
     expect(backend.expectOne('/api/sales').request.headers.get('X-Branch-Id')).toBe('7');
     backend.verify();
   });
+
+  it('never sends the branch to the platform API (E36)', () => {
+    save('token', 'mock-jwt-token.t1.u1');
+    save('company', { id: 1, code: 'DEMO', name: 'ร้าน', taxId: '', active: true });
+    save('branches', [
+      { id: 7, code: 'HQ', name: 'สำนักงานใหญ่', branchNo: '00000', active: true },
+    ]);
+    const { http, backend } = setup();
+    http.get('/api/platform/companies').subscribe();
+    const req = backend.expectOne('/api/platform/companies').request;
+    expect(req.headers.has('X-Branch-Id')).toBe(false);
+    backend.verify();
+  });
 });
