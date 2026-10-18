@@ -94,6 +94,14 @@ import {
   hasAdminRights,
   isOwner,
   ROLE_LABEL,
+  BillingInvoice,
+  CompanySuspendReason,
+  INVOICE_DUE_DAYS,
+  Subscription,
+  addMonthsIso,
+  billingNotice,
+  periodsToInvoice,
+  subscriptionStatus,
   LimitKind,
   PLANS,
   PlanId,
@@ -134,6 +142,7 @@ import {
   hasStarted,
   serialFormatError,
   todayIso,
+  addDaysIso,
   toIsoDate,
   cartError,
   paymentError,
@@ -289,7 +298,13 @@ interface MockDb {
  * A tenant in the platform registry with its package (E34); name and tax ID come from the
  * tenant's own `companyInfo`.
  */
-type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & { planId: PlanId };
+type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & {
+  planId: PlanId;
+  /** Billing schedule (E35) */
+  subscription: Subscription;
+  /** Why `active` is false (null while active): overdue billing, the platform admin, deletion */
+  suspendedReason: CompanySuspendReason | null;
+};
 
 /**
  * Platform-level data (SaaS step 6): the registry of every company. Each company's own data is a
@@ -299,10 +314,20 @@ type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & { planId: PlanId 
 interface MockPlatform {
   companies: StoredCompany[];
   nextCompanyId: number;
+  /** Invoices of the SaaS to every company (E35) */
+  invoices: BillingInvoice[];
+  nextInvoiceId: number;
 }
 
 /** The seed company; its data stays under the pre-SaaS key `mock.db` (older stored data). */
-const DEMO_COMPANY: StoredCompany = { id: 1, code: 'DEMO', active: true, planId: 'pro' };
+const DEMO_COMPANY: StoredCompany = {
+  id: 1,
+  code: 'DEMO',
+  active: true,
+  planId: 'pro',
+  subscription: { trialEndsOn: null, nextInvoiceOn: '9999-12-31' },
+  suspendedReason: null,
+};
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
 const DB_KEY = 'mock.db';
@@ -1008,20 +1033,69 @@ const blankDb = (): MockDb => ({
  */
 function loadPlatform(storage: StorageService): { platform: MockPlatform; changed: boolean } {
   const stored = storage.get<Partial<MockPlatform>>(PLATFORM_KEY);
-  // Companies registered before packages (step 6.4): DEMO gets Pro, any other the smallest.
-  const withPlan = (c: Partial<StoredCompany> & Pick<StoredCompany, 'id'>): StoredCompany =>
-    ({ ...c, planId: c.planId ?? (c.id === DEMO_COMPANY.id ? 'pro' : 'starter') }) as StoredCompany;
-  if (stored?.companies) {
-    const companies = stored.companies.map(withPlan);
-    const nextCompanyId = stored.nextCompanyId ?? Math.max(0, ...companies.map((c) => c.id)) + 1;
-    const changed = stored.companies.some((c) => !c.planId);
-    return { platform: { companies, nextCompanyId }, changed };
-  }
+  // Companies registered before packages / billing (steps 6.4 – 6.5): DEMO gets Pro, any other
+  // the smallest; no trial, first invoice on the 1st of next month; a suspended one = the platform.
+  const firstOfNextMonth = addMonthsIso(`${todayIso().slice(0, 7)}-01`, 1);
+  const filled = (c: Partial<StoredCompany> & Pick<StoredCompany, 'id' | 'active'>) =>
+    ({
+      ...c,
+      planId: c.planId ?? (c.id === DEMO_COMPANY.id ? 'pro' : 'starter'),
+      subscription: c.subscription ?? { trialEndsOn: null, nextInvoiceOn: firstOfNextMonth },
+      suspendedReason:
+        c.suspendedReason !== undefined ? c.suspendedReason : c.active ? null : 'platform',
+    }) as StoredCompany;
   const legacy = storage.get<{ companies?: StoredCompany[] }>(DB_KEY)?.companies;
-  const companies = (legacy?.length ? legacy : [{ ...DEMO_COMPANY }]).map(withPlan);
-  const nextCompanyId = Math.max(...companies.map((c) => c.id)) + 1;
-  return { platform: { companies, nextCompanyId }, changed: true };
+  const fresh = [{ id: DEMO_COMPANY.id, code: DEMO_COMPANY.code, active: true }];
+  const raw: (Partial<StoredCompany> & Pick<StoredCompany, 'id' | 'active'>)[] =
+    stored?.companies ?? (legacy?.length ? legacy : fresh);
+  const companies = raw.map(filled);
+  return {
+    platform: {
+      companies,
+      nextCompanyId: stored?.nextCompanyId ?? Math.max(0, ...companies.map((c) => c.id)) + 1,
+      invoices: stored?.invoices ?? [],
+      nextInvoiceId: stored?.nextInvoiceId ?? 1,
+    },
+    changed: !stored?.companies || raw.some((c) => !c.subscription || !c.planId),
+  };
 }
+
+/**
+ * Issues the invoices a company's schedule has reached by today (package price of the day, VAT
+ * included) and suspends it once an unpaid one is past the grace period (E35). True = changed.
+ */
+function refreshBilling(platform: MockPlatform, company: StoredCompany, today: string): boolean {
+  const { periods, nextInvoiceOn } = periodsToInvoice(company.subscription.nextInvoiceOn, today);
+  for (const period of periods) {
+    const prefix = `SUB-${period.start.slice(0, 4)}${period.start.slice(5, 7)}-`;
+    const seq = platform.invoices.filter((i) => i.invoiceNo.startsWith(prefix)).length + 1;
+    const plan = planOf(company.planId);
+    platform.invoices.push({
+      id: platform.nextInvoiceId++,
+      companyId: company.id,
+      invoiceNo: `${prefix}${String(seq).padStart(4, '0')}`,
+      planId: plan.id,
+      periodStart: period.start,
+      periodEnd: period.end,
+      amount: plan.monthlyPrice,
+      issuedOn: period.start,
+      dueDate: addDaysIso(period.start, INVOICE_DUE_DAYS),
+      status: 'open',
+      paidAt: null,
+    });
+  }
+  company.subscription = { ...company.subscription, nextInvoiceOn };
+  const status = subscriptionStatus(company.subscription, invoicesOf(platform, company.id), today);
+  if (status === 'suspended' && company.active) {
+    company.active = false;
+    company.suspendedReason = 'overdue';
+    return true;
+  }
+  return periods.length > 0;
+}
+
+const invoicesOf = (platform: MockPlatform, companyId: number): BillingInvoice[] =>
+  platform.invoices.filter((i) => i.companyId === companyId);
 
 /**
  * One company's data with defaults filled in and the one-time migrations of older stored data run
@@ -1099,6 +1173,8 @@ const LATENCY_MS = 300;
  * own record, so a handler changes it in place and sets `platformChanged` to have it saved.
  */
 let tenant: StoredCompany = DEMO_COMPANY;
+/** The platform registry of this request (companies + billing). */
+let platform: MockPlatform = { companies: [], nextCompanyId: 1, invoices: [], nextInvoiceId: 1 };
 let platformChanged = false;
 /** The user of the request being handled (set by the interceptor before `handle()`). */
 let actor: User | undefined;
@@ -1136,9 +1212,12 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
 
   const storage = inject(StorageService);
   const path = req.url.slice(base.length + 1);
-  const { platform, changed: registryMoved } = loadPlatform(storage);
+  const loaded = loadPlatform(storage);
+  platform = loaded.platform;
+  const registryMoved = loaded.changed;
   platformChanged = false;
   const company = requestCompany(req, path, platform);
+  if (company && refreshBilling(platform, company, todayIso())) platformChanged = true;
   const response$ = company ? tenantResponse(req, path, company, storage) : noTenant(req, path);
   // A handler that changed the request's company (package …) sets `platformChanged`.
   if (registryMoved || platformChanged) storage.set(PLATFORM_KEY, platform);
@@ -1152,16 +1231,16 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
 function requestCompany(
   req: HttpRequest<unknown>,
   path: string,
-  platform: MockPlatform,
+  registry: MockPlatform,
 ): StoredCompany | undefined {
   if (path === 'auth/login' && req.method === 'POST') {
     const code = normalizeCompanyCode(
       (req.body as Partial<LoginRequest> | null)?.companyCode ?? '',
     );
-    return platform.companies.find((c) => c.code === code);
+    return registry.companies.find((c) => c.code === code);
   }
   const id = tokenIds(req)?.companyId;
-  return platform.companies.find((c) => c.id === id);
+  return registry.companies.find((c) => c.id === id);
 }
 
 /** Answer when no company is known: the same messages as a wrong login / an expired session. */
@@ -1488,7 +1567,7 @@ function handle(
   if (!actor) return error(401, SESSION_EXPIRED);
   // `/me` answers whatever branch the client remembers, so a stale one can be corrected (step 2).
   if (path === 'me' && req.method === 'GET') {
-    return ok({ user: actor, ...companySession(db, actor) } satisfies MeResponse);
+    return ok(companySession(db, actor));
   }
   if (branchHeader !== null && !allowedBranch(db, actor, branchHeader)) {
     return error(403, 'ไม่มีสิทธิ์ทำงานในสาขานี้');
@@ -1769,7 +1848,14 @@ function handleCompany(
 
 /** The request company's package and what it uses (E34). */
 function subscriptionInfo(db: MockDb): SubscriptionInfo {
-  return { planId: tenant.planId, usage: usageOf(db) };
+  const invoices = invoicesOf(platform, tenant.id).sort((a, b) => b.id - a.id);
+  return {
+    planId: tenant.planId,
+    usage: usageOf(db),
+    status: subscriptionStatus(tenant.subscription, invoices, todayIso()),
+    subscription: tenant.subscription,
+    invoices,
+  };
 }
 
 const usageOf = (db: MockDb): PlanUsage =>
@@ -4612,14 +4698,19 @@ function login(
     );
     return error(401, WRONG_COMPANY_LOGIN);
   }
-  if (!company.active) {
-    return error(401, 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
-  }
+  if (!company.active) return error(401, SUSPENDED_MESSAGE[company.suspendedReason ?? 'platform']);
   pushAudit(db, { action: 'login', ref: null, detail: '' }, user);
-  return ok({ token: mockToken(company.id, user.id), user, ...companySession(db, user) });
+  return ok({ token: mockToken(company.id, user.id), ...companySession(db, user) });
 }
 
 const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+/** Told only after a correct login (E3), by why the company is suspended. */
+const SUSPENDED_MESSAGE: Record<CompanySuspendReason, string> = {
+  platform: 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท',
+  overdue:
+    'บริษัทนี้ถูกระงับการใช้งานเพราะค้างชำระค่าบริการ — เจ้าของบริษัทติดต่อผู้ให้บริการเพื่อชำระเงิน',
+  deletion: 'บริษัทนี้อยู่ระหว่างรอลบข้อมูล',
+};
 const WRONG_COMPANY_LOGIN = 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
 const SESSION_EXPIRED = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
 
@@ -4670,11 +4761,16 @@ function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
 }
 
 /** Company + the branches the user may work in (`canWorkIn()`: active, theirs or all). */
-function companySession(db: MockDb, user: User): { company: Company; branches: Branch[] } {
+function companySession(db: MockDb, user: User): MeResponse {
   const { id, code, active } = tenant;
   return {
+    user,
     company: { id, code, active, name: db.companyInfo.name, taxId: db.companyInfo.taxId },
     branches: db.branches.filter((b) => canWorkIn(user, b)),
+    // The banner of trial / invoices / overdue (E35) is for the owner and admins only.
+    billing: hasAdminRights(user)
+      ? billingNotice(tenant.subscription, invoicesOf(platform, tenant.id), todayIso())
+      : null,
   };
 }
 

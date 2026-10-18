@@ -92,6 +92,13 @@
     </div>
 
     <main class="content">
+      @if (auth.billing(); as notice) {
+        <div [class]="'billing-notice no-print ' + notice.level" role="status">
+          <mat-icon>{{ notice.level === 'error' ? 'error' : 'info' }}</mat-icon>
+          <span>{{ notice.text }}</span>
+          <a href="/account/subscription">ดูแพ็กเกจ / ใบแจ้งหนี้</a>
+        </div>
+      }
       <router-outlet />
     </main>
   </mat-sidenav-content>

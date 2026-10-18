@@ -2,7 +2,8 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../http/api.service';
 import { httpErrorShown } from '../http/http-error-shown';
-import { LimitKind, PlanId, SubscriptionInfo, planLimitError, planOf } from '../models/plan.model';
+import { LimitKind, PlanId, planLimitError, planOf } from '../models/plan.model';
+import type { SubscriptionInfo } from '../models/subscription.model';
 
 /**
  * The company's package and usage (E34) for admin screens: loaded once per page load; add buttons

@@ -13,6 +13,17 @@
       </mat-card-subtitle>
     </mat-card-header>
     <mat-card-content>
+      <p class="status">
+        <span class="badge" [class]="'badge ' + statusBadge()">{{ statusText() }}</span>
+        @if (info()!.subscription.trialEndsOn; as trialEnd) {
+          @if (statusIs('trial')) {
+            <span>ทดลองใช้ถึง {{ trialEnd | thaiDate }}</span>
+          }
+        }
+        <span class="text-muted"
+          >ใบแจ้งหนี้ถัดไปออกวันที่ {{ info()!.subscription.nextInvoiceOn | thaiDate }}</span
+        >
+      </p>
       @for (kind of kinds; track kind) {
         <div class="usage-row">
           <span>{{ label(kind) }}</span>
@@ -28,6 +39,60 @@
     </mat-card-content>
   </mat-card>
 
+  <h3 class="section-title">ใบแจ้งหนี้ค่าบริการ</h3>
+  <mat-card appearance="outlined" class="invoices">
+    @if (!info()!.invoices.length) {
+      <p class="text-muted empty">ยังไม่มีใบแจ้งหนี้</p>
+    } @else {
+      <div class="table-wrap">
+        <table mat-table [dataSource]="info()!.invoices">
+          <ng-container matColumnDef="invoiceNo">
+            <th mat-header-cell *matHeaderCellDef>เลขที่</th>
+            <td mat-cell *matCellDef="let i" class="mono">{{ i.invoiceNo }}</td>
+          </ng-container>
+          <ng-container matColumnDef="period">
+            <th mat-header-cell *matHeaderCellDef>รอบบริการ</th>
+            <td mat-cell *matCellDef="let i">
+              {{ i.periodStart | thaiDate }} – {{ i.periodEnd | thaiDate }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="plan">
+            <th mat-header-cell *matHeaderCellDef>แพ็กเกจ</th>
+            <td mat-cell *matCellDef="let i">{{ planName(i) }}</td>
+          </ng-container>
+          <ng-container matColumnDef="amount">
+            <th mat-header-cell *matHeaderCellDef class="num">ยอด (รวม VAT)</th>
+            <td mat-cell *matCellDef="let i" class="num">
+              {{ i.amount | currency: 'THB' : 'symbol-narrow' : '1.0-0' }}
+            </td>
+          </ng-container>
+          <ng-container matColumnDef="dueDate">
+            <th mat-header-cell *matHeaderCellDef>ครบกำหนด</th>
+            <td mat-cell *matCellDef="let i">{{ i.dueDate | thaiDate }}</td>
+          </ng-container>
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>สถานะ</th>
+            <td mat-cell *matCellDef="let i">
+              <span class="badge" [class.badge-success]="i.status === 'paid'">{{
+                invoiceStatus(i)
+              }}</span>
+              @if (i.paidAt) {
+                <div class="text-muted small">{{ i.paidAt | thaiDate }}</div>
+              }
+            </td>
+          </ng-container>
+          <tr mat-header-row *matHeaderRowDef="invoiceColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: invoiceColumns"></tr>
+        </table>
+      </div>
+    }
+    <p class="text-muted small pay-note">
+      ชำระโดยโอนเงินตามใบแจ้งหนี้ — ผู้ให้บริการยืนยันการชำระให้ (ยังไม่มีการชำระออนไลน์) ·
+      ค้างชำระเกิน {{ graceDays }} วันหลังครบกำหนด ระบบจะระงับการใช้งานของทั้งบริษัท
+    </p>
+  </mat-card>
+
+  <h3 class="section-title">แพ็กเกจ</h3>
   <div class="plans">
     @for (plan of plans; track plan.id) {
       <mat-card appearance="outlined" class="plan" [class.current]="plan.id === current().id">

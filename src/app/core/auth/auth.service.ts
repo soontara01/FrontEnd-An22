@@ -1,7 +1,15 @@
 import { DOCUMENT, Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, tap } from 'rxjs';
 import { ApiService } from '../http/api.service';
-import type { Branch, Company, LoginRequest, LoginResponse, MeResponse, User } from '../models';
+import type {
+  BillingNotice,
+  Branch,
+  Company,
+  LoginRequest,
+  LoginResponse,
+  MeResponse,
+  User,
+} from '../models';
 import { StorageService } from '../services/storage.service';
 
 const TOKEN_KEY = 'token';
@@ -31,6 +39,8 @@ export class AuthService {
     pickBranch(this._branches(), this.storage.get<number>(BRANCH_KEY)),
   );
   private readonly _companyCode = signal(this.storage.get<string>(COMPANY_CODE_KEY) ?? '');
+  /** Billing banner of this page load (from login / `GET /me`, not stored). */
+  private readonly _billing = signal<BillingNotice | null>(null);
 
   readonly token = this._token.asReadonly();
   readonly user = this._user.asReadonly();
@@ -38,6 +48,7 @@ export class AuthService {
   readonly branches = this._branches.asReadonly();
   /** Company code remembered on this device ('' = none). */
   readonly companyCode = this._companyCode.asReadonly();
+  readonly billing = this._billing.asReadonly();
   readonly isLoggedIn = computed(() => !!this._token() && !!this._company());
   /**
    * Admin-only screens and buttons (the server checks the same rules → 403): an admin or the owner.
@@ -93,7 +104,8 @@ export class AuthService {
     this.storage.set(BRANCH_KEY, id);
   }
 
-  private setSession({ user, company, branches }: MeResponse): void {
+  private setSession({ user, company, branches, billing }: MeResponse): void {
+    this._billing.set(billing ?? null);
     this.storage.set(USER_KEY, user);
     this.storage.set(COMPANY_KEY, company);
     this.storage.set(BRANCHES_KEY, branches);

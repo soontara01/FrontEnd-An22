@@ -34,6 +34,7 @@ describe('AuthService', () => {
     },
     company: { id: 1, code: 'DEMO', name: 'ร้านตัวอย่าง', taxId: '', active: true },
     branches,
+    billing: null,
   });
   const credentials = { companyCode: ' demo ', username: 'admin', password: 'admin' };
 

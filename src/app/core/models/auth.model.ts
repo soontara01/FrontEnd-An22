@@ -1,4 +1,5 @@
 import type { Branch, Company } from './company.model';
+import type { BillingNotice } from './subscription.model';
 import type { User } from './user.model';
 
 /** Login by company code + username + password (D4, SaaS step 1). */
@@ -17,6 +18,8 @@ export interface LoginResponse {
   user: User;
   company: Company;
   branches: Branch[];
+  /** Trial ending / invoice waiting / overdue (E35) — for the owner and admins; null = nothing */
+  billing: BillingNotice | null;
 }
 
 /** `GET /me`: the same session without a new token. */

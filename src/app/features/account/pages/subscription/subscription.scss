@@ -39,3 +39,32 @@
     }
   }
 }
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-title {
+  font: var(--mat-sys-title-medium);
+  margin: 24px 0 8px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.num {
+  text-align: right;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.empty,
+.pay-note {
+  padding: 0 16px;
+}

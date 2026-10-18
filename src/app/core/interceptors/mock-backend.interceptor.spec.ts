@@ -2008,6 +2008,7 @@ describe('mockBackendInterceptor – auth (B3)', () => {
       user: session.user,
       company: session.company,
       branches: session.branches,
+      billing: null,
     });
   });
 
@@ -3030,10 +3031,15 @@ describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
       JSON.stringify({ companies: [{ id: 1, code: 'DEMO', active: true }] }),
     );
     expect(await statusOf(call('GET', 'products', undefined, DEMO_ADMIN))).toBe(200);
-    expect(stored('an22.mock.platform')).toEqual({
-      companies: [{ id: 1, code: 'DEMO', active: true, planId: 'pro' }],
-      nextCompanyId: 2,
+    const platform = stored('an22.mock.platform');
+    expect(platform.companies).toHaveLength(1);
+    expect(platform.companies[0]).toMatchObject({
+      id: 1,
+      code: 'DEMO',
+      active: true,
+      planId: 'pro',
     });
+    expect(platform.nextCompanyId).toBe(2);
     await call(
       'PUT',
       'settings/branch',
@@ -3355,7 +3361,7 @@ describe('mockBackendInterceptor – packages (E34)', () => {
   });
 
   it('gives DEMO the Pro package and counts active branches / users / terminals', async () => {
-    expect(await call<SubscriptionInfo>('GET', 'company/subscription')).toEqual({
+    expect(await call<SubscriptionInfo>('GET', 'company/subscription')).toMatchObject({
       planId: 'pro',
       usage: { branches: 2, users: 3, terminals: 3 },
     });
@@ -3423,5 +3429,97 @@ describe('mockBackendInterceptor – packages (E34)', () => {
     expect(await call<User>('PUT', `users/${u4.id}`, { ...u4, name: 'สี่' })).toMatchObject({
       name: 'สี่',
     });
+  });
+});
+
+describe('mockBackendInterceptor – billing (E35)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  /** DEMO on Starter whose next period started `daysAgo` days ago. */
+  const plant = (daysAgo: number) =>
+    localStorage.setItem(
+      'an22.mock.platform',
+      JSON.stringify({
+        companies: [
+          {
+            id: 1,
+            code: 'DEMO',
+            active: true,
+            planId: 'starter',
+            subscription: { trialEndsOn: null, nextInvoiceOn: addDaysIso(todayIso(), -daysAgo) },
+            suspendedReason: null,
+          },
+        ],
+        nextCompanyId: 2,
+        invoices: [],
+        nextInvoiceId: 1,
+      }),
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('starts older companies with no trial and the first invoice next month', async () => {
+    const info = await call<SubscriptionInfo>('GET', 'company/subscription');
+    expect(info.status).toBe('active');
+    expect(info.invoices).toEqual([]);
+    expect(info.subscription.nextInvoiceOn.endsWith('-01')).toBe(true);
+    expect(info.subscription.nextInvoiceOn > todayIso()).toBe(true);
+    expect((await call<MeResponse>('GET', 'me')).billing).toBeNull();
+  });
+
+  it('issues the invoice of a period that started and warns admins once it is overdue', async () => {
+    plant(10); // due 3 days ago, grace still running
+    const info = await call<SubscriptionInfo>('GET', 'company/subscription');
+    expect(info.status).toBe('past_due');
+    expect(info.invoices).toHaveLength(1);
+    expect(info.invoices[0]).toMatchObject({
+      planId: 'starter',
+      amount: 590,
+      status: 'open',
+      dueDate: addDaysIso(todayIso(), -3),
+    });
+    expect(info.invoices[0].invoiceNo).toMatch(/^SUB-\d{6}-0001$/);
+    const me = await call<MeResponse>('GET', 'me');
+    expect(me.billing?.level).toBe('error');
+    expect(me.billing?.text).toContain('อีก 4 วัน');
+    expect((await call<MeResponse>('GET', 'me', undefined, STAFF)).billing).toBeNull();
+    // issued once
+    expect((await call<SubscriptionInfo>('GET', 'company/subscription')).invoices).toHaveLength(1);
+  });
+
+  it('suspends the company after the grace period: 401, and login says why', async () => {
+    plant(20);
+    expect((await failure(call('GET', 'products')))?.[0]).toBe(401);
+    const login = await failure(
+      firstValueFrom(
+        http.post('/api/auth/login', { companyCode: 'DEMO', username: 'admin', password: 'admin' }),
+      ),
+    );
+    expect(login).toEqual([
+      401,
+      'บริษัทนี้ถูกระงับการใช้งานเพราะค้างชำระค่าบริการ — เจ้าของบริษัทติดต่อผู้ให้บริการเพื่อชำระเงิน',
+    ]);
+    const stored = JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
+    expect(stored.companies[0]).toMatchObject({ active: false, suspendedReason: 'overdue' });
   });
 });

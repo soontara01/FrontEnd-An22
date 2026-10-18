@@ -81,9 +81,3 @@ export const overLimits = (plan: Plan, usage: PlanUsage): LimitKind[] =>
     const limit = plan.limits[k];
     return limit !== null && usage[k] > limit;
   });
-
-/** `GET /company/subscription` (admins): the package and what the company uses of it. */
-export interface SubscriptionInfo {
-  planId: PlanId;
-  usage: PlanUsage;
-}

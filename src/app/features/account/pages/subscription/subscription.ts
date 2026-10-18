@@ -1,16 +1,31 @@
-import { DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatTableModule } from '@angular/material/table';
 import { filter, switchMap } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
-import { LIMIT_LABEL, LimitKind, PLANS, Plan, overLimits } from '@core/models';
+import {
+  BILLING_INVOICE_STATUS_LABEL,
+  BillingInvoice,
+  GRACE_DAYS,
+  LIMIT_LABEL,
+  LimitKind,
+  PLANS,
+  Plan,
+  SUBSCRIPTION_STATUS_BADGE,
+  SUBSCRIPTION_STATUS_LABEL,
+  SubscriptionStatus,
+  overLimits,
+  planOf,
+} from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { SubscriptionService } from '@core/services/subscription.service';
 import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { MATERIAL } from '@shared/material';
+import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 
 /**
  * Package of the company (E34): the three packages with their limits, what the company uses, and
@@ -18,7 +33,16 @@ import { MATERIAL } from '@shared/material';
  */
 @Component({
   selector: 'app-subscription',
-  imports: [DecimalPipe, MatProgressBarModule, AdminOnlyNote, LoadingSpinner, MATERIAL],
+  imports: [
+    CurrencyPipe,
+    DecimalPipe,
+    MatProgressBarModule,
+    MatTableModule,
+    AdminOnlyNote,
+    LoadingSpinner,
+    ThaiDatePipe,
+    MATERIAL,
+  ],
   templateUrl: './subscription.html',
   styleUrl: './subscription.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,6 +56,23 @@ export default class Subscription {
   protected readonly plans = PLANS;
   protected readonly kinds = Object.keys(LIMIT_LABEL) as LimitKind[];
   protected readonly saving = signal(false);
+  protected readonly graceDays = GRACE_DAYS;
+  protected readonly invoiceColumns = [
+    'invoiceNo',
+    'period',
+    'plan',
+    'amount',
+    'dueDate',
+    'status',
+  ];
+  protected readonly statusText = computed(() => {
+    const status = this.info()?.status;
+    return status ? SUBSCRIPTION_STATUS_LABEL[status] : '';
+  });
+  protected readonly statusBadge = computed(() => {
+    const status = this.info()?.status;
+    return status ? SUBSCRIPTION_STATUS_BADGE[status] : '';
+  });
   protected readonly info = this.subscription.info;
   protected readonly current = this.subscription.plan;
   /** What a downgrade left over the package ('' = nothing) */
@@ -45,6 +86,18 @@ export default class Subscription {
 
   constructor() {
     this.subscription.load(true);
+  }
+
+  protected statusIs(status: SubscriptionStatus): boolean {
+    return this.info()?.status === status;
+  }
+
+  protected planName(invoice: BillingInvoice): string {
+    return planOf(invoice.planId).name;
+  }
+
+  protected invoiceStatus(invoice: BillingInvoice): string {
+    return BILLING_INVOICE_STATUS_LABEL[invoice.status];
   }
 
   protected label(kind: LimitKind): string {
