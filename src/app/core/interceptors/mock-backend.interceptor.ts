@@ -1107,7 +1107,7 @@ function loadPlatform(storage: StorageService): { platform: MockPlatform; change
       outbox: stored?.outbox ?? [],
       nextEmailId: stored?.nextEmailId ?? 1,
       platformAdmins: stored?.platformAdmins ?? [
-        { id: 1, username: 'platform', name: 'ผู้ให้บริการระบบ' },
+        { id: 1, username: 'platform', name: 'ผู้ดูแลแพลตฟอร์ม' },
       ],
       platformPasswords: stored?.platformPasswords ?? {},
     },
@@ -1744,7 +1744,9 @@ function pushAudit(
     userId: by?.id ?? null,
     userName: by?.name ?? '',
     branchId: entry.branchId === undefined ? null : entry.branchId,
-    terminalId,
+    // The device's terminal only when it is one of this company's (a device set up for another
+    // company still sends its number).
+    terminalId: db.posTerminals.some((t) => t.id === terminalId) ? terminalId : null,
     action: entry.action,
     ref: entry.ref,
     detail: entry.detail,

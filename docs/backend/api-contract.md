@@ -1,9 +1,9 @@
-# API contract (SaaS ขั้น 1: 1 บริษัท 1 สาขา)
+# API contract (SaaS ขั้น 1–6: หลายบริษัท หลายสาขา)
 
 แหล่งอ้างอิง: mock `src/app/core/interceptors/mock-backend.interceptor.ts` (+ spec) · รูปร่าง body = interface ใน
 `src/app/core/models/*.model.ts` (ชื่อในวงเล็บ `Type` ด้านล่าง) · กฎตรวจ = ฟังก์ชันใน `domain-rules.md`
 
-การเปลี่ยนแปลงตาม SaaS (`docs/saas-plan.md` หัวข้อ 2, 7) ระบุไว้ท้ายไฟล์ — ยังไม่ทำ
+สิ่งที่ SaaS ยังไม่ทำ (เลื่อนออกไป) อยู่ท้ายไฟล์
 
 ## ข้อตกลงทั่วไป
 
@@ -259,9 +259,9 @@ token แยก (mock `mock-platform-token.p<id>`): token ของ platform ใ
 
 `POST /sales`, void, ใบลดหนี้ → 400 ตาม `shiftBlocker()` เมื่อ `StoreInfo.requireShift` เปิด
 
-## ที่จะเปลี่ยนตาม SaaS (ขั้นถัดไป — `docs/saas-plan.md`)
+## ที่จะเปลี่ยนตาม SaaS (`docs/saas-plan.md`)
 
-ทำแล้วในขั้น 1: login แบบรหัสบริษัท, token มี tenant, `GET /me`, header `X-Branch-Id` + 403 · ขั้น 2: สิทธิ์สาขาของผู้ใช้, รหัสผ่าน, `/settings/company`, `/settings/branch`, `/branches` (หัวข้อด้านบน)
+ขั้น 1–6 ทำครบแล้วฝั่งหน้าบ้าน + mock (2026-10-18; หัวข้อด้านบน): login รหัสบริษัท, token มี tenant, `X-Branch-Id`, สิทธิ์สาขา, เอกสาร / สต็อกต่อสาขา, ใบโอน,
+owner, แพ็กเกจ, billing, platform admin, สมัครใช้, ลืมรหัสผ่าน owner, export / ลบบริษัท, audit log
 
-- รายงานรับ `?branchId=<id>|all`; endpoint ใหม่ `/branches`, `/settings/company`, `/settings/branch`, `/products/:id/branch-stock` (ทำแล้ว ขั้น 3), `/transfers`
-- role ใหม่ `owner`, `platform_admin`; เลขเอกสารมีรหัสสาขา (หัวข้อ 3 ของ saas-plan)
+ยังไม่ทำ (เลื่อน): subdomain (D4), payment gateway (webhook ชำระเงิน), ซ่อน `cost` / `avgCost` / COGS จาก role user (P5), รายงานยื่นภาษีรวม (`vatFilingCombined`), จำกัดการ login ผิดต่อบัญชี / IP (หลังบ้านทำได้เลย)

@@ -26,12 +26,14 @@
             {{ c.usage.branches }} สาขา · {{ c.usage.users }} ผู้ใช้ ·
             {{ c.usage.terminals }} เครื่อง POS
           </dd>
-          @if (c.subscription.trialEndsOn) {
-            <dt>ทดลองใช้ถึง</dt>
-            <dd>{{ c.subscription.trialEndsOn | thaiDate }}</dd>
+          @if (!c.deletedAt) {
+            @if (c.subscription.trialEndsOn) {
+              <dt>ทดลองใช้ถึง</dt>
+              <dd>{{ c.subscription.trialEndsOn | thaiDate }}</dd>
+            }
+            <dt>ใบแจ้งหนี้ถัดไป</dt>
+            <dd>{{ c.subscription.nextInvoiceOn | thaiDate }}</dd>
           }
-          <dt>ใบแจ้งหนี้ถัดไป</dt>
-          <dd>{{ c.subscription.nextInvoiceOn | thaiDate }}</dd>
           @if (c.suspendNote) {
             <dt>เหตุผลที่ระงับ</dt>
             <dd>{{ c.suspendNote }}</dd>

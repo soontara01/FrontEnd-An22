@@ -3294,6 +3294,27 @@ describe('mockBackendInterceptor – audit log (E40)', () => {
     expect(await statusOf(log(STAFF))).toBe(403);
   });
 
+  it("records the device's terminal only when it is one of the company's", async () => {
+    const atTerminal = (terminal: string) =>
+      firstValueFrom(
+        http.put(
+          '/api/settings/menu-access',
+          { userMenus: ['pos'] },
+          {
+            headers: {
+              Authorization: `Bearer ${OWNER}`,
+              'X-Branch-Id': '1',
+              'X-Terminal-Id': terminal,
+            },
+          },
+        ),
+      );
+    await atTerminal('1');
+    await atTerminal('99');
+    const events = await log();
+    expect(events.map((e) => e.terminalId)).toEqual([null, 1]);
+  });
+
   it('shows a branch admin only the events of their branches', async () => {
     const bnAdmin = await call<User>('POST', 'users', {
       username: 'bnadmin',

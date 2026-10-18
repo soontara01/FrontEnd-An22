@@ -93,8 +93,7 @@ export default class AuditLog {
   }
 
   protected whoText(event: AuditEvent): string {
-    if (event.actorKind === 'platform')
-      return `ผู้ให้บริการระบบ${event.userName ? ` (${event.userName})` : ''}`;
+    if (event.actorKind === 'platform') return `ผู้ให้บริการ: ${event.userName || '-'}`;
     if (event.actorKind === 'system') return 'ระบบ';
     return event.userName || '-';
   }

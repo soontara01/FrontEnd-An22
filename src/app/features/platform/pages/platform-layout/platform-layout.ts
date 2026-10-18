@@ -44,7 +44,8 @@ import { PlatformAuth } from '../../data/platform-auth.service';
       font: var(--mat-sys-title-medium);
       margin-right: 16px;
     }
-    .nav a {
+    .nav a,
+    .toolbar button {
       color: inherit;
     }
     .nav a.active {
