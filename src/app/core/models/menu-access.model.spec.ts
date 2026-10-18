@@ -10,7 +10,10 @@ describe('menu access', () => {
     );
     expect(menuAccessError({}, known)).toBe('ต้องเลือกอย่างน้อย 1 เมนูให้ผู้ใช้ทั่วไป');
     expect(menuAccessError({ userMenus: ['pos', 'users'] }, known)).toBe(
-      'เมนูผู้ใช้งานเป็นของผู้ดูแลระบบเท่านั้น',
+      'เมนูผู้ใช้งาน / บัญชีบริษัท เป็นของผู้ดูแลระบบเท่านั้น',
+    );
+    expect(menuAccessError({ userMenus: ['account'] }, [...known, 'account'])).toBe(
+      'เมนูผู้ใช้งาน / บัญชีบริษัท เป็นของผู้ดูแลระบบเท่านั้น',
     );
     expect(menuAccessError({ userMenus: ['reports'] }, known)).toBe('ไม่มีเมนู reports');
     expect(menuAccessError({ userMenus: ['pos', 'pos'] }, known)).toBe('เลือกเมนูซ้ำ');
@@ -23,6 +26,7 @@ describe('menu access', () => {
     expect(canSeeMenu('pos', false, access)).toBe(true);
     expect(canSeeMenu('inventory', false, access)).toBe(false);
     expect(canSeeMenu('users', false, { userMenus: ['users'] })).toBe(false);
+    expect(canSeeMenu('account', false, { userMenus: ['account'] })).toBe(false);
     // Not loaded yet: the default (cashier work).
     expect(DEFAULT_MENU_ACCESS.userMenus).toEqual(['dashboard', 'pos', 'sales', 'settings']);
     expect(canSeeMenu('sales', false, null)).toBe(true);

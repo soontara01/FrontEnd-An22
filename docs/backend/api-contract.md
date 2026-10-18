@@ -98,6 +98,12 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 ไม่ใช่ owner → **403** "โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท"; `ownerTransferError()` อื่น → 400; รหัสผ่านผิด → 400 "รหัสผ่านไม่ถูกต้อง" (ห้าม 401);
 ผู้รับ → `owner` + `allBranches`, owner เดิม → `admin` + `allBranches` (หน้าบ้าน reload เพราะสิทธิ์ตัวเองเปลี่ยน)
 
+### Audit log (SaaS ขั้น 6.3, E40)
+
+`GET /audit-log?from=&to=&action=&userId=&branchId=` → `AuditEvent[]` ใหม่สุดก่อน — admin เท่านั้น (user → **403** "ดูประวัติการใช้งานได้เฉพาะผู้ดูแลระบบ");
+`filterAuditEvents()`: owner / admin บริษัทเห็นทุกเหตุการณ์, admin สาขาเห็นเฉพาะเหตุการณ์ของสาขาที่ `canWorkIn()` (ไม่เห็นระดับบริษัท `branchId: null`); วันที่ = วันท้องถิ่นของ `at`; ค่าที่อ่านไม่ได้ = ไม่กรอง (`parseAuditQuery()`) ·
+ไม่มี endpoint เขียน — server บันทึกเอง (รายการเหตุการณ์ใน `domain-rules.md`)
+
 ### ตัวกรองสาขาของรายการ (SaaS ขั้น 4, E23)
 
 `GET /sales`, `/credit-notes`, `/tax-invoices`, `/shifts`, `/shifts/variance-report` รับ `?branchId=<id>|all`: ไม่ส่ง = สาขาใน `X-Branch-Id`; รายการของกะเดียว (`shiftId=`) ใช้สาขาของกะ;

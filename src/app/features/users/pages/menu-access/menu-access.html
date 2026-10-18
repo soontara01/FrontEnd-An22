@@ -42,7 +42,7 @@
                 />
               </td>
               <td class="role">
-                @if (item.path === adminOnly) {
+                @if (adminOnly.includes(item.path)) {
                   <span class="text-muted small">admin เท่านั้น</span>
                 } @else {
                   <mat-checkbox

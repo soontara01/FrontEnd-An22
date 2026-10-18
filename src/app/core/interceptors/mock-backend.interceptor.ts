@@ -93,6 +93,11 @@ import {
   userChangeError,
   hasAdminRights,
   isOwner,
+  ROLE_LABEL,
+  AuditEvent,
+  AuditRef,
+  filterAuditEvents,
+  parseAuditQuery,
   ownerRoleError,
   ownerTransferError,
   userIdentityError,
@@ -267,6 +272,9 @@ interface MockDb {
   nextBranchId: number;
   /** Passwords by user id (a real API keeps a hash); none = `admin` for the first user, else `1234` (E10). */
   passwords: Record<number, string>;
+  /** Audit log (E40): appended by `recordAudit()` / `pushAudit()`, never edited or deleted. */
+  auditLog: AuditEvent[];
+  nextAuditId: number;
 }
 
 /** A tenant in the platform registry; name and tax ID come from the tenant's own `companyInfo`. */
@@ -931,6 +939,8 @@ const seedDb = (): MockDb => ({
   branches: SEED_BRANCHES.map((b) => ({ ...b })),
   nextBranchId: SEED_BRANCHES.length + 1,
   passwords: {},
+  auditLog: [],
+  nextAuditId: 1,
 });
 
 /**
@@ -977,6 +987,8 @@ const blankDb = (): MockDb => ({
   branches: [],
   nextBranchId: 1,
   passwords: {},
+  auditLog: [],
+  nextAuditId: 1,
 });
 
 /**
@@ -1155,9 +1167,277 @@ function tenantResponse(
   db.storeInfo = storeInfoOf(db.companyInfo, requestBranch(db));
   stockBranch = requestBranch(db).id;
   db.products = db.products.map((p) => atBranch(db, p));
+  // A deleted record's label is read before the handler removes it.
+  const deleted = req.method === 'DELETE' ? deletedLabel(path, db) : '';
   const response$ = handle(req, path, db);
+  if (req.method !== 'GET' && actor) {
+    const done = syncResult(response$);
+    if (done) recordAudit(req, path, db, done.body, deleted);
+  }
   if (changed || req.method !== 'GET') saveTenantDb(storage, company.id, db);
   return response$;
+}
+
+/** The success response of a handler (handlers answer synchronously with `of()`); null = an error. */
+function syncResult(response$: Observable<HttpResponse<unknown>>): HttpResponse<unknown> | null {
+  let result: HttpResponse<unknown> | null = null;
+  response$.subscribe({ next: (r) => (result = r), error: () => undefined });
+  return result;
+}
+
+/** What an audit event says beyond who / when / where (`pushAudit()` fills the rest). */
+type AuditEntry = Pick<AuditEvent, 'action' | 'ref' | 'detail'> & { branchId?: number | null };
+
+/** Appends an event done by the request's user at its terminal (E40). */
+function pushAudit(
+  db: MockDb,
+  entry: AuditEntry,
+  by: { id: number | null; name: string } | null = actor ?? null,
+): void {
+  db.auditLog.push({
+    id: db.nextAuditId++,
+    at: new Date().toISOString(),
+    actorKind: 'user',
+    userId: by?.id ?? null,
+    userName: by?.name ?? '',
+    branchId: entry.branchId === undefined ? null : entry.branchId,
+    terminalId,
+    action: entry.action,
+    ref: entry.ref,
+    detail: entry.detail,
+  });
+}
+
+/** Label of the record a `DELETE` removes (price / promotion / user / terminal), for its event. */
+function deletedLabel(path: string, db: MockDb): string {
+  const [kind, raw] = path.split('/');
+  const id = Number(raw);
+  if (kind === 'prices') {
+    const price = db.prices.find((p) => p.id === id);
+    return price ? `${skuOf(db, price.productId)} ฿${price.price} ตั้งแต่ ${price.startDate}` : '';
+  }
+  if (kind === 'promotions') {
+    const promo = db.promotions.find((p) => p.id === id);
+    return promo ? `${promo.code} ${promo.name}` : '';
+  }
+  if (kind === 'users') return db.users.find((u) => u.id === id)?.username ?? '';
+  if (kind === 'pos-terminals') return id ? `เครื่อง ${id}` : '';
+  return '';
+}
+
+const skuOf = (db: MockDb, productId: number): string =>
+  db.products.find((p) => p.id === productId)?.sku ?? `#${productId}`;
+
+/**
+ * The audit events of a successful write (E40): which requests are "important" lives here, in one
+ * place, instead of in every handler. `body` = the response, `deleted` = `deletedLabel()`.
+ */
+function recordAudit(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+  body: unknown,
+  deleted: string,
+): void {
+  const input = (req.body ?? {}) as Record<string, unknown>;
+  const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const here = requestBranchId();
+  const verb = req.method === 'POST' ? 'เพิ่ม' : req.method === 'DELETE' ? 'ลบ' : 'แก้';
+  const add = (entry: AuditEntry) => pushAudit(db, entry);
+  let m: RegExpExecArray | null;
+
+  if (path === 'sales' && req.method === 'POST') {
+    const sale = body as Sale;
+    if (sale.manualDiscount > 0) {
+      add({
+        action: 'manual_discount',
+        branchId: sale.branchId ?? here,
+        ref: { kind: 'sale', id: sale.id, label: sale.orderNo },
+        detail: `฿${sale.manualDiscount} — ${sale.manualDiscountReason}`,
+      });
+    }
+  } else if ((m = /^sales\/(\d+)\/(void|credit-notes|tax-invoice\/reissue)$/.exec(path))) {
+    const sale = db.sales.find((x) => x.id === Number(m![1]));
+    if (!sale) return;
+    const branchId = sale.branchId ?? here;
+    if (m[2] === 'void') {
+      const approved = sale.voidApprovedBy ? ` (อนุมัติโดย ${sale.voidApprovedBy})` : '';
+      add({
+        action: 'sale_void',
+        branchId,
+        ref: { kind: 'sale', id: sale.id, label: sale.orderNo },
+        detail: `฿${sale.total} — ${sale.voidReason}${approved}`,
+      });
+    } else if (m[2] === 'credit-notes') {
+      const note = body as CreditNote;
+      add({
+        action: 'credit_note',
+        branchId,
+        ref: { kind: 'credit_note', id: note.id, label: note.cnNo },
+        detail: `บิล ${sale.orderNo} คืนเงิน ฿${note.total}`,
+      });
+    } else {
+      const invoice = body as TaxInvoice;
+      add({
+        action: 'tax_invoice_reissue',
+        branchId,
+        ref: { kind: 'tax_invoice', id: invoice.id, label: invoice.invoiceNo },
+        detail: `แทน ${invoice.replacesInvoiceNo ?? '-'} — ${text(input['reason'])}`,
+      });
+    }
+  } else if ((m = /^products\/(\d+)\/(stock|serials\/remove)$/.exec(path))) {
+    const productId = Number(m[1]);
+    const ref: AuditRef = { kind: 'product', id: productId, label: skuOf(db, productId) };
+    if (m[2] === 'stock') {
+      const delta = Number(input['delta']);
+      if (!(delta < 0)) return;
+      add({
+        action: 'stock_out',
+        branchId: here,
+        ref,
+        detail: `${delta} — ${text(input['note'])}`,
+      });
+    } else {
+      const ids = (input['ids'] as number[] | undefined) ?? [];
+      const serials = db.serials.filter((x) => ids.includes(x.id)).map((x) => x.serial);
+      add({
+        action: 'serial_remove',
+        branchId: here,
+        ref,
+        detail: `${serials.join(', ')} → ${text(input['status'])} — ${text(input['note'])}`,
+      });
+    }
+  } else if ((m = /^transfers\/(\d+)\/cancel$/.exec(path))) {
+    const transfer = body as Transfer;
+    add({
+      action: 'transfer_cancel',
+      branchId: transfer.fromBranchId,
+      ref: { kind: 'transfer', id: transfer.id, label: transfer.transferNo },
+      detail: transfer.cancelReason,
+    });
+  } else if (path === 'prices' || path.startsWith('prices/')) {
+    const price = body as SkuPrice | null;
+    const label = price ? `${skuOf(db, price.productId)} ฿${price.price}` : deleted;
+    const period = price ? ` ${price.startDate} – ${price.endDate ?? 'ไม่มีกำหนด'}` : '';
+    add({
+      action: 'price_change',
+      ref: { kind: 'price', id: price?.id ?? (Number(path.split('/')[1]) || null), label },
+      detail: `${verb}ช่วงราคา${period}`,
+    });
+  } else if (path === 'promotions' || /^promotions\/\d+$/.test(path)) {
+    const promo = body as Promotion | null;
+    add({
+      action: 'promotion_change',
+      ref: {
+        kind: 'promotion',
+        id: promo?.id ?? (Number(path.split('/')[1]) || null),
+        label: promo ? `${promo.code} ${promo.name}` : deleted,
+      },
+      detail: promo ? `${verb}โปรโมชั่น${promo.enabled ? '' : ' (ปิดใช้งาน)'}` : 'ลบโปรโมชั่น',
+    });
+  } else if ((m = /^users\/(\d+)\/password$/.exec(path))) {
+    const user = db.users.find((u) => u.id === Number(m![1]));
+    add({
+      action: 'user_password',
+      ref: { kind: 'user', id: user?.id ?? null, label: user?.username ?? '' },
+      detail: 'ผู้ดูแลระบบตั้งรหัสผ่านใหม่ให้',
+    });
+  } else if (path === 'users' || /^users\/\d+$/.test(path)) {
+    const user = body as User | null;
+    const rights = user
+      ? `${ROLE_LABEL[user.role]} · ${user.allBranches ? 'ทุกสาขา' : `สาขา ${user.branchIds.join(', ')}`}` +
+        (user.active ? '' : ' · ปิดใช้งาน')
+      : '';
+    add({
+      action: 'user_change',
+      ref: {
+        kind: 'user',
+        id: user?.id ?? (Number(path.split('/')[1]) || null),
+        label: user?.username ?? deleted,
+      },
+      detail: user ? `${verb}ผู้ใช้ — ${rights}` : 'ลบผู้ใช้',
+    });
+  } else if (path === 'company/owner') {
+    const owner = (body as User[]).find((u) => isOwner(u));
+    add({
+      action: 'owner_transfer',
+      ref: { kind: 'user', id: owner?.id ?? null, label: owner?.username ?? '' },
+      detail: `โอนความเป็นเจ้าของให้ ${owner?.name ?? ''}`,
+    });
+  } else if (path === 'settings/menu-access') {
+    const menus = (body as MenuAccess).userMenus;
+    const label = (p: string) => MENU.find((x) => x.path === p)?.label ?? p;
+    add({
+      action: 'menu_access',
+      ref: null,
+      detail: `ผู้ใช้ทั่วไปเห็น: ${menus.map(label).join(', ')}`,
+    });
+  } else if (path === 'settings/company' || path === 'settings/store') {
+    const info = body as CompanyInfo;
+    add({
+      action: 'company_settings',
+      ref: { kind: 'company', id: tenant.id, label: tenant.code },
+      detail: `VAT ${info.vatRegistered ? 'จด' : 'ไม่จด'} · ระบบกะ ${info.requireShift ? 'เปิด' : 'ปิด'} · ส่วนลดพนักงานสูงสุด ${info.manualDiscountMaxPercent}%`,
+    });
+  } else if (path === 'settings/branch') {
+    const branch = requestBranch(db);
+    add({
+      action: 'branch_settings',
+      branchId: branch.id,
+      ref: { kind: 'branch', id: branch.id, label: branch.code },
+      detail: 'แก้ชื่อสถานประกอบการ / ที่อยู่ / โทร / ท้ายใบเสร็จ',
+    });
+  } else if (path === 'branches' || /^branches\/\d+$/.test(path)) {
+    const branch = body as Branch;
+    add({
+      action: 'branch_change',
+      branchId: branch.id,
+      ref: { kind: 'branch', id: branch.id, label: branch.code },
+      detail: `${verb}สาขา ${branch.name}${branch.active ? '' : ' (ปิดใช้งาน)'}`,
+    });
+  } else if (path === 'pos-terminals' || /^pos-terminals\/\d+$/.test(path)) {
+    const t = body as PosTerminal | null;
+    add({
+      action: 'terminal_change',
+      branchId: t?.branchId ?? null,
+      ref: {
+        kind: 'terminal',
+        id: t?.id ?? (Number(path.split('/')[1]) || null),
+        label: t ? `เครื่อง ${t.id}` : deleted,
+      },
+      detail: t
+        ? `${verb}เครื่อง ${t.name} · POS ID ${t.posId || '-'}${t.active ? '' : ' (ปิดใช้งาน)'}`
+        : 'ลบเครื่อง',
+    });
+  } else if ((m = /^shifts\/(\d+)\/(close|approve|adjustments)$/.exec(path))) {
+    const shift = db.shifts.find((x) => x.id === Number(m![1]));
+    if (!shift) return;
+    const ref: AuditRef = { kind: 'shift', id: shift.id, label: shift.shiftNo };
+    if (m[2] === 'close') {
+      if (shift.cashier === actorName()) return;
+      add({
+        action: 'shift_close_other',
+        branchId: shift.branchId ?? null,
+        ref,
+        detail: `กะของ ${shift.cashier}`,
+      });
+    } else if (m[2] === 'approve') {
+      add({
+        action: 'shift_approve',
+        branchId: shift.branchId ?? null,
+        ref,
+        detail: `กะของ ${shift.cashier}`,
+      });
+    } else {
+      const adj = body as ShiftAdjustment;
+      add({
+        action: 'shift_adjust',
+        branchId: shift.branchId ?? null,
+        ref,
+        detail: `${adj.amount > 0 ? '+' : ''}${adj.amount} — ${adj.reason}`,
+      });
+    }
+  }
 }
 
 /** Routes one request to its handler; `db` is mutated in place for writes. */
@@ -1192,6 +1472,11 @@ function handle(
   }
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
   if (path === 'company' || path.startsWith('company/')) return handleCompany(req, path, db);
+  if (path === 'audit-log' && req.method === 'GET') {
+    // Admins only (`adminOnlyError()`); a branch admin sees only their branches' events (E40).
+    const query = parseAuditQuery((name) => req.params.get(name));
+    return ok(filterAuditEvents(db.auditLog, query, actor as User));
+  }
   if (path === 'products' || path.startsWith('products/')) return handleProducts(req, path, db);
   if (path === 'prices' || path.startsWith('prices/')) return handlePrices(req, path, db);
   if (path === 'suppliers' || path.startsWith('suppliers/')) {
@@ -1301,6 +1586,7 @@ function adminOnlyError(req: HttpRequest<unknown>, path: string): string | null 
     return 'จัดการสาขาได้เฉพาะผู้ดูแลระบบ';
   }
   if (path === 'settings/menu-access' && write) return 'กำหนดสิทธิ์เมนูได้เฉพาะผู้ดูแลระบบ';
+  if (path === 'audit-log') return 'ดูประวัติการใช้งานได้เฉพาะผู้ดูแลระบบ';
   if (req.method === 'POST' && /^shifts\/\d+\/approve$/.test(path)) {
     return 'อนุมัติส่วนต่างได้เฉพาะผู้ดูแลระบบ';
   }
@@ -4241,10 +4527,19 @@ function login(
   if (company.code !== normalizeCompanyCode(companyCode ?? ''))
     return error(401, WRONG_COMPANY_LOGIN);
   const user = checkCredentials(username, password, db);
-  if (typeof user === 'string') return error(401, WRONG_COMPANY_LOGIN);
+  if (typeof user === 'string') {
+    // Logged with the name typed (no user id: it may not exist — the message stays the same, E3).
+    pushAudit(
+      db,
+      { action: 'login_failed', ref: null, detail: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' },
+      { id: null, name: normalizeUsername(username ?? '') },
+    );
+    return error(401, WRONG_COMPANY_LOGIN);
+  }
   if (!company.active) {
     return error(401, 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
   }
+  pushAudit(db, { action: 'login', ref: null, detail: '' }, user);
   return ok({ token: mockToken(company.id, user.id), user, ...companySession(db, user) });
 }
 

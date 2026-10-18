@@ -79,6 +79,13 @@ export const MENU: MenuItem[] = [
     adminOnly: true,
   },
   {
+    label: 'บัญชีบริษัท',
+    icon: 'domain',
+    path: 'account',
+    loadChildren: () => import('@features/account/account.routes'),
+    adminOnly: true,
+  },
+  {
     label: 'ตั้งค่า',
     icon: 'settings',
     path: 'settings',

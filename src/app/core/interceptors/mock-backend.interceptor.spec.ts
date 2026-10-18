@@ -35,6 +35,7 @@ import {
   StoreInfo,
   TaxInvoice,
   Transfer,
+  AuditEvent,
   SerialNumber,
   SerialReceiveResult,
   SUPPLIER_DEFAULTS,
@@ -3209,5 +3210,109 @@ describe('mockBackendInterceptor – owner (E33)', () => {
       403,
       'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท',
     ]);
+  });
+});
+
+describe('mockBackendInterceptor – audit log (E40)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER, branch = '1') =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': branch },
+      }),
+    );
+  const statusOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+  const log = (token = OWNER, query = '') =>
+    call<AuditEvent[]>('GET', `audit-log${query}`, undefined, token);
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('records logins and failed logins of a known company', async () => {
+    const login = (username: string, password: string) =>
+      statusOf(
+        firstValueFrom(http.post('/api/auth/login', { companyCode: 'DEMO', username, password })),
+      );
+    expect(await login('somchai', 'x')).toBe(401);
+    expect(await login('somchai', '1234')).toBe(200);
+    const events = await log();
+    expect(events.map((e) => [e.action, e.userName, e.userId])).toEqual([
+      ['login', 'สมชาย ใจดี', 2],
+      ['login_failed', 'somchai', null],
+    ]);
+  });
+
+  it('records important writes with who, branch and what — admins only', async () => {
+    await call('PUT', 'settings/menu-access', { userMenus: ['pos', 'sales'] });
+    const prices = await call<SkuPrice[]>('GET', 'prices');
+    await call('DELETE', `prices/${prices[0].id}`);
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'บางนา', address: 'บางนา กรุงเทพฯ', phone: '', receiptFooter: '' },
+      OWNER,
+      '2',
+    );
+    await call('GET', 'products'); // reads are never logged
+    const events = await log();
+    expect(events.map((e) => [e.action, e.branchId, e.userName])).toEqual([
+      ['branch_settings', 2, 'Admin'],
+      ['price_change', null, 'Admin'],
+      ['menu_access', null, 'Admin'],
+    ]);
+    expect(events[1].detail).toBe('ลบช่วงราคา');
+    expect(events[1].ref?.label).toContain('฿');
+    expect(events[2].detail).toBe('ผู้ใช้ทั่วไปเห็น: ขายหน้าร้าน, การขาย');
+    expect((await log(OWNER, '?action=price_change')).length).toBe(1);
+    expect(await statusOf(log(STAFF))).toBe(403);
+  });
+
+  it('shows a branch admin only the events of their branches', async () => {
+    const bnAdmin = await call<User>('POST', 'users', {
+      username: 'bnadmin',
+      name: 'BN Admin',
+      email: '',
+      role: 'admin',
+      active: true,
+      allBranches: false,
+      branchIds: [2],
+      password: '1234',
+    });
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'บางนา', address: 'บางนา กรุงเทพฯ', phone: '', receiptFooter: '' },
+      OWNER,
+      '2',
+    );
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'สำนักงานใหญ่', address: 'สีลม กรุงเทพฯ', phone: '', receiptFooter: '' },
+      OWNER,
+      '1',
+    );
+    // (sent from BN: the branch admin may not work in HQ)
+    const seen = await call<AuditEvent[]>(
+      'GET',
+      'audit-log',
+      undefined,
+      mockToken(1, bnAdmin.id),
+      '2',
+    );
+    expect(seen.map((e) => [e.action, e.branchId])).toEqual([['branch_settings', 2]]);
   });
 });

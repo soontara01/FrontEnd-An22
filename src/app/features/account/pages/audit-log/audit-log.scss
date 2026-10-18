@@ -1,0 +1,22 @@
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .selected {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
