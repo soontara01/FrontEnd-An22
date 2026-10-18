@@ -34,6 +34,7 @@ import {
   BranchDetails,
   BranchPayload,
   CompanyInfo,
+  COMPANY_INFO_DEFAULTS,
   branchDetailsError,
   branchError,
   companyInfoError,
@@ -257,11 +258,6 @@ interface MockDb {
    * Z reports printed, filled into their missing snapshots on read.
    */
   legacyPosId?: string;
-  /**
-   * SaaS tenants (one, `DEMO`); name and tax ID come from `companyInfo`. Every user of this db
-   * belongs to the first company.
-   */
-  companies: StoredCompany[];
   /** Branches of the company with their printed details (seed: HQ + BN). */
   branches: Branch[];
   nextBranchId: number;
@@ -269,10 +265,29 @@ interface MockDb {
   passwords: Record<number, string>;
 }
 
+/** A tenant in the platform registry; name and tax ID come from the tenant's own `companyInfo`. */
 type StoredCompany = Pick<Company, 'id' | 'code' | 'active'>;
+
+/**
+ * Platform-level data (SaaS step 6): the registry of every company. Each company's own data is a
+ * separate `MockDb` (`tenantKey()`), so handlers keep treating "the db" as the tenant — like the
+ * real API, where RLS shows a request only its own company's rows (D7).
+ */
+interface MockPlatform {
+  companies: StoredCompany[];
+  nextCompanyId: number;
+}
+
+/** The seed company; its data stays under the pre-SaaS key `mock.db` (older stored data). */
+const DEMO_COMPANY: StoredCompany = { id: 1, code: 'DEMO', active: true };
 
 /** Mock data is kept in localStorage so it survives full page reloads (menu switches). */
 const DB_KEY = 'mock.db';
+const PLATFORM_KEY = 'mock.platform';
+
+/** Storage key of a company's data: `mock.db` for DEMO, `mock.db.<id>` for the others. */
+const tenantKey = (companyId: number): string =>
+  companyId === DEMO_COMPANY.id ? DB_KEY : `${DB_KEY}.${companyId}`;
 
 const SEED_USERS: User[] = [
   {
@@ -909,14 +924,146 @@ const seedDb = (): MockDb => ({
   drawerOpens: [],
   shiftAdjustments: [],
   posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
-  companies: [{ id: 1, code: 'DEMO', active: true }],
   branches: SEED_BRANCHES.map((b) => ({ ...b })),
   nextBranchId: SEED_BRANCHES.length + 1,
   passwords: {},
 });
 
+/**
+ * Base of a company other than DEMO: no sample data, and the one-time migrations of pre-SaaS data
+ * already count as done (such a company never had any). Its stored db holds at least its branches,
+ * users and `companyInfo`.
+ */
+const blankDb = (): MockDb => ({
+  users: [],
+  nextId: 1,
+  products: [],
+  nextProductId: 1,
+  branchStock: [],
+  branchStockMigrated: true,
+  docBranchFixed: true,
+  transfers: [],
+  sales: [],
+  serials: [],
+  nextSerialId: 1,
+  prices: [],
+  nextPriceId: 1,
+  categories: [],
+  nextCategoryId: 1,
+  suppliers: [],
+  nextSupplierId: 1,
+  movements: [],
+  nextMovementId: 1,
+  promotions: [],
+  nextPromotionId: 1,
+  paymentMethods: [],
+  nextPaymentMethodId: 1,
+  storeInfo: { ...STORE_INFO_DEFAULTS },
+  companyInfo: { ...COMPANY_INFO_DEFAULTS },
+  menuAccess: { userMenus: [...DEFAULT_USER_MENUS] },
+  creditNotes: [],
+  exchanges: [],
+  taxInvoices: [],
+  shifts: [],
+  cashMovements: [],
+  drawerOpens: [],
+  shiftAdjustments: [],
+  shiftsEnabled: true,
+  posTerminals: [],
+  branches: [],
+  nextBranchId: 1,
+  passwords: {},
+});
+
+/**
+ * The platform registry. Stored dbs from before step 6 kept `companies` inside the DEMO db: they
+ * move here once (`changed`); a fresh install starts with DEMO alone.
+ */
+function loadPlatform(storage: StorageService): { platform: MockPlatform; changed: boolean } {
+  const stored = storage.get<Partial<MockPlatform>>(PLATFORM_KEY);
+  if (stored?.companies) {
+    const companies = stored.companies;
+    const nextCompanyId = stored.nextCompanyId ?? Math.max(0, ...companies.map((c) => c.id)) + 1;
+    return { platform: { companies, nextCompanyId }, changed: false };
+  }
+  const legacy = storage.get<{ companies?: StoredCompany[] }>(DB_KEY)?.companies;
+  const companies = legacy?.length ? legacy : [{ ...DEMO_COMPANY }];
+  const nextCompanyId = Math.max(...companies.map((c) => c.id)) + 1;
+  return { platform: { companies, nextCompanyId }, changed: true };
+}
+
+/**
+ * One company's data with defaults filled in and the one-time migrations of older stored data run
+ * (`changed` = something was migrated, so the db is saved even on a GET). Only DEMO can hold
+ * pre-SaaS data: the migrations that read the raw stored db get it only there.
+ */
+function loadTenantDb(
+  storage: StorageService,
+  companyId: number,
+): { db: MockDb; changed: boolean } {
+  const demo = companyId === DEMO_COMPANY.id;
+  const stored = storage.get<Partial<MockDb>>(tenantKey(companyId));
+  const legacy = demo ? stored : null;
+  // Merge with seed so collections added later still exist in an older stored db.
+  const db: MockDb = { ...(demo ? seedDb() : blankDb()), ...stored };
+  // Products stored before the SKU master fields existed get defaults filled in.
+  db.products = db.products.map((p) => ({ ...PRODUCT_DEFAULTS, ...p }));
+  db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
+  db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
+  db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
+  db.sales = db.sales.map(withSaleDefaults);
+  db.shifts = db.shifts.map(normalizeShift);
+  const branched = splitStoreInfo(db, legacy);
+  fillUserDefaults(db);
+  db.taxInvoices = db.taxInvoices.map((t) => ({
+    ...TAX_INVOICE_DEFAULTS,
+    ...t,
+    atSale: t.atSale ?? false,
+    issuedAt: t.issuedAt ?? t.date,
+  }));
+  // Notes stored before the buyer snapshot existed take it from the invoice they quote.
+  db.creditNotes = db.creditNotes.map((n) => ({
+    ...n,
+    taxInvoiceNo: n.taxInvoiceNo ?? null,
+    buyer:
+      n.buyer !== undefined
+        ? n.buyer
+        : (db.taxInvoices.find((t) => t.invoiceNo === n.taxInvoiceNo)?.buyer ?? null),
+  }));
+  migrateLegacyPrices(db);
+  migrateLegacySkuFields(db);
+  refreshCurrentPrices(db);
+  refreshCategoryInfo(db);
+  refreshSupplierInfo(db);
+  // Older stored data: one store-wide stock → the first branch (+ sample stock for BN), once.
+  const stockMoved = migrateBranchStock(db);
+  const shiftsOn = enableShifts(db);
+  const registered = migrateTerminals(db, legacy);
+  // Terminals registered before E8 stand in the first branch.
+  db.posTerminals = db.posTerminals.map((t) => ({
+    ...t,
+    branchId: t.branchId ?? db.branches[0].id,
+  }));
+  fillTerminalSnapshots(db);
+  const docsFixed = fixDocumentBranches(db);
+  return { db, changed: stockMoved || docsFixed || shiftsOn || registered || branched };
+}
+
+/** Saves one company's data; derived fields (`storeInfo`, the products' branch stock) never are. */
+function saveTenantDb(storage: StorageService, companyId: number, db: MockDb): void {
+  // `companies` moved to the platform registry (step 6); older stored dbs still carry it.
+  storage.set(tenantKey(companyId), {
+    ...db,
+    products: storeBranchStock(db),
+    storeInfo: undefined,
+    companies: undefined,
+  });
+}
+
 const LATENCY_MS = 300;
 
+/** The company of the request being handled (set before `handle()`, like `actor`). */
+let tenant: StoredCompany = DEMO_COMPANY;
 /** The user of the request being handled (set by the interceptor before `handle()`). */
 let actor: User | undefined;
 /** Name recorded as cashier / issuer on documents. */
@@ -952,51 +1099,50 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   const req = original.clone({ url, params });
 
   const storage = inject(StorageService);
-  // Merge with seed so collections added later still exist in an older stored db.
-  const stored = storage.get<Partial<MockDb>>(DB_KEY);
-  const db: MockDb = { ...seedDb(), ...stored };
-  // Products stored before the SKU master fields existed get defaults filled in.
-  db.products = db.products.map((p) => ({ ...PRODUCT_DEFAULTS, ...p }));
-  db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
-  db.promotions = db.promotions.map((p) => ({ ...PROMOTION_DEFAULTS, ...p }));
-  db.paymentMethods = db.paymentMethods.map((m) => ({ ...PAYMENT_METHOD_DEFAULTS, ...m }));
-  db.sales = db.sales.map(withSaleDefaults);
-  db.shifts = db.shifts.map(normalizeShift);
-  const branched = splitStoreInfo(db, stored);
-  fillUserDefaults(db);
-  db.taxInvoices = db.taxInvoices.map((t) => ({
-    ...TAX_INVOICE_DEFAULTS,
-    ...t,
-    atSale: t.atSale ?? false,
-    issuedAt: t.issuedAt ?? t.date,
-  }));
-  // Notes stored before the buyer snapshot existed take it from the invoice they quote.
-  db.creditNotes = db.creditNotes.map((n) => ({
-    ...n,
-    taxInvoiceNo: n.taxInvoiceNo ?? null,
-    buyer:
-      n.buyer !== undefined
-        ? n.buyer
-        : (db.taxInvoices.find((t) => t.invoiceNo === n.taxInvoiceNo)?.buyer ?? null),
-  }));
-  migrateLegacyPrices(db);
-  migrateLegacySkuFields(db);
-  refreshCurrentPrices(db);
-  refreshCategoryInfo(db);
-  refreshSupplierInfo(db);
-  // Older stored data: one store-wide stock → the first branch (+ sample stock for BN), once.
-  const stockMoved = migrateBranchStock(db);
-  const shiftsOn = enableShifts(db);
-  const registered = migrateTerminals(db, stored);
-  // Terminals registered before E8 stand in the first branch.
-  db.posTerminals = db.posTerminals.map((t) => ({
-    ...t,
-    branchId: t.branchId ?? db.branches[0].id,
-  }));
-  fillTerminalSnapshots(db);
-  const docsFixed = fixDocumentBranches(db);
   const path = req.url.slice(base.length + 1);
-  // `handle()` is synchronous, so the caller can be kept module-wide for this one request.
+  const { platform, changed: registryMoved } = loadPlatform(storage);
+  if (registryMoved) storage.set(PLATFORM_KEY, platform);
+  const company = requestCompany(req, path, platform);
+  const response$ = company ? tenantResponse(req, path, company, storage) : noTenant(req, path);
+  return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
+};
+
+/**
+ * The company a request belongs to: the one a login names by code, else the one in the token —
+ * the tenant never comes from the URL / body (saas-plan section 2). Undefined = no such company.
+ */
+function requestCompany(
+  req: HttpRequest<unknown>,
+  path: string,
+  platform: MockPlatform,
+): StoredCompany | undefined {
+  if (path === 'auth/login' && req.method === 'POST') {
+    const code = normalizeCompanyCode(
+      (req.body as Partial<LoginRequest> | null)?.companyCode ?? '',
+    );
+    return platform.companies.find((c) => c.code === code);
+  }
+  const id = tokenIds(req)?.companyId;
+  return platform.companies.find((c) => c.id === id);
+}
+
+/** Answer when no company is known: the same messages as a wrong login / an expired session. */
+function noTenant(req: HttpRequest<unknown>, path: string): Observable<never> {
+  if (path === 'auth/login' && req.method === 'POST') return error(401, WRONG_COMPANY_LOGIN);
+  if (path === 'auth/verify' && req.method === 'POST') return error(400, WRONG_LOGIN);
+  return error(401, SESSION_EXPIRED);
+}
+
+/** Loads the company's data, handles the request in it and saves it after a write / migration. */
+function tenantResponse(
+  req: HttpRequest<unknown>,
+  path: string,
+  company: StoredCompany,
+  storage: StorageService,
+): Observable<HttpResponse<unknown>> {
+  const { db, changed } = loadTenantDb(storage, company.id);
+  // `handle()` is synchronous, so the tenant and caller can be kept module-wide for this request.
+  tenant = company;
   actor = requestUser(req, db);
   const terminal = Number(req.headers.get('X-Terminal-Id'));
   terminalId = Number.isInteger(terminal) && terminal > 0 ? terminal : null;
@@ -1005,13 +1151,9 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   stockBranch = requestBranch(db).id;
   db.products = db.products.map((p) => atBranch(db, p));
   const response$ = handle(req, path, db);
-  if (stockMoved || docsFixed || shiftsOn || registered || branched || req.method !== 'GET') {
-    // `storeInfo` is derived per request (E11) and the products' stock fields per branch: never stored.
-    storage.set(DB_KEY, { ...db, products: storeBranchStock(db), storeInfo: undefined });
-  }
-
-  return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
-};
+  if (changed || req.method !== 'GET') saveTenantDb(storage, company.id, db);
+  return response$;
+}
 
 /** Routes one request to its handler; `db` is mutated in place for writes. */
 function handle(
@@ -1030,7 +1172,7 @@ function handle(
     return typeof user === 'string' ? error(400, user) : ok({ user });
   }
   // No fallback user: the company comes only from the token, an unknown one never passes.
-  if (!actor) return error(401, 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  if (!actor) return error(401, SESSION_EXPIRED);
   // `/me` answers whatever branch the client remembers, so a stale one can be corrected (step 2).
   if (path === 'me' && req.method === 'GET') {
     return ok({ user: actor, ...companySession(db, actor) } satisfies MeResponse);
@@ -4046,11 +4188,12 @@ function login(
   { companyCode, username, password }: Partial<LoginRequest>,
   db: MockDb,
 ): Observable<HttpResponse<LoginResponse>> {
-  const company = db.companies.find((c) => c.code === normalizeCompanyCode(companyCode ?? ''));
-  const user = company ? checkCredentials(username, password, db) : WRONG_LOGIN;
-  if (!company || typeof user === 'string') {
-    return error(401, 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
-  }
+  // `requestCompany()` already found the company by its code (none → `noTenant()`).
+  const company = tenant;
+  if (company.code !== normalizeCompanyCode(companyCode ?? ''))
+    return error(401, WRONG_COMPANY_LOGIN);
+  const user = checkCredentials(username, password, db);
+  if (typeof user === 'string') return error(401, WRONG_COMPANY_LOGIN);
   if (!company.active) {
     return error(401, 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
   }
@@ -4058,6 +4201,8 @@ function login(
 }
 
 const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+const WRONG_COMPANY_LOGIN = 'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง';
+const SESSION_EXPIRED = 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่';
 
 /**
  * The active user a login names, or `WRONG_LOGIN` (login + `auth/verify` + approvals) — a
@@ -4086,26 +4231,29 @@ function passwordOf(db: MockDb, userId: number): string {
 export const mockToken = (companyId: number, userId: number): string =>
   `mock-jwt-token.t${companyId}.u${userId}`;
 
-/**
- * Who sent the request: the active user of an active company the token names. Missing / unknown /
- * pre-SaaS token (no tenant, E1), a suspended company or an inactive user → undefined (401).
- */
-function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
+/** Company and user id a mock token names; undefined = missing / malformed / pre-SaaS (E1). */
+function tokenIds(req: HttpRequest<unknown>): { companyId: number; userId: number } | undefined {
   const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
   const match = /^mock-jwt-token\.t(\d+)\.u(\d+)$/.exec(token);
-  if (!match) return undefined;
-  const company = db.companies.find((c) => c.id === Number(match[1]));
-  // One company per mock db: its users are those of the first company.
-  if (!company?.active || company.id !== db.companies[0]?.id) return undefined;
-  const user = db.users.find((u) => u.id === Number(match[2]));
+  return match ? { companyId: Number(match[1]), userId: Number(match[2]) } : undefined;
+}
+
+/**
+ * Who sent the request: the active user the token names in its company (`db` is that company's
+ * data — `requestCompany()`). A suspended company or an inactive user → undefined (401); a token
+ * of another company never reaches this db.
+ */
+function requestUser(req: HttpRequest<unknown>, db: MockDb): User | undefined {
+  const ids = tokenIds(req);
+  if (!ids || ids.companyId !== tenant.id || !tenant.active) return undefined;
+  const user = db.users.find((u) => u.id === ids.userId);
   return user?.active ? user : undefined;
 }
 
 /** Company + the branches the user may work in (`canWorkIn()`: active, theirs or all). */
 function companySession(db: MockDb, user: User): { company: Company; branches: Branch[] } {
-  const stored = db.companies[0];
   return {
-    company: { ...stored, name: db.companyInfo.name, taxId: db.companyInfo.taxId },
+    company: { ...tenant, name: db.companyInfo.name, taxId: db.companyInfo.taxId },
     branches: db.branches.filter((b) => canWorkIn(user, b)),
   };
 }

@@ -43,7 +43,14 @@ import {
   Supplier,
   User,
 } from '../models';
-import { addDaysIso, priceCart, serialMovements, storeInfoError, todayIso } from '../models';
+import {
+  COMPANY_INFO_DEFAULTS,
+  addDaysIso,
+  priceCart,
+  serialMovements,
+  storeInfoError,
+  todayIso,
+} from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backend.interceptor';
 
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
@@ -2938,5 +2945,139 @@ describe('mockBackendInterceptor – transfers', () => {
       400,
       'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน',
     ]);
+  });
+});
+
+describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
+  let http: HttpClient;
+  const DEMO_ADMIN = mockToken(1, 1);
+  const ACME_ADMIN = mockToken(2, 1);
+
+  const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
+    const headers = token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined;
+    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  };
+  const statusOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+  const stored = (key: string) => JSON.parse(localStorage.getItem(key) ?? 'null');
+
+  /** A second company `ACME` whose admin has the same username as DEMO's (unique per company). */
+  const plantAcme = () => {
+    localStorage.setItem(
+      'an22.mock.platform',
+      JSON.stringify({
+        companies: [
+          { id: 1, code: 'DEMO', active: true },
+          { id: 2, code: 'ACME', active: true },
+        ],
+        nextCompanyId: 3,
+      }),
+    );
+    const acmeBranch: Branch = {
+      id: 1,
+      code: 'MAIN',
+      name: 'สำนักงานใหญ่ ACME',
+      branchNo: '00000',
+      address: '1 ถนนสุขุมวิท กรุงเทพฯ',
+      phone: '',
+      receiptFooter: '',
+      active: true,
+    };
+    const acmeAdmin: User = {
+      id: 1,
+      username: 'admin',
+      name: 'ACME Admin',
+      email: 'owner@acme.test',
+      role: 'admin',
+      active: true,
+      branchIds: [],
+      allBranches: true,
+      createdAt: '2026-10-18T00:00:00.000Z',
+    };
+    localStorage.setItem(
+      'an22.mock.db.2',
+      JSON.stringify({
+        users: [acmeAdmin],
+        nextId: 2,
+        passwords: { 1: 'acme-pass' },
+        branches: [acmeBranch],
+        nextBranchId: 2,
+        companyInfo: {
+          ...COMPANY_INFO_DEFAULTS,
+          name: 'บริษัท แอคมี จำกัด',
+          taxId: '0105561000014',
+        },
+      }),
+    );
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('moves the company registry out of an older DEMO db once', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({ companies: [{ id: 1, code: 'DEMO', active: true }] }),
+    );
+    expect(await statusOf(call('GET', 'products', undefined, DEMO_ADMIN))).toBe(200);
+    expect(stored('an22.mock.platform')).toEqual({
+      companies: [{ id: 1, code: 'DEMO', active: true }],
+      nextCompanyId: 2,
+    });
+    await call(
+      'PUT',
+      'settings/branch',
+      { name: 'HQ', address: '1 ถนนสีลม', phone: '', receiptFooter: '' },
+      DEMO_ADMIN,
+    );
+    expect(stored('an22.mock.db').companies).toBeUndefined();
+  });
+
+  it('logs in to each company with its own users, data and password', async () => {
+    plantAcme();
+    const login = (companyCode: string, password: string) =>
+      call<LoginResponse>('POST', 'auth/login', { companyCode, username: 'admin', password });
+    const acme = await login('acme', 'acme-pass');
+    expect(acme.token).toBe(ACME_ADMIN);
+    expect(acme.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
+    expect(acme.branches.map((b) => b.code)).toEqual(['MAIN']);
+    expect(await statusOf(login('ACME', 'admin'))).toBe(401); // DEMO's password
+    expect((await login('DEMO', 'admin')).token).toBe(DEMO_ADMIN);
+  });
+
+  it("never serves one company's data to another company's token", async () => {
+    plantAcme();
+    const demoProducts = await call<Product[]>('GET', 'products', undefined, DEMO_ADMIN);
+    expect(demoProducts.length).toBeGreaterThan(0);
+    expect(await call<Product[]>('GET', 'products', undefined, ACME_ADMIN)).toEqual([]);
+    expect(await call<User[]>('GET', 'users', undefined, ACME_ADMIN)).toHaveLength(1);
+    // an id of DEMO's in the URL is simply not found in ACME's data
+    expect(
+      await statusOf(call('GET', `products/${demoProducts[0].id}`, undefined, ACME_ADMIN)),
+    ).toBe(404);
+
+    const branch: Branch = (await call<Branch[]>('GET', 'branches', undefined, ACME_ADMIN))[0];
+    await call('PUT', `branches/${branch.id}`, { ...branch, name: 'ACME สาขาหลัก' }, ACME_ADMIN);
+    const demoBranches = await call<Branch[]>('GET', 'branches', undefined, DEMO_ADMIN);
+    expect(demoBranches.map((b) => b.name)).not.toContain('ACME สาขาหลัก');
+    expect(stored('an22.mock.db.2').branches[0].name).toBe('ACME สาขาหลัก');
+  });
+
+  it('answers 401 to a token of a company that is not registered or suspended', async () => {
+    plantAcme();
+    expect(await statusOf(call('GET', 'products', undefined, mockToken(3, 1)))).toBe(401);
+    const platform = stored('an22.mock.platform');
+    platform.companies[1].active = false;
+    localStorage.setItem('an22.mock.platform', JSON.stringify(platform));
+    expect(await statusOf(call('GET', 'products', undefined, ACME_ADMIN))).toBe(401);
+    expect(await statusOf(call('GET', 'products', undefined, DEMO_ADMIN))).toBe(200);
   });
 });

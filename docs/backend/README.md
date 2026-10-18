@@ -1,6 +1,6 @@
 # เอกสารส่งต่อหลังบ้าน (สำหรับ repo web / api / db)
 
-สถานะ: เริ่ม 2026-10-16 — SaaS ขั้น 1 (login รหัสบริษัท, token มี tenant, `X-Branch-Id`; ข้อมูลยัง 1 บริษัท 1 สาขา); ทุกขั้นของ `docs/saas-plan.md` อัปเดตไฟล์ในโฟลเดอร์นี้ใน commit เดียวกับโค้ด
+สถานะ: เริ่ม 2026-10-16 — SaaS ขั้น 1–5 เสร็จ, ขั้น 6 (ส่วน SaaS: owner, แพ็กเกจ, billing mock, platform admin, สมัครใช้, export / ลบ, audit log) กำลังทำ — mock เก็บ db ละบริษัทตั้งแต่ 6.1; ทุกขั้นของ `docs/saas-plan.md` อัปเดตไฟล์ในโฟลเดอร์นี้ใน commit เดียวกับโค้ด
 
 ## ระบบมี 4 repo
 

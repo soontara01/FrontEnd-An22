@@ -3,8 +3,9 @@
 **field ทุกตัว = interface ใน `src/app/core/models/<ไฟล์>.model.ts`** (ชื่อ camelCase ใน JSON, snake_case ในตาราง)
 ไฟล์นี้บอกเฉพาะสิ่งที่ TypeScript ไม่ได้บอก: ตาราง, key, unique, ค่าที่ server คำนวณ, child table, ระดับบริษัท / สาขา (SaaS)
 
-collection ของ mock (`MockDb` ใน `mock-backend.interceptor.ts`, เก็บใน localStorage `an22.mock.db`) ≈ ตาราง 1:1
-seed ของ mock (`seedDb()`) ใช้เป็น seed ของ dev DB ได้
+collection ของ mock (`MockDb` ใน `mock-backend.interceptor.ts`) ≈ ตาราง 1:1 — เก็บใน localStorage **db ละบริษัท** (SaaS ขั้น 6.1):
+`an22.mock.db` = บริษัท DEMO (key เดิม), `an22.mock.db.<companyId>` = บริษัทอื่น, `an22.mock.platform` (`MockPlatform`) = ทะเบียนบริษัท (ตาราง platform)
+— db ละบริษัทของ mock = สิ่งที่ RLS ให้ request หนึ่งเห็น (D7) ไม่ใช่การแยกฐานจริง; seed ของ mock (`seedDb()`) ใช้เป็น seed ของ dev DB ได้ (บริษัทอื่นเริ่มจาก `blankDb()` ว่าง)
 
 ## ข้อตกลง
 
@@ -92,5 +93,5 @@ seed ของ mock (`seedDb()`) ใช้เป็น seed ของ dev DB ไ
 ## ข้อมูลเก่าที่ mock ย้ายให้ตอนอ่าน
 
 `migrateLegacyPrices`, `migrateLegacySkuFields`, `migrateCosting` (สร้างบรรทัด `opening`), `syncSerials` (สร้าง serial ตัวอย่าง),
-`enableShifts`, `migrateTerminals` (`legacyPosId`), `migrateBranchStock` (สต็อกร้านเดียว → `branch_stock` ของสาขาแรก, serial / movement / เอกสารที่ไม่มีสาขา → สาขาแรก, สต็อกตัวอย่างของ BN), `fixDocumentBranches` (เอกสารเก่าได้สาขาของเครื่อง POS, E20) — เป็นของ mock / localStorage เท่านั้น DB จริงเริ่มใหม่ไม่ต้องทำ
+`enableShifts`, `migrateTerminals` (`legacyPosId`), `migrateBranchStock` (สต็อกร้านเดียว → `branch_stock` ของสาขาแรก, serial / movement / เอกสารที่ไม่มีสาขา → สาขาแรก, สต็อกตัวอย่างของ BN), `fixDocumentBranches` (เอกสารเก่าได้สาขาของเครื่อง POS, E20), `loadPlatform` (`companies` ใน db เก่า → `an22.mock.platform`, ขั้น 6.1; migration ที่อ่านข้อมูลก่อน SaaS ทำเฉพาะ DEMO) — เป็นของ mock / localStorage เท่านั้น DB จริงเริ่มใหม่ไม่ต้องทำ
 ยกเว้นจะย้ายข้อมูลจริงจาก mock มาเข้า DB
