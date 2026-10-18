@@ -1,6 +1,6 @@
 # แผนงานถัดไปหลัง SaaS ขั้น 6 (เริ่ม 2026-10-18)
 
-สถานะ: **A + B เสร็จ** 2026-10-18 — A: PR #3 merge แล้ว; B (P5, E43–E46) บน branch `feature/p5-hide-cost`; ต่อไป C (ส่งต่อหลังบ้าน)
+สถานะ: **A + B เสร็จ** 2026-10-18 (PR #3, #4, fix #5 merge แล้ว) — ต่อไป C: web → api (E47, หลังบ้านเหลือ 2 repo)
 งานในไฟล์นี้: **A** ปิดงานค้างของขั้น 6 → **B** ซ่อนทุน / กำไรจาก role user (P5) → **C** ส่งต่อหลังบ้าน
 แต่ละขั้นย่อย build + test + lint ผ่าน → prettier เฉพาะไฟล์ที่แก้ (อย่าให้โดน `docs/test-data`) → อัปเดต docs → commit
 
@@ -84,15 +84,18 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
   แล้ว `storeBranchStock()` เขียนค่า 0 ทับ `branchStock` ของสาขาที่ request ก่อนหน้าทำงาน (ตัวแปร `stockBranch` ค้าง) → SKU ไม่คุม serial ของสาขานั้นเหลือ 0 ทั้งสต็อก ทุนเฉลี่ย จุดสั่งซื้อ (serial ไม่โดน — นับจาก serial)
   — เจอจากบัตรสต็อก MS-010 ที่ HQ ไม่ตรงกับรายการคลัง (B4); แก้: `saveTenantDb(…, branch)` รับสาขาที่ project จริง, `null` = ไม่แตะ `branchStock`; spec ใน platform admin; เป็นเรื่องของ mock เท่านั้น (api จริงไม่มีการ project)
 
-## C. ส่งต่อหลังบ้าน (repo อื่น)
+## C. ส่งต่อหลังบ้าน (repo อื่น — E47)
 
-ลำดับ **db → api → web** ตาม `docs/backend/README.md` — repo นี้เป็น spec (`api-contract.md`, `domain-rules.md`, `data-model.md`, `fixtures/`)
+**2 repo, ลำดับ web → api** (`docs/backend/README.md`) — repo นี้เป็น spec (`api-contract.md`, `domain-rules.md`, `data-model.md`, `fixtures/`);
+เปิด session ใน repo นั้นพร้อม `--add-dir ../FrontEnd-An22`; ถ้าหลังบ้านเจอ spec ไม่ชัด → แก้เอกสาร / mock ใน repo นี้ก่อน (บอกผู้ใช้ก่อน)
 
-- **db**: schema PostgreSQL ทุกตารางมี `tenant_id` + RLS (D7), ตาราง platform ไม่อยู่ใต้ RLS: `companies` (+ แพ็กเกจ, ตารางเก็บเงิน, คำขอลบ), `billing_invoices`,
-  `platform_admins`, `password_reset_tokens`; `audit_log` insert-only; seed ตรงกับ mock (DEMO, HQ + BN, `admin` / `admin`, `somchai` / `1234`)
-- **api**: Spring Boot port กฎใน `domain-rules.md` ให้ผ่าน `fixtures/*.json`; platform ใช้ DB role แยก; export / ลบบริษัทเป็น job; จำกัด login ผิดต่อบัญชี / IP; ส่งอีเมลจริง (แทน outbox ของ mock)
-- **web**: serve `dist/frontend-an22/browser` + proxy `/api` (`deploy/`)
-- เปิด session ใน repo นั้นพร้อม `--add-dir ../FrontEnd-An22`; ถ้าหลังบ้านเจอ spec ไม่ชัด → แก้เอกสาร / mock ใน repo นี้ก่อน
+- **C1 web** (`~/vscode/an22-web`): Node.js serve `dist/frontend-an22/browser` + SPA fallback + cache header + proxy `/api` (ตัวอย่าง `deploy/`);
+  ทดสอบได้ทันทีด้วย build ปัจจุบัน (`useMock: true` — mock ในเบราว์เซอร์)
+- **C2 api** (`~/vscode/an22-api`): Spring Boot + PostgreSQL, **schema เป็น Flyway migration ใน repo นี้** (แทน repo db เดิม):
+  ทุกตารางมี `tenant_id` + RLS (D7), ตาราง platform ไม่อยู่ใต้ RLS (`companies` + แพ็กเกจ / ตารางเก็บเงิน / คำขอลบ, `billing_invoices`, `platform_admins`, `password_reset_tokens`) และใช้ DB role แยก,
+  `audit_log` insert-only, seed ตรงกับ mock (DEMO, HQ + BN, `admin` / `admin`, `somchai` / `1234`);
+  port กฎใน `domain-rules.md` ให้ผ่าน `fixtures/*.json`; export / ลบบริษัทเป็น job; จำกัด login ผิดต่อบัญชี / IP; ส่งอีเมลจริง (แทน outbox ของ mock)
+- **C3** สลับหน้าบ้านไป api จริง (`useMock: false`) เมื่อ api ตอบครบ — ทดสอบตาม `docs/test-plan.md` / ผลทดสอบของแต่ละขั้นใน `saas-plan.md`
 
 ## เลื่อนไว้ / รอคนอื่น (ไม่อยู่ในแผนนี้)
 
@@ -103,18 +106,44 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
 
 ## ข้อความเริ่ม session ใหม่ (คัดลอกไปวาง)
 
-```
-ทำงานต่อตาม docs/next-steps-plan.md — ทำหัวข้อ A ก่อน แล้วต่อหัวข้อ B (P5 ซ่อนทุน / กำไรจาก role user)
-ทำฝั่งหน้าบ้าน + mock ใน repo นี้ บน branch feature/step5 (หรือ branch ใหม่ถ้า A4 รวมแล้ว)
+**C1 web** — สร้าง repo ก่อน: `mkdir ~/vscode/an22-web && cd ~/vscode/an22-web && git init && claude --add-dir ../FrontEnd-An22`
 
-อ่านก่อนเริ่ม: CLAUDE.md (โดยเฉพาะ Permissions, Data flow, Gotchas เรื่อง initial bundle), docs/next-steps-plan.md,
-docs/saas-plan.md หัวข้อ 9 (ขั้น 6 + ข้อสังเกต) และ 17 (ตารางสิทธิ์ / P5), docs/decisions.md, docs/backend/*.md
+```
+เริ่มหัวข้อ C1 ของ ../FrontEnd-An22/docs/next-steps-plan.md — ทำ repo web (Node.js) ใน repo นี้ (ยังว่าง)
+repo FrontEnd-An22 เป็น spec ของหลังบ้าน (มี 2 repo: web แล้ว api — E47)
+
+อ่านก่อนเริ่ม: ../FrontEnd-An22/docs/backend/README.md (หัวข้อ web), ../FrontEnd-An22/deploy/nginx.conf และ web.config (ตัวอย่าง),
+../FrontEnd-An22/CLAUDE.md หัวข้อ "SPA per menu" และ "Switching to a real backend"
 
 วิธีทำ:
-- A1 / A4 / ปิดกะค้าง / ลบ ACME — ถามฉันก่อนทุกข้อ
-- หัวข้อ B: เข้า plan mode ก่อน สำรวจจุดที่แสดงทุนตามรายการในแผน แล้วถามคำถาม 6 ข้อในแผน (อย่าเดา) ก่อนเสนอขั้นย่อย
-- ระวัง initial bundle (budget 600 kB, ตอนนี้ ~546.6 kB): โค้ดที่โหลดตอนเริ่มห้าม import ค่าจาก barrel @core/models
-- ทุกขั้นย่อย: build + test + lint ผ่าน, prettier เฉพาะไฟล์ที่แก้, อัปเดต docs/backend/*.md + CLAUDE.md + ความคืบหน้า + ข้อตัดสินใจใหม่ (ต่อจาก E41), commit
-- จบแต่ละหัวข้อ: ทดสอบบนหน้าจอจริง (npm start, ไม่ล้าง mock db, stub window.print) — DEMO ยัง login ได้, console สะอาด
+- เข้า plan mode ก่อน: เสนอเวอร์ชัน Node / framework (เช่น Node 24 + Express หรือ Fastify หรือไม่ใช้ framework), โครงไฟล์, วิธีรับไฟล์ build ของหน้าบ้าน,
+  config (port, ที่อยู่ api, path ของ dist) และวิธี deploy — ถามฉันก่อนเลือก (อย่าเดา)
+- ต้องมี: serve dist/frontend-an22/browser, SPA fallback → index.html, index.html no-cache / ไฟล์ที่มี hash cache ยาว immutable, proxy /api → api,
+  ไม่ส่งต่อ path แปลก ๆ ออกนอก dist, log + health check
+- สร้าง CLAUDE.md ของ repo นี้ + test อัตโนมัติ (fallback, cache header, proxy ด้วย api ปลอม)
+- ทดสอบกับ build จริง: cd ../FrontEnd-An22 && npm run build (ตอนนี้ใช้ mock ในเบราว์เซอร์ จึงใช้งานได้ครบโดยไม่มี api) — เปิดในเบราว์เซอร์ login DEMO ได้, เปลี่ยนเมนู (full reload) ได้, console สะอาด
+- ถ้า spec ต้องแก้ ให้บอกฉันก่อน แล้วค่อยแก้ใน ../FrontEnd-An22; commit ทุกขั้นย่อย, ห้าม push โดยไม่ถาม
+- ถาม / ตอบ / เขียนแผนเป็นภาษาไทย
+```
+
+**C2 api** — หลัง C1: `mkdir ~/vscode/an22-api && cd ~/vscode/an22-api && git init && claude --add-dir ../FrontEnd-An22`
+
+```
+เริ่มหัวข้อ C2 ของ ../FrontEnd-An22/docs/next-steps-plan.md — ทำ repo api (Java Spring Boot + PostgreSQL) ใน repo นี้ (ยังว่าง)
+repo นี้เป็นเจ้าของ schema ด้วย (Flyway migration — E47); repo FrontEnd-An22 เป็น spec: mock คือ reference implementation
+
+อ่านก่อนเริ่ม: ../FrontEnd-An22/docs/backend/README.md (หัวข้อ api), api-contract.md, domain-rules.md, data-model.md, fixtures/README.md,
+../FrontEnd-An22/docs/saas-plan.md หัวข้อ 2, 3, 16 (D7) และ 17 (สิทธิ์), ../FrontEnd-An22/docs/decisions.md, ../FrontEnd-An22/CLAUDE.md
+
+วิธีทำ:
+- เข้า plan mode ก่อน: สำรวจ data-model.md / api-contract.md ทั้งหมด แล้วเสนอเวอร์ชัน Java / Spring Boot, build tool, โครง package,
+  วิธีรัน PostgreSQL local (docker compose / Testcontainers), auth (JWT) และลำดับขั้นย่อย (แนะนำ: schema + RLS + seed → auth / tenant / branch → SKU / สต็อก → POS / กฎคำนวณผ่าน fixtures → ...)
+  — ถามฉันก่อนเลือกเครื่องมือ / เวอร์ชัน (อย่าเดา)
+- สร้าง CLAUDE.md ของ repo นี้ตาม "สิ่งที่ CLAUDE.md ของแต่ละ repo ควรมี" ใน README
+- schema: ทุกตารางข้อมูลมี tenant_id + RLS (D7), ตาราง platform ไม่อยู่ใต้ RLS + DB role แยก, audit_log insert-only, unique key รวม tenant_id,
+  เงิน numeric(14,2), เวลา timestamptz; seed ตรงกับ mock (DEMO, HQ + BN, admin / admin, somchai / 1234, platform / platform); ห้าม ddl-auto
+- กฎใน domain-rules.md port เป็น class แยก ทดสอบด้วย fixtures/*.json ให้ผลตรงทุกตัวเลข; ข้อความ error ภาษาไทยตาม mock
+- spec ไม่ชัด → ถือพฤติกรรม mock (และ mock-backend.interceptor.spec.ts) เป็นคำตอบ; ถ้า spec ต้องแก้ ให้บอกฉันก่อน แล้วแก้ใน ../FrontEnd-An22 (docs + mock ใน commit เดียวกัน)
+- ทุกขั้นย่อย: migrate บน DB ว่างผ่าน, test ผ่าน (รวม RLS: tenant หนึ่งมองไม่เห็นอีก tenant), commit; ห้าม push โดยไม่ถาม
 - ถาม / ตอบ / เขียนแผนเป็นภาษาไทย
 ```
