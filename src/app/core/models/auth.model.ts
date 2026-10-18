@@ -20,6 +20,8 @@ export interface LoginResponse {
   branches: Branch[];
   /** Trial ending / invoice waiting / overdue (E35) — for the owner and admins; null = nothing */
   billing: BillingNotice | null;
+  /** This user sees cost / profit (`canSeeCost()`, E43); false = every cost field arrives `null` */
+  canSeeCost: boolean;
 }
 
 /** `GET /me`: the same session without a new token. */

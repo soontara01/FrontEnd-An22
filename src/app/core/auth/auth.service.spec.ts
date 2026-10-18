@@ -35,6 +35,7 @@ describe('AuthService', () => {
     company: { id: 1, code: 'DEMO', name: 'ร้านตัวอย่าง', taxId: '', active: true },
     branches,
     billing: null,
+    canSeeCost: true,
   });
   const credentials = { companyCode: ' demo ', username: 'admin', password: 'admin' };
 
@@ -101,6 +102,28 @@ describe('AuthService', () => {
     expect(localStorage.getItem('an22.token')).toBeNull();
     expect(localStorage.getItem('an22.companyCode')).toBe('"DEMO"');
     expect(assign).toHaveBeenCalledWith('/auth/login');
+  });
+
+  it('shows cost to admins always, to staff when the session says so (E43)', () => {
+    const service = create();
+    const staff = response();
+    staff.user = { ...staff.user, role: 'user' };
+    login(service, { ...staff, canSeeCost: false });
+    expect(service.canSeeCost()).toBe(false);
+    expect(localStorage.getItem('an22.canSeeCost')).toBe('false');
+
+    // The company turned it on: the next page load's /me says so.
+    const { user, company, branches } = staff;
+    service.refresh().subscribe();
+    http
+      .expectOne({ method: 'GET', url: '/api/me' })
+      .flush({ user, company, branches, canSeeCost: true });
+    expect(service.canSeeCost()).toBe(true);
+
+    login(service, { ...response(), canSeeCost: false }); // an admin always sees it
+    expect(service.canSeeCost()).toBe(true);
+    service.logout();
+    expect(localStorage.getItem('an22.canSeeCost')).toBeNull();
   });
 
   it('treats a session saved without a company (before SaaS) as logged out (E1)', () => {

@@ -36,6 +36,8 @@ export interface StoreInfo {
   shiftVarianceLimit: number;
   /** A shift open longer than this (hours) is flagged as left open (S5; warning only) */
   shiftMaxHours: number;
+  /** Staff (`user`) see cost / profit too (P5, E43); admins always do */
+  staffSeeCost: boolean;
 }
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {
@@ -54,6 +56,7 @@ export const STORE_INFO_DEFAULTS: StoreInfo = {
   requireShift: true,
   shiftVarianceLimit: 100,
   shiftMaxHours: 12,
+  staffSeeCost: false,
 };
 
 /** Receipt title by VAT registration. */

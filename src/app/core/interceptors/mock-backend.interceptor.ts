@@ -6,7 +6,7 @@ import {
   HttpResponse,
 } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { Observable, delay, dematerialize, materialize, of, throwError } from 'rxjs';
+import { Observable, delay, dematerialize, map, materialize, of, throwError } from 'rxjs';
 import { environment } from '@env/environment';
 import {
   CATEGORY_MAX_LEVEL,
@@ -170,6 +170,7 @@ import {
   paymentError,
   paymentSummary,
   priceCart,
+  PricedCart,
   manualDiscountError,
   voidError,
   VoidPayload,
@@ -232,6 +233,9 @@ import {
   posTerminalError,
   terminalError,
   terminalOrderPrefix,
+  canSeeCost,
+  hideCost,
+  belowCostIssues,
 } from '../models';
 import { MENU } from '../navigation/menu.config';
 import { StorageService } from '../services/storage.service';
@@ -1166,6 +1170,8 @@ function loadTenantDb(
   const legacy = demo ? stored : null;
   // Merge with seed so collections added later still exist in an older stored db.
   const db: MockDb = { ...(demo ? seedDb() : blankDb()), ...stored };
+  // Company settings added later (e.g. `staffSeeCost`, E43) take their defaults.
+  db.companyInfo = { ...COMPANY_INFO_DEFAULTS, ...db.companyInfo };
   // Products stored before the SKU master fields existed get defaults filled in.
   db.products = db.products.map((p) => ({ ...PRODUCT_DEFAULTS, ...p }));
   db.nextProductId = Math.max(db.nextProductId, ...db.products.map((p) => p.id + 1));
@@ -1717,6 +1723,10 @@ function tenantResponse(
   }
   if (changed || req.method !== 'GET' || path === 'company/export') {
     saveTenantDb(storage, company.id, db);
+  }
+  // Cost / profit only for those who may see them (E43): one place, after the handler and audit.
+  if (actor && !canSeeCost(actor, db.companyInfo)) {
+    return response$.pipe(map((r) => (r.body == null ? r : r.clone({ body: hideCost(r.body) }))));
   }
   return response$;
 }
@@ -2471,7 +2481,9 @@ function handleProducts(
     return ok([...products]);
   }
   if (path === 'products' && req.method === 'POST') {
-    const payload = withServiceRules(withoutDerived(req.body as ProductPayload));
+    const payload = withServiceRules(
+      withoutDerived(withStoredCosts(db, req.body as ProductPayload)),
+    );
     const problem = validateSku(payload, db);
     if (problem) return error(400, problem);
     const product: Product = {
@@ -2521,7 +2533,8 @@ function handleProducts(
       case 'GET':
         return ok(products[index]);
       case 'PUT': {
-        const payload = withServiceRules(withoutDerived(req.body as ProductPayload));
+        const body = withStoredCosts(db, req.body as ProductPayload, products[index]);
+        const payload = withServiceRules(withoutDerived(body));
         const problem = validateSku(payload, db, id);
         if (problem) return error(400, problem);
         // Stock in any branch counts (E18).
@@ -2721,8 +2734,24 @@ function storeBranchStock(db: MockDb): Partial<Product>[] {
 }
 
 /**
+ * A SKU written by someone who does not see cost (form or Excel, E44): the costs they cannot see
+ * are never taken from the request — the stored standard cost and supplier costs stay; a new SKU
+ * or a new supplier link starts at 0 until an admin sets it.
+ */
+function withStoredCosts(db: MockDb, payload: ProductPayload, stored?: Product): ProductPayload {
+  if (canSeeCost(actor, db.companyInfo)) return payload;
+  const supplierCost = (supplierId: number) =>
+    stored?.suppliers.find((s) => s.supplierId === supplierId)?.cost ?? 0;
+  return {
+    ...payload,
+    cost: stored?.cost ?? 0,
+    suppliers: (payload.suppliers ?? []).map((s) => ({ ...s, cost: supplierCost(s.supplierId) })),
+  };
+}
+
+/**
  * `GET /products/:id/branch-stock`: every active branch (no row = 0). Everyone sees quantities;
- * the average cost goes to admins only (E14).
+ * the average cost only those who see cost (E14 → `hideCost()` in `tenantResponse()`, E43).
  */
 function branchStockRows(db: MockDb, product: Product): BranchStockRow[] {
   return db.branches
@@ -2730,7 +2759,7 @@ function branchStockRows(db: MockDb, product: Product): BranchStockRow[] {
     .map((b) => {
       const row = db.branchStock.find((r) => r.productId === product.id && r.branchId === b.id);
       const here = withSerialStock(withBranchStock(product, row), db, b.id);
-      return { branchId: b.id, stock: here.stock, avgCost: actorIsAdmin() ? here.avgCost : null };
+      return { branchId: b.id, stock: here.stock, avgCost: here.avgCost };
     });
 }
 
@@ -3622,6 +3651,10 @@ function handleSales(
     );
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
+  if (path === 'sales/cost-check' && req.method === 'POST') {
+    // E45: the POS of someone who does not see cost asks whether manual discounts go below it.
+    return ok({ issues: belowCostIssues(serverPricedCart(req.body as SalePayload, db).issues) });
+  }
 
   const idMatch =
     /^sales\/(\d+)(?:\/(status|void|credit-notes|exchanges|tax-invoice|tax-invoices|tax-invoice\/reissue))?$/.exec(
@@ -3694,6 +3727,23 @@ function handleSales(
   return notFound(req, path);
 }
 
+/** `priceCart()` of a POS payload with the stored products (real costs) of the request's branch, today. */
+function serverPricedCart(body: SalePayload, db: MockDb): PricedCart {
+  return priceCart(
+    body.items ?? [],
+    {
+      products: db.products,
+      promotions: db.promotions,
+      categories: db.categories,
+      date: todayIso(),
+      vatRegistered: db.storeInfo.vatRegistered,
+      branchId: requestBranchId(),
+    },
+    body.freeSerials ?? [],
+    body.billManualDiscount ?? null,
+  );
+}
+
 /**
  * POS checkout. Everything is validated before anything changes: the cart is re-priced with
  * `priceCart()` (a different total than the screen showed → 400), serials must be in stock and
@@ -3712,19 +3762,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
   const shift = moneyShift(db, 'sell');
   if (shift.problem) return error(400, shift.problem);
   const today = todayIso();
-  const cart = priceCart(
-    body.items ?? [],
-    {
-      products: db.products,
-      promotions: db.promotions,
-      categories: db.categories,
-      date: today,
-      vatRegistered: db.storeInfo.vatRegistered,
-      branchId: requestBranchId(),
-    },
-    body.freeSerials ?? [],
-    body.billManualDiscount ?? null,
-  );
+  const cart = serverPricedCart(body, db);
   const cartProblem = cartError(cart);
   if (cartProblem) return error(400, cartProblem);
   const manualReason = (body.manualDiscountReason ?? '').trim();
@@ -5327,6 +5365,7 @@ function companySession(db: MockDb, user: User): MeResponse {
     billing: hasAdminRights(user)
       ? billingNotice(tenant.subscription, invoicesOf(platform, tenant.id), todayIso())
       : null,
+    canSeeCost: canSeeCost(user, db.companyInfo),
   };
 }
 

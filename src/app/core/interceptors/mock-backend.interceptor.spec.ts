@@ -2016,6 +2016,7 @@ describe('mockBackendInterceptor – auth (B3)', () => {
       company: session.company,
       branches: session.branches,
       billing: null,
+      canSeeCost: true,
     });
   });
 
@@ -3927,5 +3928,151 @@ describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
       ),
     );
     expect(signup).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
+  });
+});
+
+describe('mockBackendInterceptor – cost visibility (P5, E43–E45)', () => {
+  let http: HttpClient;
+  const NOTEBOOK = 1; // serial SKU with stock at HQ
+  const MOUSE = 2; // 590, promo 1 → 531
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
+
+  const get = <T>(url: string, token?: string) =>
+    firstValueFrom(
+      http.get<T>(`/api/${url}`, {
+        headers: token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined,
+      }),
+    );
+  const send = <T>(method: string, url: string, body: unknown, token?: string) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined,
+      }),
+    );
+  const setStaffSeeCost = async (staffSeeCost: boolean) => {
+    const info = await get<CompanyInfo>('settings/company');
+    await send('PUT', 'settings/company', { ...info, staffSeeCost });
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('answers staff null for every cost while the company keeps it off (default)', async () => {
+    const info = await get<CompanyInfo>('settings/company');
+    expect(info.staffSeeCost).toBe(false);
+    expect((await get<MeResponse>('me', STAFF)).canSeeCost).toBe(false);
+
+    const products = await get<Product[]>('products', STAFF);
+    expect(products.length).toBeGreaterThan(0);
+    for (const p of products) {
+      expect(p.cost).toBeNull();
+      expect(p.avgCost).toBeNull();
+      for (const s of p.suppliers) expect(s.cost).toBeNull();
+    }
+    expect(products.some((p) => p.stock > 0)).toBe(true); // quantities stay
+    const serials = await get<SerialNumber[]>(`products/${NOTEBOOK}/serials`, STAFF);
+    expect(serials.length).toBeGreaterThan(0);
+    expect(serials.every((s) => s.cost === null)).toBe(true);
+    const card = await get<StockCardResult>(`products/${MOUSE}/movements`, STAFF);
+    expect(card.closing).toMatchObject({ avgCost: null, value: null });
+    expect(card.closing.qty).toBeGreaterThan(0);
+    expect(card.totals.inCost).toBeNull();
+    for (const m of [...card.movements, ...card.openingMovements]) {
+      expect([m.unitCost, m.totalCost, m.balanceAvgCost, m.balanceValue]).toEqual([
+        null,
+        null,
+        null,
+        null,
+      ]);
+    }
+    const rows = await get<BranchStockRow[]>(`products/${MOUSE}/branch-stock`, STAFF);
+    expect(rows.every((r) => r.avgCost === null)).toBe(true);
+    // A POS sale (shifts off, terminal 1) to read back.
+    const settings = await get<CompanyInfo>('settings/company');
+    await send('PUT', 'settings/company', { ...settings, requireShift: false });
+    await firstValueFrom(
+      http.post(
+        '/api/sales',
+        {
+          items: [{ productId: MOUSE, factor: 1, qty: 1, serial: null }],
+          freeSerials: [],
+          payments: [{ methodId: 1, amount: 531, reference: '', installmentMonths: null }],
+          customer: '',
+          expectedTotal: 531,
+          buyer: null,
+        },
+        { headers: new HttpHeaders({ 'X-Terminal-Id': '1' }) },
+      ),
+    );
+    const lines = (await get<Sale[]>('sales', STAFF)).flatMap((s) => s.lines);
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) expect(line.cogs).toBeNull();
+  });
+
+  it('keeps the numbers for admins, and for staff once the company turns it on', async () => {
+    const admin = await get<Product>(`products/${MOUSE}`);
+    expect(admin.cost).toBeGreaterThan(0);
+    expect(admin.avgCost).toBeGreaterThan(0);
+    expect((await get<MeResponse>('me')).canSeeCost).toBe(true);
+
+    await setStaffSeeCost(true);
+    expect((await get<MeResponse>('me', STAFF)).canSeeCost).toBe(true);
+    expect(await get<Product>(`products/${MOUSE}`, STAFF)).toEqual(admin);
+  });
+
+  it('never takes costs from staff writing a SKU (E44)', async () => {
+    const stored = await get<Product>(`products/${MOUSE}`);
+    const asStaff = await get<Product>(`products/${MOUSE}`, STAFF);
+    // The form sends back what it got (null costs) and a renamed short name.
+    await send('PUT', `products/${MOUSE}`, { ...asStaff, shortName: 'เมาส์ใหม่' }, STAFF);
+    await send('PUT', `products/${MOUSE}`, { ...asStaff, cost: 1, shortName: 'เมาส์ใหม่' }, STAFF);
+    const after = await get<Product>(`products/${MOUSE}`);
+    expect(after.shortName).toBe('เมาส์ใหม่');
+    expect(after.cost).toBe(stored.cost);
+    expect(after.suppliers).toEqual(stored.suppliers);
+
+    const created = await send<Product>(
+      'POST',
+      'products',
+      { ...asStaff, sku: 'NEW-P5', barcode: '', packUnits: [], cost: 500, shortName: 'ใหม่' },
+      STAFF,
+    );
+    const fresh = await get<Product>(`products/${created.id}`);
+    expect(fresh.cost).toBe(0);
+    expect(fresh.suppliers.every((s) => s.cost === 0)).toBe(true);
+  });
+
+  it('tells staff a manual discount goes below cost without the numbers (E45)', async () => {
+    const check = (value: number) =>
+      send<{ issues: { cartIndex: number; message: string }[] }>(
+        'POST',
+        'sales/cost-check',
+        {
+          items: [
+            {
+              productId: MOUSE,
+              factor: 1,
+              qty: 1,
+              serial: null,
+              manualDiscount: { kind: 'percent', value },
+            } satisfies CartItem,
+          ],
+          freeSerials: [],
+          billManualDiscount: null,
+        },
+        STAFF,
+      );
+    expect((await check(1)).issues).toEqual([]);
+    const below = await check(95);
+    expect(below.issues).toHaveLength(1);
+    expect(below.issues[0].cartIndex).toBe(0);
+    expect(below.issues[0].message).toContain('ขายต่ำกว่าทุนหลังส่วนลดพิเศษ');
+    expect(JSON.stringify(below)).not.toMatch(/cost/i);
   });
 });

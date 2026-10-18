@@ -71,6 +71,8 @@ export interface CompanyInfo {
   shiftVarianceLimit: number;
   /** A shift open longer than this (hours) is flagged as left open (S5) */
   shiftMaxHours: number;
+  /** Staff (`user`) see cost / profit too (P5, E43 — `canSeeCost()`); off = only the owner / admins */
+  staffSeeCost: boolean;
 }
 
 export const COMPANY_INFO_DEFAULTS: CompanyInfo = {
@@ -83,6 +85,7 @@ export const COMPANY_INFO_DEFAULTS: CompanyInfo = {
   requireShift: true,
   shiftVarianceLimit: 100,
   shiftMaxHours: 12,
+  staffSeeCost: false,
 };
 
 export const HEAD_OFFICE_BRANCH_NO = '00000';
@@ -125,6 +128,7 @@ export function companyInfoOf(s: StoreInfo): CompanyInfo {
     requireShift: s.requireShift,
     shiftVarianceLimit: s.shiftVarianceLimit,
     shiftMaxHours: s.shiftMaxHours,
+    staffSeeCost: s.staffSeeCost ?? false,
   };
 }
 
@@ -143,6 +147,7 @@ export function normalizeCompanyInfo(c: CompanyInfo): CompanyInfo {
     ),
     shiftVarianceLimit: n(c.shiftVarianceLimit, COMPANY_INFO_DEFAULTS.shiftVarianceLimit),
     shiftMaxHours: n(c.shiftMaxHours, COMPANY_INFO_DEFAULTS.shiftMaxHours),
+    staffSeeCost: !!c.staffSeeCost,
   };
 }
 

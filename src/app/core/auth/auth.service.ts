@@ -16,6 +16,8 @@ import { StorageService } from '../services/storage.service';
 const TOKEN_KEY = 'token';
 const USER_KEY = 'user';
 const COMPANY_KEY = 'company';
+/** `canSeeCost` of the last session (E43), so the first render of a page load is right. */
+const SEE_COST_KEY = 'canSeeCost';
 const BRANCHES_KEY = 'branches';
 /** This device's working branch; kept on logout so the next login stays in it when allowed. */
 const BRANCH_KEY = 'branch';
@@ -42,6 +44,7 @@ export class AuthService {
   private readonly _companyCode = signal(this.storage.get<string>(COMPANY_CODE_KEY) ?? '');
   /** Billing banner of this page load (from login / `GET /me`, not stored). */
   private readonly _billing = signal<BillingNotice | null>(null);
+  private readonly _seeCost = signal(this.storage.get<boolean>(SEE_COST_KEY) === true);
 
   readonly token = this._token.asReadonly();
   readonly user = this._user.asReadonly();
@@ -60,6 +63,12 @@ export class AuthService {
     const role = this._user()?.role;
     return role === 'admin' || role === 'owner';
   });
+  /**
+   * Cost / profit on screens (P5, E43): admins always, staff when the company allows it — the
+   * server's `canSeeCost()` (cost-visibility.model.ts), sent in the session; when false every cost
+   * field arrives `null`, so hide it rather than show 0.
+   */
+  readonly canSeeCost = computed(() => this.isAdmin() || this._seeCost());
   /** The company's owner (E33): package, billing, export, deletion, handing over ownership. */
   readonly isOwner = computed(() => this._user()?.role === 'owner');
   /** Admin of every branch or the owner = company-level work: branches, company settings, … (E5 / E6). */
@@ -114,8 +123,10 @@ export class AuthService {
     this.storage.set(BRANCH_KEY, id);
   }
 
-  private setSession({ user, company, branches, billing }: MeResponse): void {
+  private setSession({ user, company, branches, billing, canSeeCost }: MeResponse): void {
     this._billing.set(billing ?? null);
+    this._seeCost.set(canSeeCost === true);
+    this.storage.set(SEE_COST_KEY, canSeeCost === true);
     this.storage.set(USER_KEY, user);
     this.storage.set(COMPANY_KEY, company);
     this.storage.set(BRANCHES_KEY, branches);
@@ -144,7 +155,10 @@ export class AuthService {
 
   /** Drops the session; the remembered company code and this device's branch stay. */
   private clearSession(): void {
-    for (const key of [TOKEN_KEY, USER_KEY, COMPANY_KEY, BRANCHES_KEY]) this.storage.remove(key);
+    for (const key of [TOKEN_KEY, USER_KEY, COMPANY_KEY, BRANCHES_KEY, SEE_COST_KEY]) {
+      this.storage.remove(key);
+    }
+    this._seeCost.set(false);
     this._token.set(null);
     this._user.set(null);
     this._company.set(null);

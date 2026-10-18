@@ -44,6 +44,16 @@ export interface PricedLine extends Omit<SaleLine, 'cogs'> {
   cartIndex: number | null;
 }
 
+/** Ending of the warning when a manual discount takes a line below cost (non-blocking). */
+export const BELOW_COST_WARNING = 'ขายต่ำกว่าทุนหลังส่วนลดพิเศษ';
+
+/**
+ * The below-cost warnings of a priced cart — what `POST /sales/cost-check` answers to someone who
+ * does not see cost (E45): the warning without the numbers behind it.
+ */
+export const belowCostIssues = (issues: readonly CartIssue[]): CartIssue[] =>
+  issues.filter((i) => !i.blocking && i.message.endsWith(BELOW_COST_WARNING));
+
 export interface CartIssue {
   cartIndex: number | null;
   productId: number;
@@ -328,7 +338,7 @@ export function priceCart(
         issues.push({
           cartIndex: l.index,
           productId: l.product.id,
-          message: `${l.product.sku} ขายต่ำกว่าทุนหลังส่วนลดพิเศษ`,
+          message: `${l.product.sku} ${BELOW_COST_WARNING}`,
           blocking: false,
         });
       }

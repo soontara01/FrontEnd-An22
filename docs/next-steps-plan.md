@@ -1,6 +1,6 @@
 # แผนงานถัดไปหลัง SaaS ขั้น 6 (เริ่ม 2026-10-18)
 
-สถานะ: **กำลังทำ A** (2026-10-18: A1 เสร็จ, A2 เสร็จ — E42, A3 เสร็จ — ผลใน `saas-plan.md` หัวข้อ 9 ขั้น 6; A4 เปิด PR เข้า `main`) — SaaS ขั้น 1–6 เสร็จฝั่งหน้าบ้าน + mock แล้ว (`docs/saas-plan.md` หัวข้อ 9, ข้อตัดสินใจถึง E41)
+สถานะ: **กำลังทำ B** — A เสร็จ 2026-10-18 (PR #3 merge แล้ว); B ทำบน branch `feature/p5-hide-cost`: B1 เสร็จ (E43–E46)
 งานในไฟล์นี้: **A** ปิดงานค้างของขั้น 6 → **B** ซ่อนทุน / กำไรจาก role user (P5) → **C** ส่งต่อหลังบ้าน
 แต่ละขั้นย่อย build + test + lint ผ่าน → prettier เฉพาะไฟล์ที่แก้ (อย่าให้โดน `docs/test-data`) → อัปเดต docs → commit
 
@@ -63,9 +63,15 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
 - **docs**: `docs/saas-plan.md` หัวข้อ 17 (แถว 22 / P5 → ทำแล้ว), CLAUDE.md Permissions ("cost / profit stay visible until SaaS"), `api-contract.md` หัวข้อสิทธิ์,
   `data-model.md` (ไม่เปลี่ยน), ข้อตัดสินใจใหม่ต่อจาก E41 ใน `docs/decisions.md`
 
-### ขั้นย่อยที่เสนอ (ปรับหลังได้คำตอบ)
+### คำตอบ (2026-10-18)
 
-- **B1** กติกา + server: helper ตัด field ทุนตาม role ใน mock, spec ว่า user ได้ `null` ทุก endpoint ที่มีทุน, admin ได้เหมือนเดิม
+1. admin เปิด / ปิดได้: `CompanyInfo.staffSeeCost` ค่าเริ่มต้น = ไม่เห็น · 2. รับของ: กรอกทุนได้ แต่ไม่มีค่าเริ่มต้นจากทุนที่ซ่อน และไม่เห็นทุนเฉลี่ย / มูลค่า ·
+2. SKU form: ซ่อนช่องทุน + server คงค่าเดิม · 4. POS: ยังเตือนต่ำกว่าทุนแบบไม่บอกตัวเลข · 5. Excel: ตัดคอลัมน์ทุน · 6. ใบโอน: หน้าจอใช้สิทธิ์เดียวกัน + server ตัด `unitCost`
+   — แผนละเอียด / ข้อตัดสินใจ E43–E46 ใน `docs/decisions.md`
+
+### ขั้นย่อย
+
+- **B1** ✅ 2026-10-18 กติกา + server (`cost-visibility.model.ts`, `hideCost()` ใน `tenantResponse()`, `withStoredCosts()`, `POST /sales/cost-check`, session `canSeeCost`, สวิตช์ในตั้งค่าบริษัท): helper ตัด field ทุนตาม role ใน mock, spec ว่า user ได้ `null` ทุก endpoint ที่มีทุน, admin ได้เหมือนเดิม
 - **B2** หน้าจอคลัง + SKU + Excel
 - **B3** หน้าจอราคา / โปร (margin) + การขาย (กำไร, หน้าบิล)
 - **B4** ทดสอบบนหน้าจอ (`somchai` เปิดเมนูคลัง / SKU ชั่วคราวผ่าน `/users/menu-access` แล้วคืนค่า) + docs
