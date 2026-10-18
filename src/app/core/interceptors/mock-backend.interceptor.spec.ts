@@ -26,6 +26,7 @@ import {
   Category,
   PRODUCT_DEFAULTS,
   PaymentInput,
+  PaymentMethod,
   Product,
   Sale,
   SaleLine,
@@ -3521,5 +3522,114 @@ describe('mockBackendInterceptor – billing (E35)', () => {
     ]);
     const stored = JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
     expect(stored.companies[0]).toMatchObject({ active: false, suspendedReason: 'overdue' });
+  });
+});
+
+describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)', () => {
+  let http: HttpClient;
+  const post = <T>(url: string, body: unknown, token?: string) =>
+    firstValueFrom(
+      http.post<T>(`/api/${url}`, body, {
+        headers: token ? { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' } : {},
+      }),
+    );
+  const get = <T>(url: string, token: string) =>
+    firstValueFrom(
+      http.get<T>(`/api/${url}`, {
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const payload = {
+    companyCode: ' acme ',
+    companyName: 'บริษัท แอคมี จำกัด',
+    taxId: '0105550123451',
+    vatRegistered: true,
+    branch: { code: 'hq', name: 'สำนักงานใหญ่', branchNo: '00000', address: 'กรุงเทพฯ', phone: '' },
+    owner: { name: 'สมศักดิ์', username: 'Boss', email: 'boss@acme.test', password: 'secret' },
+    planId: 'starter',
+  };
+  const platform = () => JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('creates a company on a trial with only its first branch, owner and cash', async () => {
+    const session = await post<LoginResponse>('auth/signup', payload);
+    expect(session.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
+    expect(session.user).toMatchObject({ username: 'boss', role: 'owner', allBranches: true });
+    expect(session.branches.map((b) => b.code)).toEqual(['HQ']);
+    expect(session.token).toBe(mockToken(2, 1));
+    const info = await get<SubscriptionInfo>('company/subscription', session.token);
+    expect(info).toMatchObject({ planId: 'starter', status: 'trial' });
+    expect(info.subscription.trialEndsOn).toBe(addDaysIso(todayIso(), 14));
+    expect(await get<Product[]>('products', session.token)).toEqual([]);
+    expect(
+      (await get<PaymentMethod[]>('payment-methods', session.token)).map((m) => m.type),
+    ).toEqual(['cash']);
+    expect(await get<unknown>('company/onboarding', session.token)).toEqual({
+      terminals: 0,
+      categories: 0,
+      products: 0,
+      prices: 0,
+      users: 1,
+    });
+    const events = await get<AuditEvent[]>('audit-log', session.token);
+    expect(events.map((e) => e.action)).toEqual(['signup']);
+    // the new owner logs in with their own code; DEMO is untouched
+    const login = await post<LoginResponse>('auth/login', {
+      companyCode: 'ACME',
+      username: 'boss',
+      password: 'secret',
+    });
+    expect(login.company.id).toBe(2);
+    expect((await get<Product[]>('products', mockToken(1, 1))).length).toBeGreaterThan(0);
+  });
+
+  it('refuses a taken code and an invalid form', async () => {
+    expect(await failure(post('auth/signup', { ...payload, companyCode: 'demo' }))).toEqual([
+      400,
+      'รหัสบริษัทนี้ถูกใช้แล้ว',
+    ]);
+    expect(await failure(post('auth/signup', { ...payload, companyCode: 'x' }))).toEqual([
+      400,
+      'รหัสบริษัทใช้ได้เฉพาะ A-Z, 0-9 ยาว 3–20 ตัว',
+    ]);
+    expect(platform().companies).toHaveLength(1);
+  });
+
+  it('sends a single-use reset link only to the owner, with one answer for everything', async () => {
+    await post('auth/signup', payload);
+    const ask = (companyCode: string, email: string) =>
+      post<{ message: string }>('auth/forgot-password', { companyCode, email });
+    const same = (await ask('NOPE', 'x@y.z')).message;
+    expect((await ask('ACME', 'someone@else.test')).message).toBe(same);
+    expect(platform().outbox).toHaveLength(0);
+    expect((await ask('acme', 'BOSS@acme.test')).message).toBe(same);
+    const mail = platform().outbox[0];
+    expect(mail).toMatchObject({ companyId: 2, to: 'boss@acme.test' });
+    const token = new URLSearchParams(mail.body.split('?')[1]).get('token');
+
+    expect((await failure(post('auth/reset-password', { token, password: '1' })))?.[0]).toBe(400);
+    await post('auth/reset-password', { token, password: 'new-pass' });
+    expect(await failure(post('auth/reset-password', { token, password: 'again-pass' }))).toEqual([
+      400,
+      'ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่',
+    ]);
+    const login = await post<LoginResponse>('auth/login', {
+      companyCode: 'ACME',
+      username: 'boss',
+      password: 'new-pass',
+    });
+    expect(login.user.role).toBe('owner');
   });
 });

@@ -114,6 +114,15 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 - `LoginResponse` / `MeResponse` มี `billing: BillingNotice | null` (`billingNotice()`) — ส่งเฉพาะ owner / admin, คนอื่น `null`; หน้าบ้านแสดงเป็นแถบบนทุกหน้า
 - เปลี่ยนแพ็กเกจกลางรอบ: ไม่คิดส่วนต่าง (ใบถัดไปใช้ราคาใหม่) — ชำระ / ยกเลิกใบแจ้งหนี้ทำที่ platform (ขั้น 6.7)
 
+### สมัครใช้งาน / ลืมรหัสผ่าน owner (SaaS ขั้น 6.6, E37 / E41 — ไม่ต้องมี token)
+
+| endpoint                     | body → ตอบ                               | หมายเหตุ                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /auth/signup`          | `SignupPayload` → `LoginResponse`        | `signupError()` → 400; รหัสบริษัทซ้ำกับบริษัทใดก็ได้ (รวมที่ลบแล้ว E39) → 400 "รหัสบริษัทนี้ถูกใช้แล้ว" (ควรจำกัดจำนวนครั้งต่อ IP); สร้างบริษัท (`trial_ends_on` = วันนี้ + `TRIAL_DAYS`, ใบแรกออกวันถัดไป), สาขาแรก (`receiptFooter` "ขอบคุณที่ใช้บริการ"), owner (`allBranches`), ช่องทางเงินสด 1 รายการ — ไม่มีข้อมูลตัวอย่าง; audit `signup` |
+| `POST /auth/forgot-password` | `{ companyCode, email }` → `{ message }` | ตอบ `FORGOT_PASSWORD_ANSWER` **เสมอ** (ไม่บอกว่ามีบริษัท / อีเมลนี้); เมื่อตรงกับ owner ที่ใช้งานอยู่ → ส่งอีเมลลิงก์ `/auth/reset-password?token=` ใช้ครั้งเดียว อายุ `RESET_LINK_MINUTES` (mock: เก็บใน outbox ของ platform)                                                                                                                   |
+| `POST /auth/reset-password`  | `{ token, password }` → `null`           | token ผิด / หมดอายุ / ใช้แล้ว → 400 "ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่"; `passwordError()` → 400; audit `password_reset`                                                                                                                                                                                           |
+| `GET /company/onboarding`    | → `OnboardingCounts`                     | admin; จำนวนเครื่อง POS / หมวด / SKU / ช่วงราคา / ผู้ใช้ — หน้าบ้านทำ checklist ด้วย `onboardingSteps()`                                                                                                                                                                                                                                         |
+
 ### Audit log (SaaS ขั้น 6.3, E40)
 
 `GET /audit-log?from=&to=&action=&userId=&branchId=` → `AuditEvent[]` ใหม่สุดก่อน — admin เท่านั้น (user → **403** "ดูประวัติการใช้งานได้เฉพาะผู้ดูแลระบบ");

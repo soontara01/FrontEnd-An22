@@ -8,7 +8,19 @@ mat-card-content {
   padding-top: 16px;
 }
 
-mat-card-actions button {
+mat-card-actions {
+  flex-direction: column;
+  gap: 8px;
+
+  button {
+    width: 100%;
+  }
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   width: 100%;
 }
 

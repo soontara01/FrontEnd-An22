@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, DOCUMENT, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '@core/auth/auth.service';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
@@ -10,7 +11,7 @@ import { MATERIAL } from '@shared/material';
  */
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, AutofocusDirective, MATERIAL],
+  imports: [ReactiveFormsModule, RouterLink, AutofocusDirective, MATERIAL],
   templateUrl: './login.html',
   styleUrl: './login.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

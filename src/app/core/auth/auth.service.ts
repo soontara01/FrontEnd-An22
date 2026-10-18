@@ -8,6 +8,7 @@ import type {
   LoginRequest,
   LoginResponse,
   MeResponse,
+  SignupPayload,
   User,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -76,14 +77,23 @@ export class AuthService {
   }
 
   login(credentials: LoginRequest): Observable<LoginResponse> {
-    return this.api.post<LoginResponse>('auth/login', credentials).pipe(
-      tap((session) => {
-        this.storage.set(TOKEN_KEY, session.token);
-        this._token.set(session.token);
-        this.setSession(session);
-        this.setCompanyCode(session.company.code);
-      }),
-    );
+    return this.api
+      .post<LoginResponse>('auth/login', credentials)
+      .pipe(tap((session) => this.startSession(session)));
+  }
+
+  /** Signs a new company up (E37) and logs its owner in, like `login()`. */
+  signup(payload: SignupPayload): Observable<LoginResponse> {
+    return this.api
+      .post<LoginResponse>('auth/signup', payload)
+      .pipe(tap((session) => this.startSession(session)));
+  }
+
+  private startSession(session: LoginResponse): void {
+    this.storage.set(TOKEN_KEY, session.token);
+    this._token.set(session.token);
+    this.setSession(session);
+    this.setCompanyCode(session.company.code);
   }
 
   /**

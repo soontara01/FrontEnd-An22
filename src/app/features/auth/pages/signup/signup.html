@@ -1,0 +1,132 @@
+<mat-card class="card" appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>สมัครใช้งาน</mat-card-title>
+    <mat-card-subtitle
+      >ทดลองใช้ฟรี {{ trialDays }} วัน — ใบแจ้งหนี้แรกออกหลังหมดช่วงทดลอง</mat-card-subtitle
+    >
+  </mat-card-header>
+
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <mat-card-content>
+      <h3 class="section">บริษัท</h3>
+      <mat-form-field appearance="outline">
+        <mat-label>รหัสบริษัท (ใช้ตอนเข้าสู่ระบบ)</mat-label>
+        <input
+          matInput
+          appAutofocus
+          formControlName="companyCode"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+        <mat-hint>A-Z, 0-9 ยาว 3–20 ตัว เปลี่ยนภายหลังไม่ได้</mat-hint>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อบริษัท / ผู้ประกอบการ</mat-label>
+        <input matInput formControlName="companyName" autocomplete="organization" />
+      </mat-form-field>
+      <mat-slide-toggle formControlName="vatRegistered"
+        >จดทะเบียนภาษีมูลค่าเพิ่ม (VAT)</mat-slide-toggle
+      >
+      <mat-form-field appearance="outline">
+        <mat-label
+          >เลขประจำตัวผู้เสียภาษี 13 หลัก{{
+            form.controls.vatRegistered.value ? '' : ' (ไม่บังคับ)'
+          }}</mat-label
+        >
+        <input matInput formControlName="taxId" inputmode="numeric" maxlength="13" />
+      </mat-form-field>
+
+      <h3 class="section">สาขาแรก</h3>
+      <div class="row">
+        <mat-form-field appearance="outline">
+          <mat-label>รหัสสาขา</mat-label>
+          <input matInput formControlName="branchCode" autocapitalize="characters" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>เลขสาขาสรรพากร</mat-label>
+          <input matInput formControlName="branchNo" inputmode="numeric" maxlength="5" />
+          <mat-hint>00000 = สำนักงานใหญ่</mat-hint>
+        </mat-form-field>
+      </div>
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อสถานประกอบการ</mat-label>
+        <input matInput formControlName="branchName" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>ที่อยู่</mat-label>
+        <textarea matInput formControlName="address" rows="2"></textarea>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>โทรศัพท์ (ไม่บังคับ)</mat-label>
+        <input matInput formControlName="phone" autocomplete="tel" />
+      </mat-form-field>
+
+      <h3 class="section">เจ้าของบริษัท (ผู้ดูแลบัญชี)</h3>
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อ</mat-label>
+        <input matInput formControlName="ownerName" autocomplete="name" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>อีเมล</mat-label>
+        <input matInput type="email" formControlName="email" autocomplete="email" />
+        <mat-hint>ใช้กู้รหัสผ่านและรับใบแจ้งหนี้</mat-hint>
+      </mat-form-field>
+      <div class="row">
+        <mat-form-field appearance="outline">
+          <mat-label>ชื่อผู้ใช้</mat-label>
+          <input
+            matInput
+            formControlName="username"
+            autocomplete="username"
+            autocapitalize="none"
+          />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>รหัสผ่าน</mat-label>
+          <input
+            matInput
+            formControlName="password"
+            autocomplete="new-password"
+            [type]="hidePassword() ? 'password' : 'text'"
+          />
+          <button
+            mat-icon-button
+            matSuffix
+            type="button"
+            [attr.aria-label]="hidePassword() ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'"
+            (click)="hidePassword.set(!hidePassword())"
+          >
+            <mat-icon>{{ hidePassword() ? 'visibility' : 'visibility_off' }}</mat-icon>
+          </button>
+        </mat-form-field>
+      </div>
+
+      <h3 class="section">แพ็กเกจ</h3>
+      <mat-radio-group formControlName="planId" class="plans">
+        @for (plan of plans; track plan.id) {
+          <mat-radio-button [value]="plan.id">
+            <strong>{{ plan.name }}</strong> — ฿{{ plan.monthlyPrice.toLocaleString() }} / เดือน ·
+            {{ plan.limits.branches ?? 'ไม่จำกัด' }} สาขา ·
+            {{ plan.limits.users ?? 'ไม่จำกัด' }} ผู้ใช้ ·
+            {{ plan.limits.terminals ?? 'ไม่จำกัด' }} เครื่อง POS
+          </mat-radio-button>
+        }
+      </mat-radio-group>
+
+      @if (touched() && problem(); as p) {
+        <p class="field-error" role="alert">{{ p }}</p>
+      }
+    </mat-card-content>
+
+    <mat-card-actions>
+      <button mat-flat-button type="submit" [disabled]="submitting()">
+        @if (submitting()) {
+          <mat-spinner diameter="20" />
+        } @else {
+          สมัครและเริ่มทดลองใช้
+        }
+      </button>
+      <a mat-button routerLink="/auth/login">มีบัญชีแล้ว — เข้าสู่ระบบ</a>
+    </mat-card-actions>
+  </form>
+</mat-card>

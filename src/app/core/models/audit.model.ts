@@ -21,6 +21,8 @@ export type AuditAction =
   | 'user_password'
   | 'owner_transfer'
   | 'plan_change'
+  | 'signup'
+  | 'password_reset'
   | 'menu_access'
   | 'company_settings'
   | 'branch_settings'
@@ -46,6 +48,8 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   user_password: 'ตั้งรหัสผ่านใหม่',
   owner_transfer: 'โอนความเป็นเจ้าของ',
   plan_change: 'เปลี่ยนแพ็กเกจ',
+  signup: 'สมัครใช้งาน',
+  password_reset: 'ตั้งรหัสผ่านใหม่ (ลิงก์อีเมล)',
   menu_access: 'แก้สิทธิ์เมนู',
   company_settings: 'แก้ตั้งค่าบริษัท',
   branch_settings: 'แก้ข้อมูลสาขา (ตั้งค่า)',

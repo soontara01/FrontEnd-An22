@@ -94,6 +94,12 @@ import {
   hasAdminRights,
   isOwner,
   ROLE_LABEL,
+  FORGOT_PASSWORD_ANSWER,
+  OnboardingCounts,
+  RESET_LINK_MINUTES,
+  SignupPayload,
+  TRIAL_DAYS,
+  signupError,
   BillingInvoice,
   CompanySuspendReason,
   INVOICE_DUE_DAYS,
@@ -304,6 +310,8 @@ type StoredCompany = Pick<Company, 'id' | 'code' | 'active'> & {
   subscription: Subscription;
   /** Why `active` is false (null while active): overdue billing, the platform admin, deletion */
   suspendedReason: CompanySuspendReason | null;
+  /** Its data was deleted (E39): the entry stays so the code is never reused */
+  deletedAt?: string | null;
 };
 
 /**
@@ -317,6 +325,30 @@ interface MockPlatform {
   /** Invoices of the SaaS to every company (E35) */
   invoices: BillingInvoice[];
   nextInvoiceId: number;
+  /** Password reset links of owners (E41): single use, `RESET_LINK_MINUTES` */
+  resetTokens: ResetToken[];
+  /** E-mails the platform "sent" (the mock sends none — read on the platform pages) */
+  outbox: MockEmail[];
+  nextEmailId: number;
+}
+
+interface ResetToken {
+  token: string;
+  companyId: number;
+  userId: number;
+  /** ISO time */
+  expiresAt: string;
+  usedAt: string | null;
+}
+
+/** An e-mail the platform would send (E41). */
+export interface MockEmail {
+  id: number;
+  at: string;
+  companyId: number;
+  to: string;
+  subject: string;
+  body: string;
 }
 
 /** The seed company; its data stays under the pre-SaaS key `mock.db` (older stored data). */
@@ -1055,6 +1087,9 @@ function loadPlatform(storage: StorageService): { platform: MockPlatform; change
       nextCompanyId: stored?.nextCompanyId ?? Math.max(0, ...companies.map((c) => c.id)) + 1,
       invoices: stored?.invoices ?? [],
       nextInvoiceId: stored?.nextInvoiceId ?? 1,
+      resetTokens: stored?.resetTokens ?? [],
+      outbox: stored?.outbox ?? [],
+      nextEmailId: stored?.nextEmailId ?? 1,
     },
     changed: !stored?.companies || raw.some((c) => !c.subscription || !c.planId),
   };
@@ -1174,7 +1209,15 @@ const LATENCY_MS = 300;
  */
 let tenant: StoredCompany = DEMO_COMPANY;
 /** The platform registry of this request (companies + billing). */
-let platform: MockPlatform = { companies: [], nextCompanyId: 1, invoices: [], nextInvoiceId: 1 };
+let platform: MockPlatform = {
+  companies: [],
+  nextCompanyId: 1,
+  invoices: [],
+  nextInvoiceId: 1,
+  resetTokens: [],
+  outbox: [],
+  nextEmailId: 1,
+};
 let platformChanged = false;
 /** The user of the request being handled (set by the interceptor before `handle()`). */
 let actor: User | undefined;
@@ -1218,7 +1261,9 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   platformChanged = false;
   const company = requestCompany(req, path, platform);
   if (company && refreshBilling(platform, company, todayIso())) platformChanged = true;
-  const response$ = company ? tenantResponse(req, path, company, storage) : noTenant(req, path);
+  const response$ =
+    publicResponse(req, path, storage) ??
+    (company ? tenantResponse(req, path, company, storage) : noTenant(req, path));
   // A handler that changed the request's company (package …) sets `platformChanged`.
   if (registryMoved || platformChanged) storage.set(PLATFORM_KEY, platform);
   return response$.pipe(materialize(), delay(LATENCY_MS), dematerialize());
@@ -1241,6 +1286,172 @@ function requestCompany(
   }
   const id = tokenIds(req)?.companyId;
   return registry.companies.find((c) => c.id === id);
+}
+
+/**
+ * Requests without a session that are not a login (E37 / E41): signing up, asking for a password
+ * reset link, setting the new password. Null = not one of them.
+ */
+function publicResponse(
+  req: HttpRequest<unknown>,
+  path: string,
+  storage: StorageService,
+): Observable<HttpResponse<unknown>> | null {
+  if (req.method !== 'POST') return null;
+  terminalId = null;
+  if (path === 'auth/signup') return signup(req.body as SignupPayload, storage);
+  if (path === 'auth/forgot-password') return forgotPassword(req.body, storage);
+  if (path === 'auth/reset-password') return resetPassword(req.body, storage);
+  return null;
+}
+
+/**
+ * A new company (E37): registry entry on a `TRIAL_DAYS` trial of the chosen package, and its own
+ * data — first branch, the owner, one cash payment method, nothing else. Logs the owner in.
+ */
+function signup(
+  body: SignupPayload | null,
+  storage: StorageService,
+): Observable<HttpResponse<LoginResponse>> {
+  const p: SignupPayload = {
+    companyCode: body?.companyCode ?? '',
+    companyName: (body?.companyName ?? '').trim(),
+    taxId: (body?.taxId ?? '').trim(),
+    vatRegistered: !!body?.vatRegistered,
+    branch: { code: '', name: '', branchNo: '', address: '', phone: '', ...body?.branch },
+    owner: { name: '', username: '', email: '', password: '', ...body?.owner },
+    planId: body?.planId ?? ('' as PlanId),
+  };
+  const problem = signupError(p);
+  if (problem) return error(400, problem);
+  const code = normalizeCompanyCode(p.companyCode);
+  // Codes of deleted companies stay taken (E39): the registry keeps them.
+  if (platform.companies.some((c) => c.code === code)) return error(400, 'รหัสบริษัทนี้ถูกใช้แล้ว');
+  const today = todayIso();
+  const trialEndsOn = addDaysIso(today, TRIAL_DAYS);
+  const company: StoredCompany = {
+    id: platform.nextCompanyId++,
+    code,
+    active: true,
+    planId: p.planId,
+    subscription: { trialEndsOn, nextInvoiceOn: addDaysIso(trialEndsOn, 1) },
+    suspendedReason: null,
+  };
+  platform.companies.push(company);
+  platformChanged = true;
+  const owner: User = {
+    id: 1,
+    username: normalizeUsername(p.owner.username),
+    name: p.owner.name.trim(),
+    email: p.owner.email.trim(),
+    role: 'owner',
+    active: true,
+    branchIds: [],
+    allBranches: true,
+    createdAt: new Date().toISOString(),
+  };
+  const cash = SEED_PAYMENT_METHODS.find((m) => m.type === 'cash') as PaymentMethod;
+  const db: MockDb = {
+    ...blankDb(),
+    companyInfo: {
+      ...COMPANY_INFO_DEFAULTS,
+      name: p.companyName,
+      taxId: p.taxId,
+      vatRegistered: p.vatRegistered,
+    },
+    branches: [
+      normalizeBranch({
+        ...BRANCH_DEFAULTS,
+        ...p.branch,
+        code: p.branch.code.trim().toUpperCase(),
+        id: 1,
+        receiptFooter: 'ขอบคุณที่ใช้บริการ',
+        active: true,
+      }) as Branch,
+    ],
+    nextBranchId: 2,
+    users: [owner],
+    nextId: 2,
+    passwords: { [owner.id]: p.owner.password },
+    paymentMethods: [{ ...structuredClone(cash), id: 1, sortOrder: 1 }],
+    nextPaymentMethodId: 2,
+  };
+  tenant = company;
+  actor = owner;
+  branchHeader = null;
+  pushAudit(db, {
+    action: 'signup',
+    ref: { kind: 'company', id: company.id, label: code },
+    detail: `สมัครใช้งาน แพ็กเกจ ${planOf(p.planId).name} ทดลองใช้ถึง ${trialEndsOn}`,
+  });
+  saveTenantDb(storage, company.id, db);
+  return ok({ token: mockToken(company.id, owner.id), ...companySession(db, owner) });
+}
+
+/**
+ * An owner who forgot their password (E41): a single-use link valid `RESET_LINK_MINUTES`, "sent"
+ * to the owner's e-mail (the mock's outbox) when code + e-mail match — the answer is always the
+ * same, so nobody learns which companies or e-mails exist.
+ */
+function forgotPassword(body: unknown, storage: StorageService): Observable<HttpResponse<unknown>> {
+  const { companyCode, email } = (body ?? {}) as { companyCode?: string; email?: string };
+  const answer = ok({ message: FORGOT_PASSWORD_ANSWER });
+  const company = platform.companies.find(
+    (c) => c.code === normalizeCompanyCode(companyCode ?? ''),
+  );
+  const wanted = (email ?? '').trim().toLowerCase();
+  if (!company || company.deletedAt || !wanted) return answer;
+  const { db } = loadTenantDb(storage, company.id);
+  const owner = db.users.find((u) => isOwner(u) && u.active && u.email.toLowerCase() === wanted);
+  if (!owner) return answer;
+  const token = crypto.randomUUID();
+  platform.resetTokens.push({
+    token,
+    companyId: company.id,
+    userId: owner.id,
+    expiresAt: new Date(Date.now() + RESET_LINK_MINUTES * 60_000).toISOString(),
+    usedAt: null,
+  });
+  platform.outbox.push({
+    id: platform.nextEmailId++,
+    at: new Date().toISOString(),
+    companyId: company.id,
+    to: owner.email,
+    subject: `ตั้งรหัสผ่านใหม่ — บริษัท ${company.code}`,
+    body: `/auth/reset-password?token=${token}`,
+  });
+  platformChanged = true;
+  return answer;
+}
+
+/** Sets the owner's new password with a reset link (once, before it expires). */
+function resetPassword(body: unknown, storage: StorageService): Observable<HttpResponse<unknown>> {
+  const { token, password } = (body ?? {}) as { token?: string; password?: string };
+  const link = platform.resetTokens.find((t) => t.token === token);
+  const invalid = 'ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่';
+  if (!link || link.usedAt || link.expiresAt < new Date().toISOString()) return error(400, invalid);
+  const company = platform.companies.find((c) => c.id === link.companyId);
+  if (!company || company.deletedAt) return error(400, invalid);
+  const { db } = loadTenantDb(storage, company.id);
+  const user = db.users.find((u) => u.id === link.userId && u.active);
+  if (!user) return error(400, invalid);
+  const problem = passwordError(password ?? '');
+  if (problem) return error(400, problem);
+  db.passwords[user.id] = password ?? '';
+  link.usedAt = new Date().toISOString();
+  platformChanged = true;
+  tenant = company;
+  pushAudit(
+    db,
+    {
+      action: 'password_reset',
+      ref: { kind: 'user', id: user.id, label: user.username },
+      detail: 'ตั้งรหัสผ่านใหม่ด้วยลิงก์ทางอีเมล',
+    },
+    user,
+  );
+  saveTenantDb(storage, company.id, db);
+  return ok(null);
 }
 
 /** Answer when no company is known: the same messages as a wrong login / an expired session. */
@@ -1819,6 +2030,16 @@ function handleCompany(
   if (path === 'company/subscription' && req.method === 'GET') {
     if (!hasAdminRights(caller)) return error(403, 'ดูแพ็กเกจได้เฉพาะผู้ดูแลระบบ');
     return ok(subscriptionInfo(db));
+  }
+  if (path === 'company/onboarding' && req.method === 'GET') {
+    if (!hasAdminRights(caller)) return error(403, 'ดูขั้นตอนเริ่มต้นใช้งานได้เฉพาะผู้ดูแลระบบ');
+    return ok({
+      terminals: db.posTerminals.length,
+      categories: db.categories.length,
+      products: db.products.length,
+      prices: db.prices.length,
+      users: db.users.length,
+    } satisfies OnboardingCounts);
   }
   if (path === 'company/plan' && req.method === 'PUT') {
     if (!isOwner(caller)) return error(403, 'เปลี่ยนแพ็กเกจได้เฉพาะเจ้าของบริษัท');

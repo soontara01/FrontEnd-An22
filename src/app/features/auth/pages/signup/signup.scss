@@ -1,0 +1,50 @@
+.card {
+  width: min(560px, 100%);
+  margin: 24px 0;
+}
+
+mat-card-content {
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+}
+
+.section {
+  font: var(--mat-sys-title-small);
+  margin: 16px 0 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+mat-slide-toggle {
+  margin-bottom: 16px;
+}
+
+.plans {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-error {
+  margin: 16px 0 0;
+}
+
+mat-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  button,
+  a {
+    width: 100%;
+  }
+}
