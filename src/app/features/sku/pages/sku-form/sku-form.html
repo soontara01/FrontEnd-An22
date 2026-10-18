@@ -99,7 +99,11 @@
 
     <!-- Sale status, VAT, cost, stock -->
     <mat-card appearance="outlined">
-      <mat-card-header><mat-card-title>การขาย ภาษี และต้นทุน</mat-card-title></mat-card-header>
+      <mat-card-header>
+        <mat-card-title>{{
+          canSeeCost() ? 'การขาย ภาษี และต้นทุน' : 'การขาย ภาษี และสต็อก'
+        }}</mat-card-title>
+      </mat-card-header>
       <mat-card-content class="grid">
         <mat-form-field appearance="outline">
           <mat-label>สถานะการขาย</mat-label>
@@ -121,19 +125,23 @@
           <mat-hint>ราคาขายในเมนูจัดการราคาเป็นราคารวม VAT</mat-hint>
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
-          <mat-label>{{ isService() ? 'ต้นทุนต่อครั้ง' : 'ต้นทุนมาตรฐาน' }} (ไม่รวม VAT)</mat-label>
-          <input matInput type="number" min="0" formControlName="cost" />
-          <span matTextSuffix>฿ / {{ baseUnit() }}</span>
-          <mat-hint>{{
-            isService()
-              ? 'ใช้เป็นต้นทุนขายทุกครั้งที่ขาย (0 = ไม่มีต้นทุน)'
-              : 'ใช้ตั้งต้นตอนรับเข้า และประมาณกำไรเมื่อยังไม่มีสต็อก'
-          }}</mat-hint>
-          @if (moneyErrorText(form.controls.cost, 'ต้นทุน'); as message) {
-            <mat-error>{{ message }}</mat-error>
-          }
-        </mat-form-field>
+        @if (canSeeCost()) {
+          <mat-form-field appearance="outline">
+            <mat-label
+              >{{ isService() ? 'ต้นทุนต่อครั้ง' : 'ต้นทุนมาตรฐาน' }} (ไม่รวม VAT)</mat-label
+            >
+            <input matInput type="number" min="0" formControlName="cost" />
+            <span matTextSuffix>฿ / {{ baseUnit() }}</span>
+            <mat-hint>{{
+              isService()
+                ? 'ใช้เป็นต้นทุนขายทุกครั้งที่ขาย (0 = ไม่มีต้นทุน)'
+                : 'ใช้ตั้งต้นตอนรับเข้า และประมาณกำไรเมื่อยังไม่มีสต็อก'
+            }}</mat-hint>
+            @if (moneyErrorText(form.controls.cost, 'ต้นทุน'); as message) {
+              <mat-error>{{ message }}</mat-error>
+            }
+          </mat-form-field>
+        }
 
         @if (!isService()) {
           <mat-form-field appearance="outline">
@@ -172,11 +180,13 @@
         </div>
 
         @if (!isService()) {
-          <div class="readonly">
-            <div class="text-muted">ต้นทุนเฉลี่ยจริง</div>
-            <strong>{{ avgCost() | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
-            <div class="text-muted small">คำนวณจากการรับเข้า (ดูบัตรสต็อกที่เมนูคลังสินค้า)</div>
-          </div>
+          @if (canSeeCost()) {
+            <div class="readonly">
+              <div class="text-muted">ต้นทุนเฉลี่ยจริง</div>
+              <strong>{{ avgCost() | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
+              <div class="text-muted small">คำนวณจากการรับเข้า (ดูบัตรสต็อกที่เมนูคลังสินค้า)</div>
+            </div>
+          }
 
           <div class="readonly">
             <div class="text-muted">สต็อกคงเหลือ</div>
@@ -311,14 +321,16 @@
                 <mat-label>รหัสสินค้าของผู้จำหน่าย</mat-label>
                 <input matInput formControlName="supplierSku" class="mono" />
               </mat-form-field>
-              <mat-form-field appearance="outline" class="narrow">
-                <mat-label>ราคาซื้อ (ไม่รวม VAT)</mat-label>
-                <input matInput type="number" min="0" formControlName="cost" />
-                <span matTextSuffix>฿</span>
-                @if (moneyErrorText(row.controls.cost, 'ราคาซื้อ'); as message) {
-                  <mat-error>{{ message }}</mat-error>
-                }
-              </mat-form-field>
+              @if (canSeeCost()) {
+                <mat-form-field appearance="outline" class="narrow">
+                  <mat-label>ราคาซื้อ (ไม่รวม VAT)</mat-label>
+                  <input matInput type="number" min="0" formControlName="cost" />
+                  <span matTextSuffix>฿</span>
+                  @if (moneyErrorText(row.controls.cost, 'ราคาซื้อ'); as message) {
+                    <mat-error>{{ message }}</mat-error>
+                  }
+                </mat-form-field>
+              }
               <mat-form-field appearance="outline" class="narrow">
                 <mat-label>Lead time</mat-label>
                 <input matInput type="number" min="0" formControlName="leadTimeDays" />

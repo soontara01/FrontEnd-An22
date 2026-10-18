@@ -57,6 +57,15 @@ describe('Excel goods receipt', () => {
     expect(pieces).toMatchObject({ errors: [], baseQty: 5, unitCostBase: 90 }); // main supplier cost
   });
 
+  it('has no default cost for who cannot see cost: a blank cost is an error (E46)', () => {
+    const [typed, blank] = validateReceiveRows(
+      [row(2, { sku: 'MS-1', qty: '5', cost: '95' }), row(3, { sku: 'MS-1', qty: '5' })],
+      { ...ctx, seeCost: false },
+    );
+    expect(typed).toMatchObject({ errors: [], unitCostBase: 95 });
+    expect(blank.errors).toEqual(['กรุณากรอกต้นทุน']);
+  });
+
   it('validates serial rows (format, duplicates in file, already in stock) and SKU status', () => {
     const lines = validateReceiveRows(
       [

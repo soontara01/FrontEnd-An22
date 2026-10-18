@@ -88,6 +88,11 @@ export default class SkuForm implements OnInit {
   protected readonly store = inject(SkuStore);
   /** Reorder levels belong to the working branch (E13). */
   protected readonly branch = inject(AuthService).currentBranch;
+  /**
+   * Standard cost, purchase prices and the average only for who may see cost (E43): otherwise the
+   * cost controls stay disabled (no validation) and the server keeps the stored costs (E44).
+   */
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
   private readonly fb = inject(NonNullableFormBuilder);
@@ -240,6 +245,7 @@ export default class SkuForm implements OnInit {
   }
 
   ngOnInit(): void {
+    if (!this.canSeeCost()) this.form.controls.cost.disable({ emitEvent: false });
     // Needed for duplicate checks and the category list when this page is opened directly.
     this.store.load();
 
@@ -387,7 +393,7 @@ export default class SkuForm implements OnInit {
     return this.fb.group({
       supplierId: this.fb.control<number | null>(l.supplierId, Validators.required),
       supplierSku: [l.supplierSku],
-      cost: [l.cost, moneyValidator],
+      cost: [{ value: l.cost, disabled: !this.canSeeCost() }, moneyValidator],
       leadTimeDays: [l.leadTimeDays, [Validators.required, Validators.min(0), Validators.max(365)]],
       moq: [l.moq, [Validators.required, Validators.min(0)]],
       isMain: [l.isMain],

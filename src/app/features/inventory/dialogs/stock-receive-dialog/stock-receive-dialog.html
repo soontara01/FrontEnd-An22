@@ -5,8 +5,10 @@
     <div class="product">
       <span class="mono">{{ product.sku }}</span> — {{ product.name }}
       <div class="text-muted small">
-        คงเหลือ {{ product.stock }} {{ product.unit }} · ต้นทุนเฉลี่ย
-        {{ product.avgCost | number: '1.2-2' }} ฿
+        คงเหลือ {{ product.stock }} {{ product.unit }}
+        @if (canSeeCost()) {
+          · ต้นทุนเฉลี่ย {{ product.avgCost | number: '1.2-2' }} ฿
+        }
       </div>
     </div>
 
@@ -48,12 +50,14 @@
         รับเข้า <strong>{{ baseQty() }} {{ product.unit }}</strong> · มูลค่า
         <strong>{{ total() | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}</strong>
       </div>
-      <div class="text-muted small">
-        ต้นทุนเฉลี่ยใหม่ (ถัวเฉลี่ยเคลื่อนที่):
-        {{ product.avgCost | number: '1.2-2' }} →
-        <strong>{{ newAvg() | number: '1.2-2' }}</strong> ฿ /
-        {{ product.unit }}
-      </div>
+      @if (canSeeCost()) {
+        <div class="text-muted small">
+          ต้นทุนเฉลี่ยใหม่ (ถัวเฉลี่ยเคลื่อนที่):
+          {{ product.avgCost | number: '1.2-2' }} →
+          <strong>{{ newAvg() | number: '1.2-2' }}</strong> ฿ /
+          {{ product.unit }}
+        </div>
+      }
     </div>
   </mat-dialog-content>
 

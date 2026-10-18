@@ -1,6 +1,6 @@
 # แผนงานถัดไปหลัง SaaS ขั้น 6 (เริ่ม 2026-10-18)
 
-สถานะ: **กำลังทำ B** — A เสร็จ 2026-10-18 (PR #3 merge แล้ว); B ทำบน branch `feature/p5-hide-cost`: B1 เสร็จ (E43–E46)
+สถานะ: **กำลังทำ B** — A เสร็จ 2026-10-18 (PR #3 merge แล้ว); B ทำบน branch `feature/p5-hide-cost`: B1–B2 เสร็จ (E43–E46)
 งานในไฟล์นี้: **A** ปิดงานค้างของขั้น 6 → **B** ซ่อนทุน / กำไรจาก role user (P5) → **C** ส่งต่อหลังบ้าน
 แต่ละขั้นย่อย build + test + lint ผ่าน → prettier เฉพาะไฟล์ที่แก้ (อย่าให้โดน `docs/test-data`) → อัปเดต docs → commit
 
@@ -72,7 +72,7 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
 ### ขั้นย่อย
 
 - **B1** ✅ 2026-10-18 กติกา + server (`cost-visibility.model.ts`, `hideCost()` ใน `tenantResponse()`, `withStoredCosts()`, `POST /sales/cost-check`, session `canSeeCost`, สวิตช์ในตั้งค่าบริษัท): helper ตัด field ทุนตาม role ใน mock, spec ว่า user ได้ `null` ทุก endpoint ที่มีทุน, admin ได้เหมือนเดิม
-- **B2** หน้าจอคลัง + SKU + Excel
+- **B2** ✅ 2026-10-18 หน้าจอคลัง + SKU + Excel (รายการคลัง, บัตรสต็อกเหลือแต่จำนวน, สต็อกทุกสาขา, ประวัติ Serial, แนะนำสั่งซื้อ, dialog รับ / serial ไม่มีทุนตั้งต้น, นำเข้าใบรับต้องกรอกทุน, export คลัง / SKU ไม่มีคอลัมน์ทุน, ฟอร์ม / หน้ารายละเอียด SKU; dialog ตัดสต็อกเป็นของ admin อยู่แล้ว)
 - **B3** หน้าจอราคา / โปร (margin) + การขาย (กำไร, หน้าบิล)
 - **B4** ทดสอบบนหน้าจอ (`somchai` เปิดเมนูคลัง / SKU ชั่วคราวผ่าน `/users/menu-access` แล้วคืนค่า) + docs
 

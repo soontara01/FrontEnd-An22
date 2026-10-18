@@ -186,9 +186,17 @@ const codeOf = <T extends string>(map: Record<string, T>, value: T): string =>
 export const formatPacks = (packs: PackUnit[]): string =>
   packs.map((p) => `${p.unit}:${p.factor}:${p.barcode}`).join('; ');
 
-function skuSheet(workbook: Workbook): Worksheet {
+/** Columns with a cost (standard / average) — left out for who cannot see cost (E46). */
+const COST_KEYS: ReadonlySet<string> = new Set(['cost', 'avgCost']);
+
+/** The SKU sheet's columns for this user (E43 / E46). */
+export const skuColumns = (seeCost = true): Column[] =>
+  SKU_COLUMNS.filter((c) => seeCost || !COST_KEYS.has(c.key));
+
+function skuSheet(workbook: Workbook, seeCost: boolean): Worksheet {
+  const columns = skuColumns(seeCost);
   const sheet = workbook.addWorksheet('SKU');
-  sheet.columns = SKU_COLUMNS.map((c) => ({
+  sheet.columns = columns.map((c) => ({
     header: c.header,
     key: c.key,
     width: c.width,
@@ -197,7 +205,7 @@ function skuSheet(workbook: Workbook): Worksheet {
       ? { numFmt: '@' }
       : {},
   }));
-  styleHeaderRow(sheet, new Set(SKU_COLUMNS.flatMap((c, i) => (c.info ? [i + 1] : []))));
+  styleHeaderRow(sheet, new Set(columns.flatMap((c, i) => (c.info ? [i + 1] : []))));
   sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: 1 }];
   return sheet;
 }
@@ -224,10 +232,12 @@ export async function exportSkusToExcel(
   products: Product[],
   categories: Category[],
   suppliers: Supplier[],
+  /** false: no cost columns (E46) */
+  seeCost = true,
 ): Promise<Blob> {
   const ExcelJS = await loadExcel();
   const workbook = new ExcelJS.Workbook();
-  const sheet = skuSheet(workbook);
+  const sheet = skuSheet(workbook, seeCost);
   for (const p of products) {
     const main = mainSupplier(p);
     sheet.addRow({
@@ -262,10 +272,14 @@ export async function exportSkusToExcel(
 }
 
 /** Empty import template with an example row, column help and category codes. */
-export async function buildImportTemplate(categories: Category[]): Promise<Blob> {
+export async function buildImportTemplate(
+  categories: Category[],
+  /** false: no cost column — SKUs keep their cost, new ones start at 0 (E44 / E46) */
+  seeCost = true,
+): Promise<Blob> {
   const ExcelJS = await loadExcel();
   const workbook = new ExcelJS.Workbook();
-  const sheet = skuSheet(workbook);
+  const sheet = skuSheet(workbook, seeCost);
   const leaf = categories.find((c) => c.active && isLeaf(categories, c.id));
   sheet.addRow({
     sku: 'EX-001',
@@ -292,7 +306,7 @@ export async function buildImportTemplate(categories: Category[]): Promise<Blob>
     { header: 'คำอธิบาย', key: 'help', width: 80 },
   ];
   help.getRow(1).font = { bold: true };
-  SKU_COLUMNS.forEach((c) => help.addRow({ header: c.header, help: c.help }));
+  skuColumns(seeCost).forEach((c) => help.addRow({ header: c.header, help: c.help }));
   help.addRow({});
   help.addRow({
     header: 'หมายเหตุ',

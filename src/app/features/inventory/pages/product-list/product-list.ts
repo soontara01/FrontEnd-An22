@@ -74,16 +74,13 @@ export default class ProductList {
   /** Every figure on this page is the working branch's (D1, E19). */
   protected readonly branch = inject(AuthService).currentBranch;
 
-  protected readonly columns = [
-    'sku',
-    'name',
-    'category',
-    'currentPrice',
-    'stock',
-    'avgCost',
-    'level',
-    'actions',
-  ];
+  /** Cost / value only for who may see them (E43); the server sends them as null otherwise. */
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
+  protected readonly columns = computed(() =>
+    ['sku', 'name', 'category', 'currentPrice', 'stock', 'avgCost', 'level', 'actions'].filter(
+      (c) => c !== 'avgCost' || this.canSeeCost(),
+    ),
+  );
   protected readonly dataSource = new MatTableDataSource<Product>([]);
   protected readonly filterText = signal('');
   protected readonly lowOnly = signal(false);
@@ -139,7 +136,13 @@ export default class ProductList {
         ? (await firstValueFrom(forkJoin(serialIds.map((id) => this.store.serials(id))))).flat()
         : [];
       const code = this.branch()?.code ?? '';
-      const blob = await inventoryXlsx(rows, serials, new Date(), code && `สาขา ${code}`);
+      const blob = await inventoryXlsx(
+        rows,
+        serials,
+        new Date(),
+        code && `สาขา ${code}`,
+        this.canSeeCost(),
+      );
       saveBlob(blob, `${timestampedName(code ? `inventory-${code}` : 'inventory')}.xlsx`);
     } catch (err) {
       // A failed serial lookup was already shown by errorInterceptor; anything else is a bug.
@@ -157,11 +160,16 @@ export default class ProductList {
     return SKU_STATUS_BADGE[p.saleStatus];
   }
 
+  /** ' <label> 12.34 ฿' for who sees cost, else '' (E43). */
+  private atCost(p: Product, label: string): string {
+    return this.canSeeCost() ? ` ${label} ${p.avgCost.toFixed(2)} ฿` : '';
+  }
+
   /** Non-serial issue by quantity, at the current average cost. */
   protected openStockIssue(product: Product): void {
     this.openDialog(StockIssueDialog, product, (p) =>
       this.notify.success(
-        `${p.sku}: ตัดออก ${product.stock - p.stock} ${p.unit} ที่ทุน ${p.avgCost.toFixed(2)} ฿ · คงเหลือ ${p.stock}`,
+        `${p.sku}: ตัดออก ${product.stock - p.stock} ${p.unit}${this.atCost(p, 'ที่ทุน')} · คงเหลือ ${p.stock}`,
       ),
     );
   }
@@ -170,7 +178,7 @@ export default class ProductList {
   protected openStockReceive(product: Product): void {
     this.openDialog(StockReceiveDialog, product, (p) =>
       this.notify.success(
-        `${p.sku}: รับเข้าแล้ว คงเหลือ ${p.stock} ${p.unit} · ทุนเฉลี่ย ${p.avgCost.toFixed(2)} ฿`,
+        `${p.sku}: รับเข้าแล้ว คงเหลือ ${p.stock} ${p.unit}${this.atCost(p, '· ทุนเฉลี่ย')}`,
       ),
     );
   }

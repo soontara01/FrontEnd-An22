@@ -4,6 +4,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import { Observable, catchError, concatMap, firstValueFrom, forkJoin, from, map, of } from 'rxjs';
 import { Product } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
@@ -49,6 +50,8 @@ interface SaveResult {
 export default class ReceiveImport {
   protected readonly store = inject(InventoryStore);
   private readonly notify = inject(NotificationService);
+  /** Without the right to see cost there is no default cost: every row needs one (E46). */
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
 
   protected readonly step = signal<Step>('pick');
   protected readonly busy = signal(false);
@@ -101,7 +104,10 @@ export default class ReceiveImport {
   protected async downloadTemplate(): Promise<void> {
     this.busy.set(true);
     try {
-      saveBlob(await buildReceiveTemplate(this.store.products()), 'receive-template.xlsx');
+      saveBlob(
+        await buildReceiveTemplate(this.store.products(), this.canSeeCost()),
+        'receive-template.xlsx',
+      );
     } finally {
       this.busy.set(false);
     }
@@ -128,7 +134,9 @@ export default class ReceiveImport {
         ),
       ];
       const inStockSerials = await firstValueFrom(this.loadInStockSerials(serialIds));
-      this.lines.set(validateReceiveRows(raw, { products, inStockSerials }));
+      this.lines.set(
+        validateReceiveRows(raw, { products, inStockSerials, seeCost: this.canSeeCost() }),
+      );
       this.fileName.set(file.name);
       this.results.set(new Map());
       this.onlyErrors.set(this.errorCount() > 0);

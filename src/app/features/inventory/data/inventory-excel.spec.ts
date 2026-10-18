@@ -96,4 +96,42 @@ describe('inventory Excel', () => {
     expect(value('C6')).toBe('รวม 2 เครื่อง');
     expect(value('E6')).toBe(30000);
   });
+
+  it('leaves the cost columns out for who cannot see cost (E46)', async () => {
+    const unit: SerialNumber = {
+      id: 1,
+      productId: 1,
+      branchId: 1,
+      serial: 'SN-0001',
+      status: 'in_stock',
+      receivedAt: '2026-10-01T03:00:00.000Z',
+      removedAt: null,
+      note: 'INV-1',
+      cost: 15000,
+    };
+    const blob = await inventoryXlsx(products, [unit], new Date(), '', false);
+    const ExcelJS = await loadExcel();
+    const book = new ExcelJS.Workbook();
+    await book.xlsx.load(await blob.arrayBuffer());
+    const stock = book.getWorksheet('คลังสินค้า')!;
+    const serials = book.getWorksheet('Serial')!;
+    const headers = (sheet: typeof stock) =>
+      (sheet.getRow(3).values as unknown[]).filter((v) => v != null);
+
+    expect(headers(stock)).not.toContain('ต้นทุนเฉลี่ย');
+    expect(headers(stock)).not.toContain('มูลค่าทุน');
+    expect(headers(stock).at(-1)).toBe('มูลค่าตามราคาขาย');
+    expect(stock.getCell('M4').value).toBe(39800); // two columns to the left
+    expect(stock.getCell('M6').value).toBe(39800);
+    expect(headers(serials)).toEqual([
+      'ลำดับ',
+      'SKU',
+      'ชื่อสินค้า',
+      'Serial',
+      'วันที่รับเข้า',
+      'หมายเหตุ',
+    ]);
+    expect(serials.getCell('F4').value).toBe('INV-1');
+    expect(serials.getCell('E5').value).toBeNull(); // no total at cost
+  });
 });
