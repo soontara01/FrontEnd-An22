@@ -3,7 +3,11 @@ import {
   parseBranchScope,
   User,
   canWorkIn,
+  hasAdminRights,
   isCompanyAdmin,
+  isOwner,
+  ownerRoleError,
+  ownerTransferError,
   normalizeUsername,
   passwordError,
   userBranchError,
@@ -168,5 +172,78 @@ describe('branch scope of lists (E23)', () => {
     expect(branchScopeError(1, branchAdmin, branches)).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
     expect(branchScopeError(1, staff, branches)).toBeNull();
     expect(branchScopeError(9, companyAdmin, branches)).toBe('ไม่มีสิทธิ์ดูข้อมูลของสาขานี้');
+  });
+});
+
+describe('owner (E33)', () => {
+  const user = (id: number, role: User['role'], active = true, email = `u${id}@x.test`) => ({
+    id,
+    role,
+    active,
+    email,
+  });
+
+  it('gives the owner every admin right and company-level work', () => {
+    expect(hasAdminRights({ role: 'owner' })).toBe(true);
+    expect(hasAdminRights({ role: 'admin' })).toBe(true);
+    expect(hasAdminRights({ role: 'user' })).toBe(false);
+    expect(isCompanyAdmin({ role: 'owner', allBranches: false })).toBe(true);
+    expect(isCompanyAdmin({ role: 'admin', allBranches: false })).toBe(false);
+    expect(isOwner({ role: 'admin' })).toBe(false);
+  });
+
+  it('never deletes, deactivates or demotes the owner, nor makes one through the form', () => {
+    const users = [user(1, 'owner'), user(2, 'admin'), user(3, 'user')];
+    const update = (id: number, role: User['role'], active = true) =>
+      userChangeError(users, { kind: 'update', id, payload: { role, active } }, 2);
+    expect(userChangeError(users, { kind: 'delete', id: 1 }, 2)).toBe(
+      'ลบเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    );
+    expect(update(1, 'owner', false)).toBe(
+      'ปิดใช้งานเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    );
+    expect(update(1, 'admin')).toBe(
+      'เปลี่ยนสิทธิ์ของเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    );
+    expect(update(3, 'owner')).toBe('ตั้งเจ้าของบริษัทได้ด้วยการโอนความเป็นเจ้าของเท่านั้น');
+    expect(update(1, 'owner')).toBeNull();
+    // the owner counts as an admin: the only admin may step down while an owner stays
+    expect(update(2, 'user')).toBe('ลดสิทธิ์ผู้ดูแลระบบของตัวเองไม่ได้');
+    expect(
+      userChangeError(users, { kind: 'update', id: 2, payload: { role: 'user', active: true } }, 1),
+    ).toBeNull();
+    expect(ownerRoleError(null, 'owner')).not.toBeNull();
+    expect(ownerRoleError(null, 'admin')).toBeNull();
+  });
+
+  it('needs an e-mail for the owner', () => {
+    const payload = { username: 'boss', email: '', role: 'owner' as const };
+    expect(userIdentityError([], payload, null)).toBe(
+      'เจ้าของบริษัทต้องมีอีเมล (ใช้กู้รหัสผ่านและแจ้งเรื่องการเก็บเงิน)',
+    );
+    expect(userIdentityError([], { ...payload, role: 'admin' }, null)).toBeNull();
+  });
+
+  it('hands ownership over only from the owner to another active user with an e-mail', () => {
+    const users = [
+      user(1, 'owner'),
+      user(2, 'admin'),
+      user(3, 'user', false),
+      user(4, 'user', true, ''),
+    ];
+    expect(ownerTransferError(users, { id: 2, role: 'admin' }, 1)).toBe(
+      'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 1)).toBe(
+      'เลือกผู้ใช้อื่นที่จะรับโอน',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 3)).toBe(
+      'ผู้รับโอนต้องเป็นผู้ใช้ที่ใช้งานอยู่',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 4)).toBe(
+      'ผู้รับโอนต้องมีอีเมล — แก้ข้อมูลผู้ใช้ให้มีอีเมลก่อน',
+    );
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 9)).toBe('ไม่พบผู้ใช้ที่จะรับโอน');
+    expect(ownerTransferError(users, { id: 1, role: 'owner' }, 2)).toBeNull();
   });
 });

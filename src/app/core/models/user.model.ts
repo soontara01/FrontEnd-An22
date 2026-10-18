@@ -1,6 +1,16 @@
 import type { Branch } from './company.model';
 
-export type UserRole = 'admin' | 'user';
+/**
+ * `owner` (E33): one per company, every admin right + the company's own account (package, billing,
+ * export, deletion, handing over ownership). `admin` = manager, `user` = cashier / stock clerk.
+ */
+export type UserRole = 'owner' | 'admin' | 'user';
+
+export const ROLE_LABEL: Record<UserRole, string> = {
+  owner: 'เจ้าของบริษัท',
+  admin: 'ผู้ดูแลระบบ',
+  user: 'ผู้ใช้ทั่วไป',
+};
 
 export interface User {
   id: number;
@@ -13,7 +23,7 @@ export interface User {
   active: boolean;
   /** Branches this user may work in (ignored when `allBranches`) */
   branchIds: number[];
-  /** Every branch of the company, now and later (an admin with it = company admin, E5) */
+  /** Every branch of the company, now and later (an admin with it = company admin, E5; owner always) */
   allBranches: boolean;
   createdAt: string;
 }
@@ -23,9 +33,19 @@ export type UserPayload = Omit<User, 'id' | 'createdAt'>;
 /** `POST /users`: a new user needs a password (E10); the API never returns it. */
 export type NewUserPayload = UserPayload & { password: string };
 
-/** Who may do company-level work (branches, company settings, branch-limited promotions — E5 / E6). */
+/** Every admin right (403 rules, approvals, admin screens): an admin or the owner (E33). */
+export const hasAdminRights = (u: Pick<User, 'role'> | null | undefined): boolean =>
+  !!u && (u.role === 'admin' || u.role === 'owner');
+
+/** The company's owner (E33): package, billing, export, deletion, handing over ownership. */
+export const isOwner = (u: Pick<User, 'role'> | null | undefined): boolean => u?.role === 'owner';
+
+/**
+ * Who may do company-level work (branches, company settings, branch-limited promotions — E5 / E6):
+ * an admin of every branch, or the owner.
+ */
 export const isCompanyAdmin = (u: Pick<User, 'role' | 'allBranches'> | null | undefined): boolean =>
-  !!u && u.role === 'admin' && u.allBranches;
+  isOwner(u) || (!!u && u.role === 'admin' && u.allBranches);
 
 /** Whether the user may work in this branch (an inactive branch is never open to anyone). */
 export const canWorkIn = (
@@ -130,7 +150,7 @@ export function usernameError(username: string): string | null {
  */
 export function userIdentityError(
   users: readonly Pick<User, 'id' | 'username' | 'email'>[],
-  payload: Pick<UserPayload, 'username' | 'email'>,
+  payload: Pick<UserPayload, 'username' | 'email'> & Partial<Pick<UserPayload, 'role'>>,
   exceptId: number | null,
 ): string | null {
   const nameProblem = usernameError(payload.username);
@@ -139,11 +159,46 @@ export function userIdentityError(
   const name = normalizeUsername(payload.username);
   if (others.some((u) => normalizeUsername(u.username) === name)) return 'ชื่อผู้ใช้นี้มีอยู่แล้ว';
   const email = payload.email.trim().toLowerCase();
-  if (!email) return null;
+  if (!email) return payload.role === 'owner' ? OWNER_EMAIL_REQUIRED : null;
   if (!EMAIL_PATTERN.test(email)) return 'รูปแบบอีเมลไม่ถูกต้อง';
   if (others.some((u) => u.email.trim().toLowerCase() === email)) {
     return 'อีเมลนี้มีผู้ใช้อื่นใช้แล้ว';
   }
+  return null;
+}
+
+const OWNER_EMAIL_REQUIRED = 'เจ้าของบริษัทต้องมีอีเมล (ใช้กู้รหัสผ่านและแจ้งเรื่องการเก็บเงิน)';
+
+/**
+ * The owner role changes only by handing ownership over (`ownerTransferError()`), never through
+ * the user form / `POST`·`PUT /users`: nobody becomes owner there and the owner stays owner.
+ * `before` null = a new user.
+ */
+export function ownerRoleError(before: UserRole | null, after: UserRole): string | null {
+  if (after === 'owner' && before !== 'owner') {
+    return 'ตั้งเจ้าของบริษัทได้ด้วยการโอนความเป็นเจ้าของเท่านั้น';
+  }
+  if (before === 'owner' && after !== 'owner') {
+    return 'เปลี่ยนสิทธิ์ของเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน';
+  }
+  return null;
+}
+
+/**
+ * Handing ownership over (E33, `POST /company/owner`): only the owner, to another active user of
+ * the company who has an e-mail. The new owner gets every branch; the old one becomes an admin.
+ */
+export function ownerTransferError(
+  users: readonly Pick<User, 'id' | 'role' | 'active' | 'email'>[],
+  actor: Pick<User, 'id' | 'role'>,
+  targetId: number,
+): string | null {
+  if (!isOwner(actor)) return 'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท';
+  const target = users.find((u) => u.id === targetId);
+  if (!target) return 'ไม่พบผู้ใช้ที่จะรับโอน';
+  if (target.id === actor.id) return 'เลือกผู้ใช้อื่นที่จะรับโอน';
+  if (!target.active) return 'ผู้รับโอนต้องเป็นผู้ใช้ที่ใช้งานอยู่';
+  if (!target.email.trim()) return 'ผู้รับโอนต้องมีอีเมล — แก้ข้อมูลผู้ใช้ให้มีอีเมลก่อน';
   return null;
 }
 
@@ -154,7 +209,9 @@ export type UserChange =
 
 /**
  * Admin-account rule for the user form and the server (the caller must already be an admin):
- * nobody may demote / deactivate / delete themselves, and the last active admin always stays.
+ * nobody may demote / deactivate / delete themselves, the last active admin always stays, and the
+ * owner is never deactivated / deleted (E33 — hand ownership over first). Owner and admin both
+ * count as admins (`hasAdminRights()`).
  */
 export function userChangeError(
   users: readonly Pick<User, 'id' | 'role' | 'active'>[],
@@ -164,17 +221,28 @@ export function userChangeError(
   const target = users.find((u) => u.id === change.id);
   if (!target) return null;
   const removesAdmin =
-    change.kind === 'delete' || change.payload.role !== 'admin' || !change.payload.active;
+    change.kind === 'delete' || !hasAdminRights(change.payload) || !change.payload.active;
   const removesAccess = change.kind === 'delete' || !change.payload.active;
   if (change.id === actorId) {
     if (change.kind === 'delete') return 'ลบบัญชีของตัวเองไม่ได้';
-    if (target.role === 'admin' && change.payload.role !== 'admin') {
+    if (hasAdminRights(target) && !hasAdminRights(change.payload)) {
       return 'ลดสิทธิ์ผู้ดูแลระบบของตัวเองไม่ได้';
     }
     if (removesAccess) return 'ปิดใช้งานบัญชีของตัวเองไม่ได้';
   }
-  if (target.role === 'admin' && target.active && removesAdmin) {
-    const others = users.filter((u) => u.id !== target.id && u.role === 'admin' && u.active);
+  if (isOwner(target)) {
+    if (change.kind === 'delete')
+      return 'ลบเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน';
+    if (!change.payload.active) {
+      return 'ปิดใช้งานเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน';
+    }
+  }
+  if (change.kind === 'update') {
+    const roleProblem = ownerRoleError(target.role, change.payload.role);
+    if (roleProblem) return roleProblem;
+  }
+  if (hasAdminRights(target) && target.active && removesAdmin) {
+    const others = users.filter((u) => u.id !== target.id && hasAdminRights(u) && u.active);
     if (others.length === 0) return 'ต้องมีผู้ดูแลระบบที่ใช้งานอยู่อย่างน้อย 1 คน';
   }
   return null;

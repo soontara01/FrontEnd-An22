@@ -35,6 +35,7 @@ import {
   terminalError,
   terminalLabel,
   todayIso,
+  hasAdminRights,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
 import { StorageService } from '@core/services/storage.service';
@@ -345,7 +346,7 @@ export class PosStore {
     return this.api.verify(credentials).pipe(
       map(({ user }) => {
         const shift = this._shift();
-        if (shift && user.name !== shift.cashier && user.role !== 'admin') {
+        if (shift && user.name !== shift.cashier && !hasAdminRights(user)) {
           return `ปลดล็อกได้เฉพาะ ${shift.cashier} หรือผู้ดูแลระบบ`;
         }
         this.setLock(null);

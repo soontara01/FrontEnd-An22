@@ -14,7 +14,13 @@ import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
-import { User, userChangeError, userScopeError } from '@core/models';
+import {
+  ROLE_LABEL,
+  User,
+  ownerTransferError,
+  userChangeError,
+  userScopeError,
+} from '@core/models';
 import { NotificationService } from '@core/services/notification.service';
 import { openConfirm } from '@shared/components/confirm-dialog/confirm-dialog';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
@@ -24,6 +30,7 @@ import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { UsersStore } from '../../data/users.store';
+import { OwnerTransferDialog } from '../../dialogs/owner-transfer-dialog/owner-transfer-dialog';
 import { PasswordDialog } from '../../dialogs/password-dialog/password-dialog';
 
 @Component({
@@ -92,6 +99,22 @@ export default class UserList {
   protected scopeBlocker(user: User): string {
     const actor = this.auth.user();
     return (actor && userScopeError(actor, user, user)) ?? '';
+  }
+
+  protected readonly isOwner = this.auth.isOwner;
+
+  protected roleText(user: User): string {
+    return ROLE_LABEL[user.role] ?? user.role;
+  }
+
+  /** Why ownership cannot go to this user ('' = can): only the owner, to an active user with an e-mail. */
+  protected transferBlocker(user: User): string {
+    const actor = this.auth.user();
+    return (actor && ownerTransferError(this.store.users(), actor, user.id)) ?? '';
+  }
+
+  protected transferOwner(user: User): void {
+    this.dialog.open(OwnerTransferDialog, { data: user, width: '440px' });
   }
 
   protected setPassword(user: User): void {

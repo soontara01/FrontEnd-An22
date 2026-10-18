@@ -29,6 +29,11 @@ export class UsersApi {
     return this.api.put<null>(`users/${id}/password`, { password });
   }
 
+  /** The owner hands ownership over (E33), confirming with their own password. */
+  transferOwner(userId: number, password: string): Observable<User[]> {
+    return this.api.post<User[]>('company/owner', { userId, password });
+  }
+
   remove(id: number): Observable<void> {
     return this.api.delete(`users/${id}`);
   }

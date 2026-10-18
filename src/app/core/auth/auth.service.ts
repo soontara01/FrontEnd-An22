@@ -39,16 +39,21 @@ export class AuthService {
   /** Company code remembered on this device ('' = none). */
   readonly companyCode = this._companyCode.asReadonly();
   readonly isLoggedIn = computed(() => !!this._token() && !!this._company());
-  /** Admin-only screens and buttons (the server checks the same rules → 403). */
-  readonly isAdmin = computed(() => this._user()?.role === 'admin');
   /**
-   * Admin of every branch = company-level work: branches, company settings, … (E5 / E6). Same rule
-   * as `isCompanyAdmin()` in `user.model.ts`, inlined: importing that file adds ~3 kB to the
-   * initial bundle.
+   * Admin-only screens and buttons (the server checks the same rules → 403): an admin or the owner.
+   * Same rules as `hasAdminRights()` / `isOwner()` / `isCompanyAdmin()` in `user.model.ts`,
+   * inlined: importing that file adds ~3 kB to the initial bundle.
    */
+  readonly isAdmin = computed(() => {
+    const role = this._user()?.role;
+    return role === 'admin' || role === 'owner';
+  });
+  /** The company's owner (E33): package, billing, export, deletion, handing over ownership. */
+  readonly isOwner = computed(() => this._user()?.role === 'owner');
+  /** Admin of every branch or the owner = company-level work: branches, company settings, … (E5 / E6). */
   readonly isCompanyAdmin = computed(() => {
     const user = this._user();
-    return user?.role === 'admin' && !!user.allBranches;
+    return this.isOwner() || (user?.role === 'admin' && !!user.allBranches);
   });
   /** The working branch (sent as `X-Branch-Id`); null = not chosen yet (only one → automatic). */
   readonly currentBranch = computed(

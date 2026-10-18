@@ -3081,3 +3081,133 @@ describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
     expect(await statusOf(call('GET', 'products', undefined, DEMO_ADMIN))).toBe(200);
   });
 });
+
+describe('mockBackendInterceptor – owner (E33)', () => {
+  let http: HttpClient;
+  const OWNER = mockToken(1, 1);
+  const STAFF = mockToken(1, 2);
+
+  const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${url}`, {
+        body,
+        headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
+      }),
+    );
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const newAdmin = {
+    username: 'mgr',
+    name: 'ผู้จัดการ',
+    email: 'mgr@x.test',
+    role: 'admin',
+    active: true,
+    allBranches: true,
+    branchIds: [],
+    password: '1234',
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('makes the first admin of every branch of older data the owner, once', async () => {
+    localStorage.setItem(
+      'an22.mock.db',
+      JSON.stringify({
+        users: [
+          {
+            id: 1,
+            username: 'boss',
+            name: 'Boss',
+            email: 'b@x.test',
+            role: 'admin',
+            active: true,
+            branchIds: [],
+            allBranches: true,
+            createdAt: '',
+          },
+          {
+            id: 2,
+            username: 'staff',
+            name: 'Staff',
+            email: '',
+            role: 'user',
+            active: true,
+            branchIds: [1],
+            allBranches: false,
+            createdAt: '',
+          },
+        ],
+      }),
+    );
+    const users = await call<User[]>('GET', 'users');
+    expect(users.map((u) => u.role)).toEqual(['owner', 'user']);
+    expect(JSON.parse(localStorage.getItem('an22.mock.db') ?? '{}').users[0].role).toBe('owner');
+  });
+
+  it('never makes an owner through the user form, nor deletes / deactivates / demotes one', async () => {
+    expect(await failure(call('POST', 'users', { ...newAdmin, role: 'owner' }))).toEqual([
+      400,
+      'ตั้งเจ้าของบริษัทได้ด้วยการโอนความเป็นเจ้าของเท่านั้น',
+    ]);
+    const mgr = await call<User>('POST', 'users', newAdmin);
+    const MGR = mockToken(1, mgr.id);
+    const owner = await call<User>('GET', 'users/1');
+    expect(await failure(call('DELETE', 'users/1', undefined, MGR))).toEqual([
+      400,
+      'ลบเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    ]);
+    expect(await failure(call('PUT', 'users/1', { ...owner, role: 'admin' }, MGR))).toEqual([
+      400,
+      'เปลี่ยนสิทธิ์ของเจ้าของบริษัทไม่ได้ — โอนความเป็นเจ้าของให้ผู้ใช้อื่นก่อน',
+    ]);
+    expect((await failure(call('PUT', 'users/1', { ...owner, email: '' })))?.[1]).toBe(
+      'เจ้าของบริษัทต้องมีอีเมล (ใช้กู้รหัสผ่านและแจ้งเรื่องการเก็บเงิน)',
+    );
+    // the owner keeps every branch whatever the form sends
+    const saved = await call<User>('PUT', 'users/1', {
+      ...owner,
+      allBranches: false,
+      branchIds: [2],
+    });
+    expect([saved.allBranches, saved.branchIds]).toEqual([true, []]);
+  });
+
+  it('hands ownership over with the owner password; the old owner becomes an admin', async () => {
+    const mgr = await call<User>('POST', 'users', newAdmin);
+    const transfer = (userId: number, password: string, token = OWNER) =>
+      call<User[]>('POST', 'company/owner', { userId, password }, token);
+    const noMail = await call<User>('POST', 'users', {
+      ...newAdmin,
+      username: 'nomail',
+      email: '',
+      role: 'user',
+      allBranches: false,
+      branchIds: [1],
+    });
+    expect(await failure(transfer(mgr.id, 'admin', STAFF))).toEqual([
+      403,
+      'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท',
+    ]);
+    expect(await failure(transfer(mgr.id, 'wrong'))).toEqual([400, 'รหัสผ่านไม่ถูกต้อง']);
+    expect(await failure(transfer(noMail.id, 'admin'))).toEqual([
+      400,
+      'ผู้รับโอนต้องมีอีเมล — แก้ข้อมูลผู้ใช้ให้มีอีเมลก่อน',
+    ]);
+    const users = await transfer(mgr.id, 'admin');
+    const roleOf = (id: number) => users.find((u) => u.id === id)?.role;
+    expect([roleOf(1), roleOf(mgr.id)]).toEqual(['admin', 'owner']);
+    expect(await failure(transfer(1, 'admin'))).toEqual([
+      403,
+      'โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท',
+    ]);
+  });
+});

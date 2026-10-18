@@ -108,8 +108,7 @@ export default class TaxInvoiceForm {
     const info = this.store.storeInfo();
     if (!this.sale.hasValue() || !info) return null;
     if (this.isReissue()) {
-      if (this.auth.user()?.role !== 'admin')
-        return 'เฉพาะผู้ดูแลระบบ (admin) ยกเลิกใบกำกับภาษีได้';
+      if (!this.auth.isAdmin()) return 'เฉพาะผู้ดูแลระบบ (admin) ยกเลิกใบกำกับภาษีได้';
       if (!this.current.hasValue()) return null;
       return reissueError(this.sale.value(), this.current.value(), this.buyer(), this.reason());
     }

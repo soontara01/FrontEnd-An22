@@ -12,6 +12,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '@core/auth/auth.service';
 import {
+  ROLE_LABEL,
   UserRole,
   passwordError,
   userBranchError,
@@ -57,7 +58,7 @@ export default class UserForm implements OnInit {
 
   protected readonly loading = signal(false);
   protected readonly saving = signal(false);
-  protected readonly roles: UserRole[] = ['admin', 'user'];
+  protected readonly roleLabel = ROLE_LABEL;
 
   protected readonly form = inject(NonNullableFormBuilder).group({
     username: [''],
@@ -70,11 +71,21 @@ export default class UserForm implements OnInit {
     password: [''],
   });
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+  /** Editing the owner (E33): the role and "every branch" are locked — ownership is handed over. */
+  protected readonly isOwnerAccount = signal(false);
+  protected readonly roles = computed<UserRole[]>(() =>
+    this.isOwnerAccount() ? ['owner'] : ['admin', 'user'],
+  );
 
   /** Username / e-mail, same rule as the server (`userIdentityError()`: format, unique — B5). */
   protected readonly identityProblem = computed(() => {
     const { username = '', email = '' } = this.value();
-    return userIdentityError(this.store.users(), { username, email }, Number(this.id()) || null);
+    const role = this.form.controls.role.value;
+    return userIdentityError(
+      this.store.users(),
+      { username, email, role },
+      Number(this.id()) || null,
+    );
   });
 
   /** Branch rights + password (new users only), same rules as the server (E6 / E10). */
@@ -91,7 +102,8 @@ export default class UserForm implements OnInit {
   /** Same rule as the server: not yourself, never the last active admin (`userChangeError()`). */
   protected readonly problem = computed(() => {
     if (!this.isEdit()) return null;
-    const { role = 'user', active = true } = this.value();
+    const { active = true } = this.value();
+    const role = this.form.controls.role.value;
     return userChangeError(
       this.store.users(),
       { kind: 'update', id: Number(this.id()), payload: { role, active } },
@@ -107,6 +119,11 @@ export default class UserForm implements OnInit {
     this.store.getById(id).subscribe({
       next: (user) => {
         this.form.patchValue(user);
+        if (user.role === 'owner') {
+          this.isOwnerAccount.set(true);
+          this.form.controls.role.disable();
+          this.form.controls.allBranches.disable();
+        }
         this.before.set({ allBranches: user.allBranches, branchIds: user.branchIds });
         this.loading.set(false);
       },

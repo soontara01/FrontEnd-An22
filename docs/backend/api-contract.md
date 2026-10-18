@@ -45,7 +45,9 @@ claims: `sub` (userId), `tenantId` (companyId), `role`, `branchIds` หรือ
 
 `POST /auth/login` ผิด → 401 (หน้าบ้านยกเว้น path นี้ไม่ logout) · token ที่ไม่มี tenant (ก่อน SaaS) หรือบริษัทถูกระงับ → 401 · `POST /auth/verify` ผิด → **400 เสมอ** (ห้าม 401: จะ logout คนที่ยืนอยู่หน้าเครื่อง)
 
-## สิทธิ์ (admin / user)
+## สิทธิ์ (owner / admin / user)
+
+role `owner` (E33, 1 คนต่อบริษัท) ได้ทุกอย่างที่ admin ได้ (`hasAdminRights()`) และนับเป็น admin บริษัท (`isCompanyAdmin()`) — "non-admin" ข้างล่าง = role `user`
 
 server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตารางเต็ม `docs/saas-plan.md` หัวข้อ 17) — non-admin ได้ **403**:
 
@@ -83,11 +85,18 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 `GET /users` → `User[]` · `POST /users` (`NewUserPayload` = `UserPayload` + `password`) · `GET/PUT/DELETE /users/:id` ·
 `PUT /users/:id/password { password }` → `null` (admin ตั้งรหัสใหม่ให้, E10) — ไม่มี endpoint ไหนคืน `password`
 
-- `userChangeError()` → 400 (ลด / ปิด / ลบตัวเองไม่ได้, ต้องเหลือ admin ที่ใช้งาน ≥ 1)
+- `userChangeError()` → 400 (ลด / ปิด / ลบตัวเองไม่ได้, ต้องเหลือ admin ที่ใช้งาน ≥ 1 — owner นับเป็น admin; owner ลบ / ปิดใช้งาน / เปลี่ยน role ไม่ได้, E33)
+- `ownerRoleError()` → 400: `POST` / `PUT /users` ตั้ง role `owner` ไม่ได้ และ owner เปลี่ยน role ไม่ได้ — เปลี่ยนเจ้าของด้วย `POST /company/owner` เท่านั้น; owner ต้องมีอีเมล (`userIdentityError()`) และได้ `allBranches: true` เสมอ (server บังคับ)
 - `userIdentityError()` → 400 (B5): `username` บังคับ `a-z 0-9 . _ -` 3–30 ตัว เก็บตัวเล็ก ไม่ซ้ำในบริษัท (ไม่สนตัวพิมพ์);
   `email` ไม่บังคับ (`""` = ไม่มี) ถ้ามีต้องถูกรูปแบบและไม่ซ้ำ
 - `userBranchError()` → 400: `allBranches` หรือ `branchIds` ≥ 1 สาขาที่ใช้งานอยู่ (เก็บ `branchIds: []` เมื่อ `allBranches`) · `passwordError()` → 400 (4–64 ตัว)
 - `userScopeError()` → **403** (E6): admin ที่ไม่ใช่ `allBranches` จัดการได้เฉพาะผู้ใช้ที่อยู่ในสาขาของตัวเองทั้งหมด และให้สิทธิ์ได้แค่สาขาของตัวเอง
+
+### บัญชีบริษัท (SaaS ขั้น 6, owner เท่านั้น — E33)
+
+`POST /company/owner { userId, password }` → `User[]` (ผู้ใช้ทั้งบริษัทหลังโอน) — owner โอนความเป็นเจ้าของ ยืนยันด้วยรหัสผ่านของตัวเอง:
+ไม่ใช่ owner → **403** "โอนความเป็นเจ้าของได้เฉพาะเจ้าของบริษัท"; `ownerTransferError()` อื่น → 400; รหัสผ่านผิด → 400 "รหัสผ่านไม่ถูกต้อง" (ห้าม 401);
+ผู้รับ → `owner` + `allBranches`, owner เดิม → `admin` + `allBranches` (หน้าบ้าน reload เพราะสิทธิ์ตัวเองเปลี่ยน)
 
 ### ตัวกรองสาขาของรายการ (SaaS ขั้น 4, E23)
 

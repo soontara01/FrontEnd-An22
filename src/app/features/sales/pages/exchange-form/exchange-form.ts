@@ -111,7 +111,7 @@ export default class ExchangeForm {
       creditNotes: notes,
       exchanges,
       store: this.store.storeInfo() ?? STORE_INFO_DEFAULTS,
-      isAdmin: this.auth.user()?.role === 'admin',
+      isAdmin: this.auth.isAdmin(),
       today: todayIso(),
       here: { branchId: this.auth.currentBranch()?.id ?? null, branches: this.auth.branches() },
       products: this.products.hasValue() ? this.products.value() : [],

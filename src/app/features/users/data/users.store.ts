@@ -53,6 +53,10 @@ export class UsersStore {
     return this.api.setPassword(id, password);
   }
 
+  transferOwner(userId: number, password: string): Observable<User[]> {
+    return this.api.transferOwner(userId, password).pipe(tap((users) => this._users.set(users)));
+  }
+
   remove(id: number): Observable<void> {
     return this.api
       .remove(id)

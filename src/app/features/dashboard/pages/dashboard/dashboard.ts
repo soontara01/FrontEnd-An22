@@ -3,7 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { of } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
 import { ApiService } from '@core/http/api.service';
-import { User } from '@core/models';
+import { User, hasAdminRights } from '@core/models';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
@@ -46,7 +46,7 @@ export default class Dashboard {
       { label: 'ใช้งานอยู่', value: users.filter((u) => u.active).length, icon: 'check_circle' },
       {
         label: 'ผู้ดูแลระบบ',
-        value: users.filter((u) => u.role === 'admin').length,
+        value: users.filter((u) => hasAdminRights(u)).length,
         icon: 'shield_person',
       },
     ];

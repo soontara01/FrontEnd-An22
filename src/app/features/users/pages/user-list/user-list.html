@@ -47,7 +47,7 @@
 
       <ng-container matColumnDef="role">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>สิทธิ์</th>
-        <td mat-cell *matCellDef="let u">{{ u.role }}</td>
+        <td mat-cell *matCellDef="let u">{{ roleText(u) }}</td>
       </ng-container>
 
       <ng-container matColumnDef="active">
@@ -78,6 +78,18 @@
               <mat-icon>key</mat-icon>
             </button>
           </span>
+          @if (isOwner() && u.role !== 'owner') {
+            <span [matTooltip]="transferBlocker(u) || 'โอนความเป็นเจ้าของบริษัทให้ผู้ใช้นี้'">
+              <button
+                mat-icon-button
+                aria-label="โอนความเป็นเจ้าของ"
+                [disabled]="!!transferBlocker(u)"
+                (click)="transferOwner(u)"
+              >
+                <mat-icon>workspace_premium</mat-icon>
+              </button>
+            </span>
+          }
           <span [matTooltip]="deleteBlocker(u) || 'ลบ'">
             <button
               mat-icon-button

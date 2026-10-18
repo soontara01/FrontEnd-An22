@@ -91,6 +91,10 @@ import {
   passwordError,
   userBranchError,
   userChangeError,
+  hasAdminRights,
+  isOwner,
+  ownerRoleError,
+  ownerTransferError,
   userIdentityError,
   userScopeError,
   usernameError,
@@ -295,7 +299,7 @@ const SEED_USERS: User[] = [
     username: 'admin',
     name: 'Admin',
     email: 'admin@example.com',
-    role: 'admin',
+    role: 'owner',
     active: true,
     branchIds: [],
     allBranches: true,
@@ -1015,6 +1019,7 @@ function loadTenantDb(
   db.shifts = db.shifts.map(normalizeShift);
   const branched = splitStoreInfo(db, legacy);
   fillUserDefaults(db);
+  const owned = fillOwner(db);
   db.taxInvoices = db.taxInvoices.map((t) => ({
     ...TAX_INVOICE_DEFAULTS,
     ...t,
@@ -1046,7 +1051,7 @@ function loadTenantDb(
   }));
   fillTerminalSnapshots(db);
   const docsFixed = fixDocumentBranches(db);
-  return { db, changed: stockMoved || docsFixed || shiftsOn || registered || branched };
+  return { db, changed: stockMoved || docsFixed || shiftsOn || registered || branched || owned };
 }
 
 /** Saves one company's data; derived fields (`storeInfo`, the products' branch stock) never are. */
@@ -1069,7 +1074,7 @@ let actor: User | undefined;
 /** Name recorded as cashier / issuer on documents. */
 const actorName = (): string => actor?.name ?? '';
 /** Admin-only rules (exchange window, manual-discount ceiling) follow the logged-in user. */
-const actorIsAdmin = (): boolean => actor?.role === 'admin';
+const actorIsAdmin = (): boolean => hasAdminRights(actor);
 /** POS terminal (cash drawer) of the request: header `X-Terminal-Id`, null = not set on the device. */
 let terminalId: number | null = null;
 /**
@@ -1186,6 +1191,7 @@ function handle(
     return error(400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน');
   }
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
+  if (path === 'company' || path.startsWith('company/')) return handleCompany(req, path, db);
   if (path === 'products' || path.startsWith('products/')) return handleProducts(req, path, db);
   if (path === 'prices' || path.startsWith('prices/')) return handlePrices(req, path, db);
   if (path === 'suppliers' || path.startsWith('suppliers/')) {
@@ -1320,6 +1326,7 @@ function handleUsers(
     const scope = userScopeError(caller, null, body);
     if (scope) return error(403, scope);
     const problem =
+      ownerRoleError(null, body.role) ??
       userIdentityError(users, body, null) ??
       userBranchError(body, db.branches) ??
       passwordError(password ?? '');
@@ -1386,18 +1393,59 @@ function handleUsers(
 
 /**
  * A user as stored: username lower case, e-mail trimmed ('' when not given), branch ids unique and
- * sorted — none when the user has all branches.
+ * sorted — none when the user has all branches (the owner always has, E33).
  */
-function withUserRules<T extends Pick<User, 'username' | 'email' | 'allBranches' | 'branchIds'>>(
-  u: T,
-): T {
+function withUserRules<
+  T extends Pick<User, 'username' | 'email' | 'allBranches' | 'branchIds' | 'role'>,
+>(u: T): T {
+  const allBranches = !!u.allBranches || isOwner(u);
   return {
     ...u,
     username: normalizeUsername(u.username ?? ''),
     email: (u.email ?? '').trim(),
-    allBranches: !!u.allBranches,
-    branchIds: u.allBranches ? [] : [...new Set(u.branchIds ?? [])].sort((a, b) => a - b),
+    allBranches,
+    branchIds: allBranches ? [] : [...new Set(u.branchIds ?? [])].sort((a, b) => a - b),
   };
+}
+
+/**
+ * The company's own account, owner only (E33): `POST /company/owner { userId, password }` hands
+ * ownership over — the owner confirms with their password, the new owner gets every branch and
+ * the old one becomes an admin of every branch. Answers the users.
+ */
+function handleCompany(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const caller = actor as User;
+  if (path === 'company/owner' && req.method === 'POST') {
+    const { userId, password } = (req.body ?? {}) as { userId?: number; password?: string };
+    const problem = ownerTransferError(db.users, caller, Number(userId));
+    if (problem) return error(isOwner(caller) ? 400 : 403, problem);
+    if (password !== passwordOf(db, caller.id)) return error(400, 'รหัสผ่านไม่ถูกต้อง');
+    for (const u of db.users) {
+      if (u.id === caller.id) Object.assign(u, { role: 'admin', allBranches: true, branchIds: [] });
+      if (u.id === Number(userId)) {
+        Object.assign(u, { role: 'owner', allBranches: true, branchIds: [] });
+      }
+    }
+    return ok([...db.users]);
+  }
+  return notFound(req, path);
+}
+
+/**
+ * Companies stored before the owner role (E33): the first active admin of every branch (else the
+ * first active admin) becomes the owner, once.
+ */
+function fillOwner(db: MockDb): boolean {
+  if (db.users.some((u) => isOwner(u))) return false;
+  const admins = db.users.filter((u) => u.active && u.role === 'admin');
+  const owner = admins.find((u) => u.allBranches) ?? admins[0];
+  if (!owner) return false;
+  Object.assign(owner, { role: 'owner', allBranches: true, branchIds: [] });
+  return true;
 }
 
 /**
@@ -1409,7 +1457,7 @@ function fillUserDefaults(db: MockDb): void {
   const { users } = db;
   for (const u of users) {
     if (u.allBranches !== undefined) continue;
-    u.allBranches = u.role === 'admin';
+    u.allBranches = hasAdminRights(u);
     u.branchIds = u.allBranches ? [] : [db.branches[0].id];
   }
   const taken = new Set(users.filter((u) => u.username).map((u) => normalizeUsername(u.username)));
@@ -2612,7 +2660,7 @@ function handleSales(
       if (!approval) return error(403, 'ยกเลิกบิลต้องให้ผู้ดูแลระบบอนุมัติ');
       const found = checkCredentials(approval.username, approval.password, db);
       if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
-      if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
+      if (!hasAdminRights(found)) return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
       approver = found.name;
     }
     return voidSale(sale, (reason ?? '').trim(), approver, db);
@@ -4000,7 +4048,7 @@ function handleShifts(
     if (!approver && payload.approval) {
       const found = checkCredentials(payload.approval.username, payload.approval.password, db);
       if (typeof found === 'string') return error(400, 'รหัสผ่านผู้อนุมัติไม่ถูกต้อง');
-      if (found.role !== 'admin') return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
+      if (!hasAdminRights(found)) return error(400, 'ผู้อนุมัติต้องเป็นผู้ดูแลระบบ');
       approver = found.name;
     }
     const counts = buildShiftCounts(expected, payload.counts, user);
