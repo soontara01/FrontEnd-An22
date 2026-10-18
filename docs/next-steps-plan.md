@@ -78,6 +78,12 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
 
 ---
 
+## หลัง B — bug ใน mock (2026-10-18)
+
+- **สต็อกสาขาถูกล้างเมื่อ platform เขียนข้อมูลบริษัท**: `withTenantDb()` (ตั้งรหัส owner, ระงับ / เปิดกลับ, เปลี่ยนแพ็กเกจ, รับชำระ …) และลิงก์ตั้งรหัสผ่านบันทึก db ที่ไม่ได้ project สต็อก
+  แล้ว `storeBranchStock()` เขียนค่า 0 ทับ `branchStock` ของสาขาที่ request ก่อนหน้าทำงาน (ตัวแปร `stockBranch` ค้าง) → SKU ไม่คุม serial ของสาขานั้นเหลือ 0 ทั้งสต็อก ทุนเฉลี่ย จุดสั่งซื้อ (serial ไม่โดน — นับจาก serial)
+  — เจอจากบัตรสต็อก MS-010 ที่ HQ ไม่ตรงกับรายการคลัง (B4); แก้: `saveTenantDb(…, branch)` รับสาขาที่ project จริง, `null` = ไม่แตะ `branchStock`; spec ใน platform admin; เป็นเรื่องของ mock เท่านั้น (api จริงไม่มีการ project)
+
 ## C. ส่งต่อหลังบ้าน (repo อื่น)
 
 ลำดับ **db → api → web** ตาม `docs/backend/README.md` — repo นี้เป็น spec (`api-contract.md`, `domain-rules.md`, `data-model.md`, `fixtures/`)

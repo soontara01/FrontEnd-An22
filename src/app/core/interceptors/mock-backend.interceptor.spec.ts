@@ -3724,6 +3724,34 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
     expect(rows[0].name).toBe(SEED_STORE_INFO.name);
   });
 
+  it("never touches a branch's stock when it writes the company's data", async () => {
+    // A platform write loads the company's data without any branch: it must not store the
+    // unprojected (zero) stock fields into the branch the previous request worked in.
+    const admin = mockToken(1, 1);
+    const at = (branch: string) =>
+      firstValueFrom(
+        http.get<Product[]>('/api/products', {
+          headers: { Authorization: `Bearer ${admin}`, 'X-Branch-Id': branch },
+        }),
+      );
+    const stockOf = (products: Product[]) =>
+      products
+        .filter((p) => !p.serialControl)
+        .map((p) => [p.sku, p.stock, p.avgCost, p.minStock, p.maxStock]);
+    const hq = stockOf(await at('1'));
+    const bn = stockOf(await at('2'));
+    expect(hq.some(([, stock]) => (stock as number) > 0)).toBe(true);
+
+    const token = await loginPlatform();
+    await at('1'); // the last company request worked in HQ
+    await call('PUT', 'platform/companies/1/owner-password', { password: 'owner-new' }, token);
+    await call('POST', 'platform/companies/1/suspend', { note: 'ทดสอบ' }, token);
+    await call('POST', 'platform/companies/1/reactivate', {}, token);
+
+    expect(stockOf(await at('1'))).toEqual(hq);
+    expect(stockOf(await at('2'))).toEqual(bn);
+  });
+
   it('marks an overdue invoice paid and the company comes back on by itself', async () => {
     plantOverdue();
     const token = await loginPlatform();
