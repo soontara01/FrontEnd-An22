@@ -92,6 +92,8 @@ export default class SaleList {
   private readonly auth = inject(AuthService);
   /** The sales tax report is admin only (P4). */
   protected readonly isAdmin = this.auth.isAdmin;
+  /** Gross profit only for who may see cost (E43). */
+  protected readonly canSeeCost = this.auth.canSeeCost;
 
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();

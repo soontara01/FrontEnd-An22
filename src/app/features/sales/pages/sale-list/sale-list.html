@@ -78,13 +78,15 @@
     [value]="(sum.average | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
     icon="trending_up"
   />
-  <app-stat-card
-    [label]="
-      'กำไรขั้นต้น' + (sum.margin === null ? '' : ' (' + (sum.margin | number: '1.1-1') + '%)')
-    "
-    [value]="(sum.grossProfit | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
-    icon="savings"
-  />
+  @if (canSeeCost()) {
+    <app-stat-card
+      [label]="
+        'กำไรขั้นต้น' + (sum.margin === null ? '' : ' (' + (sum.margin | number: '1.1-1') + '%)')
+      "
+      [value]="(sum.grossProfit | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+      icon="savings"
+    />
+  }
   <app-stat-card
     [label]="'ลดหนี้ (' + sum.creditCount + ' ใบ)'"
     [value]="(sum.creditTotal | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"

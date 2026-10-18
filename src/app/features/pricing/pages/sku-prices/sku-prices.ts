@@ -71,6 +71,8 @@ export default class SkuPrices {
   /** Bound from the `:productId` route param. */
   readonly productId = input.required<string>();
 
+  /** Cost and margin only for who may see cost (E43). */
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
   protected readonly columns = [
     'price',
     'startDate',
@@ -79,7 +81,7 @@ export default class SkuPrices {
     'margin',
     'note',
     'actions',
-  ].filter((c) => c !== 'actions' || this.isAdmin());
+  ].filter((c) => (c !== 'actions' || this.isAdmin()) && (c !== 'margin' || this.canSeeCost()));
 
   protected readonly row = computed(() =>
     this.store.rows().find((r) => r.product.id === Number(this.productId())),

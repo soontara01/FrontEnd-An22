@@ -69,6 +69,7 @@ export class StoreInfoForm {
     requireShift: COMPANY_INFO_DEFAULTS.requireShift,
     shiftVarianceLimit: COMPANY_INFO_DEFAULTS.shiftVarianceLimit,
     shiftMaxHours: COMPANY_INFO_DEFAULTS.shiftMaxHours,
+    staffSeeCost: COMPANY_INFO_DEFAULTS.staffSeeCost,
   });
 
   protected readonly details = this.fb.group({

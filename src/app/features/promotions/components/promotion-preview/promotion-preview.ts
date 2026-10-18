@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { CurrencyPipe, DecimalPipe } from '@angular/common';
+import { AuthService } from '@core/auth/auth.service';
 import { PromotionPayload } from '@core/models';
 import { MATERIAL } from '@shared/material';
 import {
@@ -19,6 +20,7 @@ import { PromotionsStore } from '../../data/promotions.store';
 })
 export class PromotionPreview {
   private readonly store = inject(PromotionsStore);
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
 
   readonly promotion = input.required<PromotionPayload>();
 

@@ -12,7 +12,7 @@ import { InventoryStore } from '../../data/inventory.store';
 
 interface Line extends BranchStockRow {
   branch: Pick<Branch, 'id' | 'code' | 'name'>;
-  /** stock × avgCost; null when the cost is not shown (non-admins, E14) */
+  /** stock × avgCost; null when the cost is not shown (E14 → E43) */
   value: number | null;
   current: boolean;
   /** The user works in this branch, so its stock card opens (E15) */
@@ -47,7 +47,7 @@ export default class BranchStock {
   protected readonly product = computed(() =>
     this.store.products().find((p) => p.id === Number(this.productId())),
   );
-  protected readonly showCost = this.auth.isAdmin;
+  protected readonly showCost = this.auth.canSeeCost;
 
   protected readonly lines = computed<Line[]>(() => {
     if (!this.data.hasValue()) return [];

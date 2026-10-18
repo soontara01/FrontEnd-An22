@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { AuthService } from '@core/auth/auth.service';
 import { Product, effectiveCost, mainSupplier, movingAverage } from '@core/models';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
@@ -34,9 +35,15 @@ export class StockReceiveDialog {
   private readonly store = inject(InventoryStore);
   private readonly dialogRef = inject<MatDialogRef<StockReceiveDialog, Product>>(MatDialogRef);
 
-  /** Default cost per base unit: main supplier's price, else the current/standard cost. */
-  private readonly baseDefaultCost =
-    mainSupplier(this.product)?.cost ?? effectiveCost(this.product);
+  /** Average cost / standard cost / supplier price only for who may see cost (E43). */
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
+  /**
+   * Default cost per base unit: main supplier's price, else the current/standard cost; none for
+   * who cannot see cost — they type the invoice's cost (E44).
+   */
+  private readonly baseDefaultCost: number | null = this.canSeeCost()
+    ? (mainSupplier(this.product)?.cost ?? effectiveCost(this.product))
+    : null;
 
   protected readonly saving = signal(false);
   protected readonly units = [
@@ -51,7 +58,8 @@ export class StockReceiveDialog {
   protected readonly form = inject(NonNullableFormBuilder).group({
     qty: [1, [Validators.required, Validators.min(1), Validators.pattern(/^\d+$/)]],
     unit: [''],
-    unitCost: [this.baseDefaultCost, moneyValidator],
+    // null until typed when there is no default: `moneyValidator` asks for it (never a silent 0).
+    unitCost: [this.baseDefaultCost as number, moneyValidator],
     note: [''],
   });
 
@@ -71,6 +79,7 @@ export class StockReceiveDialog {
   constructor() {
     // Switching unit re-prices the default cost for that unit.
     this.form.controls.unit.valueChanges.subscribe((name) => {
+      if (this.baseDefaultCost === null) return;
       const factor = this.units.find((u) => u.name === name)?.factor ?? 1;
       this.form.controls.unitCost.setValue(Math.round(this.baseDefaultCost * factor * 100) / 100);
     });

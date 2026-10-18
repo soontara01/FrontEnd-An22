@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { RouterLink } from '@angular/router';
 import { catchError, concatMap, from, map, of } from 'rxjs';
+import { AuthService } from '@core/auth/auth.service';
 import { NotificationService } from '@core/services/notification.service';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
@@ -32,6 +33,8 @@ interface SaveResult {
 })
 export default class SkuImport {
   protected readonly store = inject(SkuStore);
+  /** No cost column in the template for who cannot see cost — costs stay as stored (E44 / E46). */
+  private readonly canSeeCost = inject(AuthService).canSeeCost;
   private readonly notify = inject(NotificationService);
 
   protected readonly step = signal<Step>('pick');
@@ -73,7 +76,10 @@ export default class SkuImport {
   protected async downloadTemplate(): Promise<void> {
     this.busy.set(true);
     try {
-      saveBlob(await buildImportTemplate(this.store.categories()), 'sku-import-template.xlsx');
+      saveBlob(
+        await buildImportTemplate(this.store.categories(), this.canSeeCost()),
+        'sku-import-template.xlsx',
+      );
     } finally {
       this.busy.set(false);
     }

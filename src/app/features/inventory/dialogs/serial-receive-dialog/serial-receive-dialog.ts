@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CurrencyPipe } from '@angular/common';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { AuthService } from '@core/auth/auth.service';
 import { Product, effectiveCost, mainSupplier, moneyInputError } from '@core/models';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
@@ -24,9 +25,14 @@ export class SerialReceiveDialog {
 
   protected readonly formatHint = serialFormatHint(this.product);
   protected readonly text = signal('');
-  /** Cost per unit (excl. VAT) stored on every received serial — specific identification. */
+  /**
+   * Cost per unit (excl. VAT) stored on every received serial — specific identification. Default =
+   * main supplier's price / current cost, none (NaN = empty) for who cannot see cost (E44).
+   */
   protected readonly unitCost = signal(
-    mainSupplier(this.product)?.cost ?? effectiveCost(this.product),
+    inject(AuthService).canSeeCost()
+      ? (mainSupplier(this.product)?.cost ?? effectiveCost(this.product))
+      : NaN,
   );
   protected readonly note = signal('');
   protected readonly loading = signal(true);

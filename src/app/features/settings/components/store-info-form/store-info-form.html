@@ -78,6 +78,14 @@
         </mat-form-field>
       }
 
+      <h3 class="section">ทุน / กำไร</h3>
+      <mat-slide-toggle formControlName="staffSeeCost">ผู้ใช้ทั่วไปเห็นทุน / กำไร</mat-slide-toggle>
+      <p class="text-muted small">
+        เจ้าของบริษัทและผู้ดูแลระบบเห็นเสมอ · ปิด = ผู้ใช้ทั่วไปไม่เห็นทุน ทุนเฉลี่ย มูลค่าคงคลัง
+        ราคาซื้อ และกำไร (ยังกรอกทุนตอนรับสินค้าได้ และ POS ยังเตือนเมื่อขายต่ำกว่าทุน) ·
+        มีผลเมื่อผู้ใช้โหลดหน้าใหม่
+      </p>
+
       @if (companyEditable()) {
         <div class="actions">
           @if (companyProblem(); as message) {

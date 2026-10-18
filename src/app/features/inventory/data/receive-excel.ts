@@ -63,8 +63,12 @@ const TEXT_COLUMNS: ReceiveKey[] = ['sku', 'serial', 'note'];
 /** Default purchase cost per base unit: main supplier price, else actual/standard cost. */
 export const defaultBaseCost = (p: Product): number => mainSupplier(p)?.cost ?? effectiveCost(p);
 
-/** Template with example rows, column help and the list of receivable SKUs. */
-export async function buildReceiveTemplate(products: Product[]): Promise<Blob> {
+/**
+ * Template with example rows, column help and the list of receivable SKUs. `seeCost` false (E43 /
+ * E46): no default costs anywhere — the cost column is filled in from the supplier's invoice.
+ */
+export async function buildReceiveTemplate(products: Product[], seeCost = true): Promise<Blob> {
+  const exampleCost = (p: Product) => (seeCost ? defaultBaseCost(p) : undefined);
   const ExcelJS = await loadExcel();
   const workbook = new ExcelJS.Workbook();
   const receivable = products.filter((p) => !isDiscontinued(p) && !isService(p) && canPurchase(p));
@@ -80,12 +84,12 @@ export async function buildReceiveTemplate(products: Product[]): Promise<Blob> {
   const normal = receivable.find((p) => !p.serialControl);
   const serial = receivable.find((p) => p.serialControl);
   if (normal)
-    sheet.addRow({ sku: normal.sku, qty: 10, cost: defaultBaseCost(normal), note: 'INV-0001' });
+    sheet.addRow({ sku: normal.sku, qty: 10, cost: exampleCost(normal), note: 'INV-0001' });
   if (serial) {
     sheet.addRow({
       sku: serial.sku,
       serial: `${serial.serialPrefix ? serial.serialPrefix + '-' : ''}XXXXXXXX`,
-      cost: defaultBaseCost(serial),
+      cost: exampleCost(serial),
       note: 'INV-0001',
     });
   }
@@ -97,7 +101,13 @@ export async function buildReceiveTemplate(products: Product[]): Promise<Blob> {
     { header: 'คำอธิบาย', key: 'help', width: 90 },
   ];
   help.getRow(1).font = { bold: true };
-  RECEIVE_COLUMNS.forEach((c) => help.addRow({ header: c.header, help: c.help }));
+  RECEIVE_COLUMNS.forEach((c) =>
+    help.addRow({
+      header: c.header,
+      help:
+        c.key === 'cost' && !seeCost ? 'ต่อหน่วยที่ระบุ · ต้องกรอกทุกแถว (ตามใบส่งของ)' : c.help,
+    }),
+  );
   help.addRow({});
   help.addRow({
     header: 'หมายเหตุ',
@@ -111,7 +121,7 @@ export async function buildReceiveTemplate(products: Product[]): Promise<Blob> {
     { header: 'คุม Serial', key: 'serial', width: 10 },
     { header: 'หน่วยฐาน', key: 'unit', width: 10 },
     { header: 'หน่วยแพ็ค', key: 'packs', width: 18 },
-    { header: 'ต้นทุนตั้งต้น/หน่วยฐาน', key: 'cost', width: 14 },
+    ...(seeCost ? [{ header: 'ต้นทุนตั้งต้น/หน่วยฐาน', key: 'cost', width: 14 }] : []),
     { header: 'คงเหลือ', key: 'stock', width: 10 },
   ];
   styleHeaderRow(list);
@@ -122,7 +132,7 @@ export async function buildReceiveTemplate(products: Product[]): Promise<Blob> {
       serial: p.serialControl ? 'Y' : 'N',
       unit: p.unit,
       packs: p.packUnits.map((u) => `${u.unit} ×${u.factor}`).join(', '),
-      cost: defaultBaseCost(p),
+      cost: exampleCost(p),
       stock: p.stock,
     });
   }
@@ -188,8 +198,14 @@ export interface ReceiveLine {
  */
 export function validateReceiveRows(
   rows: RawReceiveRow[],
-  ctx: { products: Product[]; inStockSerials: ReadonlyMap<number, ReadonlySet<string>> },
+  ctx: {
+    products: Product[];
+    inStockSerials: ReadonlyMap<number, ReadonlySet<string>>;
+    /** false: a blank cost is an error, never the hidden supplier / standard cost (E46) */
+    seeCost?: boolean;
+  },
 ): ReceiveLine[] {
+  const seeCost = ctx.seeCost ?? true;
   const firstRowOfSerial = new Map<string, number>();
 
   return rows.map((raw) => {
@@ -239,7 +255,8 @@ export function validateReceiveRows(
     const factor = pack?.factor ?? 1;
     line.unitLabel = pack?.unit ?? product.unit;
 
-    let unitCostBase = defaultBaseCost(product);
+    let unitCostBase = seeCost ? defaultBaseCost(product) : 0;
+    if (raw.cost === undefined && !seeCost) errors.push('กรุณากรอกต้นทุน');
     if (raw.cost !== undefined) {
       const cost = Number(raw.cost.replace(/,/g, ''));
       if (!Number.isFinite(cost) || cost < 0) errors.push(`ต้นทุนไม่ถูกต้อง (${raw.cost})`);

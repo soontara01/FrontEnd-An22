@@ -141,6 +141,20 @@ describe('SKU Excel import/export', () => {
     expect(raw).not.toHaveProperty('stock'); // reference columns are not imported
   });
 
+  it('has no cost columns for who cannot see cost; a re-import keeps the stored cost (E44 / E46)', async () => {
+    const hidden = { ...existing, serialControl: false, cost: null as unknown as number };
+    const blob = await exportSkusToExcel([hidden], categories, [], false);
+    const [raw] = await readSkuRows(new File([blob], 'sku.xlsx'));
+    expect(raw).toMatchObject({ sku: 'NB-001', name: 'โน้ตบุ๊ก' });
+    expect(raw).not.toHaveProperty('cost');
+    const [update] = validateImportRows([{ ...raw, name: 'โน้ตบุ๊กใหม่' }], {
+      skus: [hidden],
+      categories,
+    });
+    expect(update.errors).toEqual([]);
+    expect(update.payload?.name).toBe('โน้ตบุ๊กใหม่'); // the server keeps the cost (E44)
+  });
+
   it('picks EAN-13 only for valid EAN-13 values', () => {
     expect(barcodeFormat('8850000000010')).toBe('EAN13');
     expect(barcodeFormat('8850000000011')).toBe('CODE128'); // wrong check digit

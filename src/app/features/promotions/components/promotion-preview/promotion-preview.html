@@ -1,4 +1,6 @@
-@if (belowCostCount()) {
+<!-- Margins, costs and the below-cost warning only for who may see cost (E43). -->
+@let cost = canSeeCost();
+@if (cost && belowCostCount()) {
   <p class="warn">
     <mat-icon inline>warning</mat-icon>
     {{ belowCostCount() }} รายการขายต่ำกว่าทุนเมื่อใช้โปรนี้ (คิดจากราคาวันนี้และต้นทุนปัจจุบัน)
@@ -21,7 +23,9 @@
             <th class="num">ราคาวันนี้</th>
             <th class="num">ส่วนลด / ชิ้น</th>
             <th class="num">ราคาหลังลด</th>
-            <th class="num">กำไร</th>
+            @if (cost) {
+              <th class="num">กำไร</th>
+            }
           </tr>
         </thead>
         <tbody>
@@ -37,14 +41,16 @@
                 <td class="num">
                   <strong>{{ r.discounted | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</strong>
                 </td>
-                <td class="num" [class.negative]="r.belowCost">
-                  {{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}
-                  @if (r.belowCost) {
-                    <span class="badge badge-error">ต่ำกว่าทุน</span>
-                  }
-                </td>
+                @if (cost) {
+                  <td class="num" [class.negative]="r.belowCost">
+                    {{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}
+                    @if (r.belowCost) {
+                      <span class="badge badge-error">ต่ำกว่าทุน</span>
+                    }
+                  </td>
+                }
               } @else {
-                <td class="num" colspan="4">
+                <td class="num" [attr.colspan]="cost ? 4 : 3">
                   <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
                 </td>
               }
@@ -72,7 +78,9 @@
       <tr>
         <th>ของแถมต่อชุด</th>
         <th class="num">จำนวน</th>
-        <th class="num">ต้นทุน</th>
+        @if (cost) {
+          <th class="num">ต้นทุน</th>
+        }
       </tr>
     </thead>
     <tbody>
@@ -86,13 +94,17 @@
             }
           </td>
           <td class="num">{{ i.qty }}</td>
-          <td class="num">{{ i.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+          @if (cost) {
+            <td class="num">{{ i.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+          }
         </tr>
       }
-      <tr class="total">
-        <td colspan="2">ต้นทุนของแถม / ชุด</td>
-        <td class="num">{{ f.setCost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
-      </tr>
+      @if (cost) {
+        <tr class="total">
+          <td colspan="2">ต้นทุนของแถม / ชุด</td>
+          <td class="num">{{ f.setCost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+        </tr>
+      }
     </tbody>
   </table>
 
@@ -104,7 +116,9 @@
             <th>ซื้อ</th>
             <th class="num">ราคาวันนี้</th>
             <th class="num">ซื้อขั้นต่ำ</th>
-            <th class="num">กำไรรวมของแถม</th>
+            @if (cost) {
+              <th class="num">กำไรรวมของแถม</th>
+            }
           </tr>
         </thead>
         <tbody>
@@ -117,11 +131,13 @@
               @if (r.price !== null) {
                 <td class="num">{{ r.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
                 <td class="num">{{ r.buyQty }} {{ r.product.unit }}</td>
-                <td class="num" [class.negative]="r.margin !== null && r.margin < 0">
-                  {{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}
-                </td>
+                @if (cost) {
+                  <td class="num" [class.negative]="r.margin !== null && r.margin < 0">
+                    {{ r.margin === null ? '-' : (r.margin | number: '1.1-1') + '%' }}
+                  </td>
+                }
               } @else {
-                <td class="num" colspan="3">
+                <td class="num" [attr.colspan]="cost ? 3 : 2">
                   <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
                 </td>
               }

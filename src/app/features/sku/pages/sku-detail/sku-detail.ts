@@ -55,6 +55,8 @@ export default class SkuDetail implements OnInit {
   protected readonly store = inject(SkuStore);
   /** Stock and reorder levels shown are the working branch's (D1, E13). */
   protected readonly branch = inject(AuthService).currentBranch;
+  /** Costs, margin and purchase prices only for who may see cost (E43). */
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);

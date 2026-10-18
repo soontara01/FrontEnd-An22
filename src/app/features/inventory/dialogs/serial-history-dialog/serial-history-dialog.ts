@@ -12,6 +12,7 @@ import {
   StockMovement,
   serialMovements,
 } from '@core/models';
+import { AuthService } from '@core/auth/auth.service';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { MATERIAL } from '@shared/material';
@@ -76,15 +77,13 @@ export class SerialHistoryDialog {
   private readonly dialogRef = inject(MatDialogRef);
 
   protected readonly formatHint = serialFormatHint(this.product);
-  protected readonly columns = [
-    'serial',
-    'status',
-    'cost',
-    'receivedAt',
-    'removedAt',
-    'note',
-    'history',
-  ];
+  /** A unit's cost only for who may see cost (E43). */
+  private readonly canSeeCost = inject(AuthService).canSeeCost;
+  protected readonly columns = computed(() =>
+    ['serial', 'status', 'cost', 'receivedAt', 'removedAt', 'note', 'history'].filter(
+      (c) => c !== 'cost' || this.canSeeCost(),
+    ),
+  );
   protected readonly movementLabel = MOVEMENT_TYPE_LABEL;
 
   protected readonly loading = signal(true);

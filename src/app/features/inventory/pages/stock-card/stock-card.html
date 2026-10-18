@@ -62,32 +62,35 @@
 @if (card.hasValue()) {
   @let c = card.value();
   @let p = product();
+  @let unit = ' ' + (p?.unit ?? '');
+  <!-- Without the right to see cost (E43) the card shows quantities only. -->
+  @let cost = canSeeCost();
 
   <section class="stat-grid">
     <app-stat-card
-      [label]="c.from ? 'ยอดยกมา (มูลค่าทุน)' : 'ยอดยกมา'"
-      [value]="(c.opening.value | number: '1.2-2') + ' ฿'"
+      [label]="cost ? (c.from ? 'ยอดยกมา (มูลค่าทุน)' : 'ยอดยกมา') : 'ยอดยกมา'"
+      [value]="cost ? (c.opening.value | number: '1.2-2') + ' ฿' : c.opening.qty + unit"
       [icon]="'login'"
     />
     <app-stat-card
-      [label]="'รับเข้า ' + c.totals.inQty + ' ' + (p?.unit ?? '')"
-      [value]="(c.totals.inCost | number: '1.2-2') + ' ฿'"
+      [label]="cost ? 'รับเข้า ' + c.totals.inQty + unit : 'รับเข้า'"
+      [value]="cost ? (c.totals.inCost | number: '1.2-2') + ' ฿' : c.totals.inQty + unit"
       icon="add_box"
     />
     <app-stat-card
-      [label]="'ตัดออก (ต้นทุนขาย) ' + c.totals.outQty + ' ' + (p?.unit ?? '')"
-      [value]="(c.totals.outCost | number: '1.2-2') + ' ฿'"
+      [label]="cost ? 'ตัดออก (ต้นทุนขาย) ' + c.totals.outQty + unit : 'ตัดออก'"
+      [value]="cost ? (c.totals.outCost | number: '1.2-2') + ' ฿' : c.totals.outQty + unit"
       icon="trending_down"
       tone="warn"
     />
     <app-stat-card
-      [label]="'คงเหลือ ' + c.closing.qty + ' ' + (p?.unit ?? '')"
-      [value]="(c.closing.value | number: '1.2-2') + ' ฿'"
+      [label]="cost ? 'คงเหลือ ' + c.closing.qty + unit : 'คงเหลือ'"
+      [value]="cost ? (c.closing.value | number: '1.2-2') + ' ฿' : c.closing.qty + unit"
       icon="inventory_2"
     />
   </section>
 
-  @if (p) {
+  @if (p && cost) {
     <p class="text-muted small method">
       วิธีคิดต้นทุน:
       @if (p.serialControl) {
@@ -107,17 +110,21 @@
           <tr>
             <th rowspan="2">วันที่</th>
             <th rowspan="2">รายการ</th>
-            <th colspan="3" class="group">เคลื่อนไหว</th>
-            <th colspan="3" class="group">คงเหลือ</th>
+            <th [attr.colspan]="cost ? 3 : 1" class="group">เคลื่อนไหว</th>
+            <th [attr.colspan]="cost ? 3 : 1" class="group">คงเหลือ</th>
             <th rowspan="2">หมายเหตุ</th>
           </tr>
           <tr>
             <th class="num">จำนวน</th>
-            <th class="num">ทุน/หน่วย</th>
-            <th class="num">มูลค่า</th>
+            @if (cost) {
+              <th class="num">ทุน/หน่วย</th>
+              <th class="num">มูลค่า</th>
+            }
             <th class="num">จำนวน</th>
-            <th class="num">ทุนเฉลี่ย</th>
-            <th class="num">มูลค่า</th>
+            @if (cost) {
+              <th class="num">ทุนเฉลี่ย</th>
+              <th class="num">มูลค่า</th>
+            }
           </tr>
         </thead>
         <tbody>
@@ -125,10 +132,12 @@
           @if (c.from || c.opening.qty || c.opening.value) {
             <tr class="balance-row">
               <td class="nowrap">{{ c.from ? (c.from | thaiDate) : '-' }}</td>
-              <td colspan="4"><strong>ยอดยกมา</strong></td>
+              <td [attr.colspan]="cost ? 4 : 2"><strong>ยอดยกมา</strong></td>
               <td class="num strong">{{ c.opening.qty }}</td>
-              <td class="num">{{ c.opening.avgCost | number: '1.2-2' }}</td>
-              <td class="num">{{ c.opening.value | number: '1.2-2' }}</td>
+              @if (cost) {
+                <td class="num">{{ c.opening.avgCost | number: '1.2-2' }}</td>
+                <td class="num">{{ c.opening.value | number: '1.2-2' }}</td>
+              }
               <td></td>
             </tr>
           }
@@ -139,11 +148,15 @@
                 <span class="badge" [class]="typeBadge(m)">{{ typeText(m) }}</span>
               </td>
               <td class="num" [class.out]="m.qty < 0">{{ m.qty > 0 ? '+' : '' }}{{ m.qty }}</td>
-              <td class="num">{{ m.unitCost | number: '1.2-2' }}</td>
-              <td class="num" [class.out]="m.qty < 0">{{ m.totalCost | number: '1.2-2' }}</td>
+              @if (cost) {
+                <td class="num">{{ m.unitCost | number: '1.2-2' }}</td>
+                <td class="num" [class.out]="m.qty < 0">{{ m.totalCost | number: '1.2-2' }}</td>
+              }
               <td class="num strong">{{ m.balanceQty }}</td>
-              <td class="num">{{ m.balanceAvgCost | number: '1.2-2' }}</td>
-              <td class="num">{{ m.balanceValue | number: '1.2-2' }}</td>
+              @if (cost) {
+                <td class="num">{{ m.balanceAvgCost | number: '1.2-2' }}</td>
+                <td class="num">{{ m.balanceValue | number: '1.2-2' }}</td>
+              }
               <td class="small">
                 {{ m.note || '-' }}
                 @if (m.serials.length) {
@@ -153,27 +166,35 @@
             </tr>
           } @empty {
             <tr>
-              <td colspan="9" class="text-muted empty">ไม่มีการเคลื่อนไหวในช่วงนี้</td>
+              <td [attr.colspan]="cost ? 9 : 5" class="text-muted empty">
+                ไม่มีการเคลื่อนไหวในช่วงนี้
+              </td>
             </tr>
           }
         </tbody>
         <tfoot>
           <tr>
             <td colspan="2">รวมในช่วง</td>
-            <td class="num" colspan="3">
-              รับ +{{ c.totals.inQty }} ({{ c.totals.inCost | number: '1.2-2' }}) · ตัด −{{
-                c.totals.outQty
-              }}
-              ({{ c.totals.outCost | number: '1.2-2' }})
+            <td class="num" [attr.colspan]="cost ? 3 : 1">
+              @if (cost) {
+                รับ +{{ c.totals.inQty }} ({{ c.totals.inCost | number: '1.2-2' }}) · ตัด −{{
+                  c.totals.outQty
+                }}
+                ({{ c.totals.outCost | number: '1.2-2' }})
+              } @else {
+                รับ +{{ c.totals.inQty }} · ตัด −{{ c.totals.outQty }}
+              }
             </td>
-            <td colspan="4"></td>
+            <td [attr.colspan]="cost ? 4 : 2"></td>
           </tr>
           <tr class="balance-row">
             <td colspan="2">คงเหลือ{{ c.to ? ' ณ ' : '' }}{{ c.to | thaiDate }}</td>
-            <td colspan="3"></td>
+            <td [attr.colspan]="cost ? 3 : 1"></td>
             <td class="num strong">{{ c.closing.qty }}</td>
-            <td class="num">{{ c.closing.avgCost | number: '1.2-2' }}</td>
-            <td class="num">{{ c.closing.value | number: '1.2-2' }}</td>
+            @if (cost) {
+              <td class="num">{{ c.closing.avgCost | number: '1.2-2' }}</td>
+              <td class="num">{{ c.closing.value | number: '1.2-2' }}</td>
+            }
             <td></td>
           </tr>
         </tfoot>

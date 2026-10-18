@@ -68,6 +68,8 @@ const matchesType = (s: Product, type: TypeFilter): boolean => {
 export default class SkuList {
   protected readonly store = inject(SkuStore);
   private readonly branch = inject(AuthService).currentBranch;
+  /** The export has cost columns only for who may see cost (E46). */
+  private readonly canSeeCost = inject(AuthService).canSeeCost;
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
@@ -142,6 +144,7 @@ export default class SkuList {
         this.dataSource.filteredData,
         this.store.categories(),
         this.store.suppliers(),
+        this.canSeeCost(),
       );
       // Reorder levels in the file are the working branch's (E13).
       const code = this.branch()?.code;

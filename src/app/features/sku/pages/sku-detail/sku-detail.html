@@ -64,11 +64,15 @@
 
     <mat-card appearance="outlined">
       <mat-card-header>
-        <mat-card-title>{{ service() ? 'ราคาและต้นทุน' : 'ราคาและสต็อก' }}</mat-card-title>
+        <mat-card-title>{{
+          service() && canSeeCost() ? 'ราคาและต้นทุน' : service() ? 'ราคา' : 'ราคาและสต็อก'
+        }}</mat-card-title>
       </mat-card-header>
       <mat-card-content>
         <dl>
-          @if (service()) {
+          @if (!canSeeCost()) {
+            <!-- cost, average and margin hidden (E43) -->
+          } @else if (service()) {
             <dt>ต้นทุนต่อครั้ง</dt>
             <dd>{{ s.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }} / {{ s.unit }}</dd>
           } @else {
@@ -97,14 +101,16 @@
               <span class="badge badge-warn">ยังไม่กำหนดราคา</span>
             }
           </dd>
-          <dt>กำไรขั้นต้น</dt>
-          <dd>
-            @if (margin(); as m) {
-              {{ m.toFixed(1) }}%
-            } @else {
-              -
-            }
-          </dd>
+          @if (canSeeCost()) {
+            <dt>กำไรขั้นต้น</dt>
+            <dd>
+              @if (margin(); as m) {
+                {{ m.toFixed(1) }}%
+              } @else {
+                -
+              }
+            </dd>
+          }
           @if (!service()) {
             <dt>สต็อกคงเหลือ (สาขา {{ branch()?.code }})</dt>
             <dd>
@@ -153,7 +159,9 @@
             <thead>
               <tr>
                 <th>ผู้จำหน่าย</th>
-                <th class="num">ราคาซื้อ</th>
+                @if (canSeeCost()) {
+                  <th class="num">ราคาซื้อ</th>
+                }
                 <th class="num">Lead time</th>
                 <th class="num">MOQ</th>
               </tr>
@@ -171,7 +179,9 @@
                       {{ supplierCredit(l.supplierId) }}
                     </div>
                   </td>
-                  <td class="num">{{ l.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+                  @if (canSeeCost()) {
+                    <td class="num">{{ l.cost | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}</td>
+                  }
                   <td class="num">{{ l.leadTimeDays }} วัน</td>
                   <td class="num">{{ l.moq || '-' }}</td>
                 </tr>

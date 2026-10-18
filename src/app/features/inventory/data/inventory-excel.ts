@@ -16,7 +16,7 @@ export const STOCK_LEVEL_LABEL: Record<StockLevel, string> = {
   out: 'หมด',
 };
 
-const COLUMNS = [
+const COLUMNS: readonly ExportColumn[] = [
   { header: 'SKU', width: 16 },
   { header: 'บาร์โค้ด', width: 16 },
   { header: 'ชื่อสินค้า', width: 36 },
@@ -28,21 +28,30 @@ const COLUMNS = [
   { header: 'คงเหลือตามแพ็ค', width: 18 },
   { header: 'จุดสั่งซื้อ', width: 10 },
   { header: 'สถานะสต็อก', width: 11 },
-  { header: 'ต้นทุนเฉลี่ย', width: 13 },
-  { header: 'มูลค่าทุน', width: 14 },
-  { header: 'ราคาขาย', width: 12 },
-  { header: 'มูลค่าตามราคาขาย', width: 16 },
+  { header: 'ต้นทุนเฉลี่ย', width: 13, money: true, cost: true },
+  { header: 'มูลค่าทุน', width: 14, money: true, cost: true },
+  { header: 'ราคาขาย', width: 12, money: true },
+  { header: 'มูลค่าตามราคาขาย', width: 16, money: true },
 ];
 
-/** 1-based columns with baht amounts. */
-const MONEY_COLS = [12, 13, 14, 15];
+/** `cost` columns are left out for who cannot see cost (E43 / E46). */
+interface ExportColumn {
+  header: string;
+  width: number;
+  money?: boolean;
+  cost?: boolean;
+}
 
-const SERIAL_COLUMNS = [
+/** The cells of the columns kept (same order as `columns`). */
+const kept = <T>(columns: readonly ExportColumn[], cells: T[], seeCost: boolean): T[] =>
+  cells.filter((_, i) => seeCost || !columns[i]?.cost);
+
+const SERIAL_COLUMNS: readonly ExportColumn[] = [
   { header: 'ลำดับ', width: 7 },
   { header: 'SKU', width: 16 },
   { header: 'ชื่อสินค้า', width: 36 },
   { header: 'Serial', width: 24 },
-  { header: 'ต้นทุน', width: 14 },
+  { header: 'ต้นทุน', width: 14, money: true, cost: true },
   { header: 'วันที่รับเข้า', width: 17 },
   { header: 'หมายเหตุ', width: 30 },
 ];
@@ -58,6 +67,8 @@ export async function inventoryXlsx(
   at = new Date(),
   /** Branch the figures belong to, e.g. 'สาขา HQ' (stock is per branch, D1) */
   branch = '',
+  /** false: no cost / value at cost columns (E46) */
+  seeCost = true,
 ): Promise<Blob> {
   const ExcelJS = await loadExcel();
   const book = new ExcelJS.Workbook();
@@ -65,57 +76,76 @@ export async function inventoryXlsx(
     at,
   );
   const when = `${branch ? `${branch} ` : ''}ณ ${date}`;
-  addStockSheet(book, products, when);
+  addStockSheet(book, products, when, seeCost);
   const inStock = serials.filter((s) => s.status === 'in_stock');
-  if (inStock.length) addSerialSheet(book, products, inStock, when);
+  if (inStock.length) addSerialSheet(book, products, inStock, when, seeCost);
   return xlsxBlob(await book.xlsx.writeBuffer());
 }
 
-function addStockSheet(book: Workbook, products: readonly Product[], when: string): void {
+function addStockSheet(
+  book: Workbook,
+  products: readonly Product[],
+  when: string,
+  seeCost: boolean,
+): void {
+  const columns = kept(COLUMNS, [...COLUMNS], seeCost);
   const sheet = book.addWorksheet('คลังสินค้า');
-  sheet.columns = COLUMNS.map((c) => ({ width: c.width }));
+  sheet.columns = columns.map((c) => ({ width: c.width }));
   sheet.addRow([`สต็อกคงเหลือ ${when}`]).font = { bold: true, size: 14 };
   sheet.addRow([]);
-  const headerRow = sheet.addRow(COLUMNS.map((c) => c.header));
+  const headerRow = sheet.addRow(columns.map((c) => c.header));
   styleHeaderRow(sheet, new Set(), headerRow.number);
 
   for (const p of products) {
-    const row = sheet.addRow([
-      p.sku,
-      p.barcode,
-      p.name,
-      p.categoryPath,
-      p.unit,
-      p.serialControl ? 'ใช่' : '',
-      SKU_STATUS_LABEL[p.saleStatus],
-      p.stock,
-      p.packUnits.length && p.stock ? stockInPacks(p) : '',
-      p.minStock,
-      STOCK_LEVEL_LABEL[stockLevel(p)],
-      p.avgCost,
-      costValue(p),
-      p.currentPrice,
-      (p.currentPrice ?? 0) * p.stock,
-    ]);
+    const row = sheet.addRow(
+      kept(
+        COLUMNS,
+        [
+          p.sku,
+          p.barcode,
+          p.name,
+          p.categoryPath,
+          p.unit,
+          p.serialControl ? 'ใช่' : '',
+          SKU_STATUS_LABEL[p.saleStatus],
+          p.stock,
+          p.packUnits.length && p.stock ? stockInPacks(p) : '',
+          p.minStock,
+          STOCK_LEVEL_LABEL[stockLevel(p)],
+          p.avgCost,
+          costValue(p),
+          p.currentPrice,
+          (p.currentPrice ?? 0) * p.stock,
+        ],
+        seeCost,
+      ),
+    );
     row.getCell(1).numFmt = '@';
     row.getCell(2).numFmt = '@';
   }
 
-  const totals = sheet.addRow([
-    null,
-    null,
-    `รวม ${products.length} รายการ`,
-    ...Array<null>(9).fill(null),
-    products.reduce((sum, p) => sum + costValue(p), 0),
-    null,
-    products.reduce((sum, p) => sum + (p.currentPrice ?? 0) * p.stock, 0),
-  ]);
+  const totals = sheet.addRow(
+    kept(
+      COLUMNS,
+      [
+        null,
+        null,
+        `รวม ${products.length} รายการ`,
+        ...Array<null>(9).fill(null),
+        products.reduce((sum, p) => sum + costValue(p), 0),
+        null,
+        products.reduce((sum, p) => sum + (p.currentPrice ?? 0) * p.stock, 0),
+      ],
+      seeCost,
+    ),
+  );
   totals.font = { bold: true };
-  for (const col of MONEY_COLS) {
-    sheet.getColumn(col).eachCell((cell, rowNumber) => {
+  columns.forEach((c, i) => {
+    if (!c.money) return;
+    sheet.getColumn(i + 1).eachCell((cell, rowNumber) => {
       if (rowNumber > headerRow.number) cell.numFmt = '#,##0.00';
     });
-  }
+  });
   sheet.pageSetup = {
     paperSize: 9,
     orientation: 'landscape',
@@ -131,7 +161,9 @@ function addSerialSheet(
   products: readonly Product[],
   serials: readonly SerialNumber[],
   when: string,
+  seeCost: boolean,
 ): void {
+  const columns = kept(SERIAL_COLUMNS, [...SERIAL_COLUMNS], seeCost);
   const byId = new Map(products.map((p) => [p.id, p]));
   const rows = serials
     .map((s) => ({ s, p: byId.get(s.productId) }))
@@ -141,37 +173,36 @@ function addSerialSheet(
     );
 
   const sheet = book.addWorksheet('Serial');
-  sheet.columns = SERIAL_COLUMNS.map((c) => ({ width: c.width }));
+  sheet.columns = columns.map((c) => ({ width: c.width }));
   sheet.addRow([`Serial คงคลัง ${when}`]).font = { bold: true, size: 14 };
   sheet.addRow([]);
-  const headerRow = sheet.addRow(SERIAL_COLUMNS.map((c) => c.header));
+  const headerRow = sheet.addRow(columns.map((c) => c.header));
   styleHeaderRow(sheet, new Set(), headerRow.number);
 
+  const dateCol = seeCost ? 6 : 5;
   rows.forEach(({ s, p }, i) => {
-    const row = sheet.addRow([
-      i + 1,
-      p?.sku ?? '',
-      p?.name ?? '',
-      s.serial,
-      s.cost,
-      new Date(s.receivedAt),
-      s.note,
-    ]);
+    const row = sheet.addRow(
+      kept(
+        SERIAL_COLUMNS,
+        [i + 1, p?.sku ?? '', p?.name ?? '', s.serial, s.cost, new Date(s.receivedAt), s.note],
+        seeCost,
+      ),
+    );
     row.getCell(2).numFmt = '@';
     row.getCell(4).numFmt = '@';
-    row.getCell(5).numFmt = '#,##0.00';
-    row.getCell(6).numFmt = 'dd/mm/yyyy hh:mm';
+    if (seeCost) row.getCell(5).numFmt = '#,##0.00';
+    row.getCell(dateCol).numFmt = 'dd/mm/yyyy hh:mm';
   });
 
-  const totals = sheet.addRow([
-    null,
-    null,
-    `รวม ${rows.length} เครื่อง`,
-    null,
-    rows.reduce((sum, r) => sum + r.s.cost, 0),
-  ]);
+  const totals = sheet.addRow(
+    kept(
+      SERIAL_COLUMNS,
+      [null, null, `รวม ${rows.length} เครื่อง`, null, rows.reduce((sum, r) => sum + r.s.cost, 0)],
+      seeCost,
+    ),
+  );
   totals.font = { bold: true };
-  totals.getCell(5).numFmt = '#,##0.00';
+  if (seeCost) totals.getCell(5).numFmt = '#,##0.00';
   sheet.pageSetup = {
     paperSize: 9,
     orientation: 'portrait',

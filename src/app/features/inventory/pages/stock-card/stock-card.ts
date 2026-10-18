@@ -80,6 +80,8 @@ export default class StockCard {
 
   protected readonly presets = DATE_PRESETS;
   private readonly auth = inject(AuthService);
+  /** Cost columns / values only for who may see cost (E43). */
+  protected readonly canSeeCost = this.auth.canSeeCost;
   /** Branches whose card the user may open; the picker shows when there is more than one. */
   protected readonly branches = this.auth.branches;
   /** The card is always one branch's (D1, E15). */

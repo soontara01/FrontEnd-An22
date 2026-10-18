@@ -25,6 +25,8 @@ export default class ReorderSuggestions {
   protected readonly store = inject(InventoryStore);
   /** Suggestions use the working branch's stock and reorder levels (D1, E13). */
   protected readonly workingBranch = inject(AuthService).currentBranch;
+  /** Purchase prices / amounts only for who may see cost (E43). */
+  protected readonly canSeeCost = inject(AuthService).canSeeCost;
   private readonly document = inject(DOCUMENT);
 
   protected readonly branch = branchLabel;

@@ -35,11 +35,13 @@
     icon="remove_shopping_cart"
     tone="error"
   />
-  <app-stat-card
-    label="มูลค่าคงคลัง (ราคาทุน)"
-    [value]="(store.costValue() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
-    icon="account_balance_wallet"
-  />
+  @if (canSeeCost()) {
+    <app-stat-card
+      label="มูลค่าคงคลัง (ราคาทุน)"
+      [value]="(store.costValue() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
+      icon="account_balance_wallet"
+    />
+  }
   <app-stat-card
     label="มูลค่าตามราคาขาย"
     [value]="(store.saleValue() | currency: 'THB' : 'symbol-narrow' : '1.0-0') ?? ''"
@@ -190,10 +192,12 @@
         </td>
       </ng-container>
 
-      <tr mat-header-row *matHeaderRowDef="columns"></tr>
-      <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+      <tr mat-row *matRowDef="let row; columns: columns()"></tr>
       <tr class="mat-row" *matNoDataRow>
-        <td class="mat-cell no-data" [attr.colspan]="columns.length">ไม่พบสินค้าที่ตรงเงื่อนไข</td>
+        <td class="mat-cell no-data" [attr.colspan]="columns().length">
+          ไม่พบสินค้าที่ตรงเงื่อนไข
+        </td>
       </tr>
     </table>
     <mat-paginator [pageSizeOptions]="[5, 10, 25]" [pageSize]="10" showFirstLastButtons />
