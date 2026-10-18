@@ -10,6 +10,9 @@ describe('terminalInterceptor', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    // Logged in to company 1 (AuthService reads the stored session).
+    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u1'));
+    localStorage.setItem('an22.company', JSON.stringify({ id: 1, code: 'DEMO', name: 'DEMO' }));
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([terminalInterceptor])),
@@ -29,12 +32,20 @@ describe('terminalInterceptor', () => {
     terminal.set(0); // ignored
     http.get('/api/sales').subscribe();
     expect(backend.expectOne('/api/sales').request.headers.get('X-Terminal-Id')).toBe('3');
-    expect(localStorage.getItem('an22.pos.terminal')).toBe('3');
+    expect(localStorage.getItem('an22.pos.terminal.1')).toBe('3');
 
     terminal.clear();
     http.get('/api/sales').subscribe();
     expect(backend.expectOne('/api/sales').request.headers.has('X-Terminal-Id')).toBe(false);
-    expect(localStorage.getItem('an22.pos.terminal')).toBeNull();
+    expect(localStorage.getItem('an22.pos.terminal.1')).toBeNull();
+    backend.verify();
+  });
+
+  it('never sends the terminal to the platform API', () => {
+    TestBed.inject(TerminalService).set(3);
+    http.get('/api/platform/companies').subscribe();
+    const req = backend.expectOne('/api/platform/companies');
+    expect(req.request.headers.has('X-Terminal-Id')).toBe(false);
     backend.verify();
   });
 });

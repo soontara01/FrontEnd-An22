@@ -65,8 +65,10 @@ describe('PosStore', () => {
     localStorage.clear();
     // Logged in as a cashier (AuthService reads the stored user).
     localStorage.setItem('an22.user', JSON.stringify({ id: 2, name: 'สมชาย ใจดี', role: 'user' }));
-    // This device is set to terminal 1 (Settings → "เครื่องนี้").
-    localStorage.setItem('an22.pos.terminal', '1');
+    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u2'));
+    localStorage.setItem('an22.company', JSON.stringify({ id: 1, code: 'DEMO', name: 'DEMO' }));
+    // This device is set to terminal 1 of company 1 (Settings → "เครื่องนี้").
+    localStorage.setItem('an22.pos.terminal.1', '1');
     api = {
       products: vi.fn(() =>
         of([
@@ -147,7 +149,7 @@ describe('PosStore', () => {
     const [held] = store.holds();
     expect(held).toMatchObject({ customer: 'คุณเอ', total: 100 });
     expect(
-      JSON.parse(localStorage.getItem('an22.pos.held.0.0') ?? '[]') as HeldBill[],
+      JSON.parse(localStorage.getItem('an22.pos.held.1.0') ?? '[]') as HeldBill[],
     ).toHaveLength(1);
 
     store.add(1, 10);
