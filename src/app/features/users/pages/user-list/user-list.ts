@@ -100,7 +100,9 @@ export default class UserList {
   /** "ทุกสาขา" or the codes of the user's branches. */
   protected branchText(user: User): string {
     if (user.allBranches) return 'ทุกสาขา';
-    const codes = new Map(this.auth.branches().map((b) => [b.id, b.code]));
+    const codes = new Map(
+      [...this.auth.branches(), ...this.store.branches()].map((b) => [b.id, b.code]),
+    );
     return user.branchIds.map((id) => codes.get(id) ?? `#${id}`).join(', ') || '-';
   }
 

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { MenuAccess, NewUserPayload, User, UserPayload } from '@core/models';
+import { Branch, MenuAccess, NewUserPayload, User, UserPayload } from '@core/models';
 
 /** HTTP calls for the users feature (provided in users.routes.ts). */
 @Injectable()
@@ -10,6 +10,11 @@ export class UsersApi {
 
   list(): Observable<User[]> {
     return this.api.get<User[]>('users');
+  }
+
+  /** Every branch of the company, so a user's branches show by code even outside the admin's own. */
+  branches(): Observable<Branch[]> {
+    return this.api.get<Branch[]>('branches');
   }
 
   get(id: number): Observable<User> {

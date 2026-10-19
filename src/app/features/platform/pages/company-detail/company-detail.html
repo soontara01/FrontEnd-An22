@@ -79,7 +79,9 @@
             <mat-label>แพ็กเกจ</mat-label>
             <mat-select [value]="selectedPlan()" (selectionChange)="planId.set($event.value)">
               @for (p of plans; track p.id) {
-                <mat-option [value]="p.id">{{ p.name }} — ฿{{ p.monthlyPrice }} / เดือน</mat-option>
+                <mat-option [value]="p.id"
+                  >{{ p.name }} — ฿{{ p.monthlyPrice.toLocaleString('en-US') }} / เดือน</mat-option
+                >
               }
             </mat-select>
           </mat-form-field>

@@ -2053,7 +2053,9 @@ describe('mockBackendInterceptor – auth (B3)', () => {
         (e: { error: { message: string } }) => e.error.message,
       );
     expect(await login('x')).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
-    expect(await login('admin')).toBe('บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท');
+    expect(await login('admin')).toBe(
+      'บริษัทนี้ถูกผู้ให้บริการระงับการใช้งาน — เจ้าของบริษัทติดต่อผู้ให้บริการ',
+    );
     expect(await statusOf(call('GET', 'products', undefined, ADMIN))).toBe(401);
   });
 });

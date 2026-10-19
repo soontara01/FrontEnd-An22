@@ -67,11 +67,15 @@ describe('auth guards', () => {
     expect(String(run(guestGuard))).toBe('/');
   });
 
-  it('adminGuard sends non-admins home and lets admins in', () => {
+  it('adminGuard sends non-admins home with a snackbar and lets admins in', () => {
+    notify.error.mockClear();
     isAdmin.set(false);
     expect(String(run(adminGuard))).toBe('/');
+    expect(notify.error).toHaveBeenCalledWith('หน้านี้สำหรับผู้ดูแลระบบเท่านั้น');
+    notify.error.mockClear();
     isAdmin.set(true);
     expect(run(adminGuard)).toBe(true);
+    expect(notify.error).not.toHaveBeenCalled();
   });
 
   it('adminGuardTo redirects non-admins within the feature', () => {

@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, finalize, tap } from 'rxjs';
-import { NewUserPayload, User, UserPayload } from '@core/models';
+import { Branch, NewUserPayload, User, UserPayload } from '@core/models';
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { UsersApi } from './users-api.service';
 
@@ -10,10 +10,13 @@ export class UsersStore {
   private readonly api = inject(UsersApi);
 
   private readonly _users = signal<User[]>([]);
+  private readonly _branches = signal<Branch[]>([]);
   private readonly _loading = signal(false);
   private loaded = false;
 
   readonly users = this._users.asReadonly();
+  /** All branches of the company (incl. ones this admin does not work in). */
+  readonly branches = this._branches.asReadonly();
   readonly loading = this._loading.asReadonly();
   readonly count = computed(() => this._users().length);
 
@@ -31,6 +34,10 @@ export class UsersStore {
         },
         error: httpErrorShown,
       });
+    this.api.branches().subscribe({
+      next: (branches) => this._branches.set(branches),
+      error: httpErrorShown,
+    });
   }
 
   getById(id: number): Observable<User> {

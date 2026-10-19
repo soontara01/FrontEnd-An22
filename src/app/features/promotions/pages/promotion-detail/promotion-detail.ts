@@ -19,6 +19,7 @@ import {
   PromotionPayload,
   formatDateRange,
   hasStarted,
+  promotionBranchScopeError,
   promotionStatus,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
@@ -45,8 +46,9 @@ export default class PromotionDetail implements OnInit {
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
+  private readonly auth = inject(AuthService);
   /** Only admins edit / enable / delete promotions (server → 403). */
-  protected readonly isAdmin = inject(AuthService).isAdmin;
+  protected readonly isAdmin = this.auth.isAdmin;
 
   /** Bound from the `:id` route param. */
   readonly id = input.required<string>();
@@ -61,6 +63,12 @@ export default class PromotionDetail implements OnInit {
     if (!p) return null;
     const s = promotionStatus(p, this.store.today);
     return { label: PROMOTION_STATUS_LABEL[s], badge: PROMOTION_STATUS_BADGE[s] };
+  });
+
+  /** Why this admin may not change it ('' = may): a branch-limited one needs a company admin (D2). */
+  protected readonly scopeBlocker = computed(() => {
+    const p = this.promotion();
+    return (p && promotionBranchScopeError(null, p, this.auth.isCompanyAdmin())) ?? '';
   });
 
   protected readonly started = computed(() => {
