@@ -97,6 +97,8 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
 
 - **C1 web** (`~/vscode/an22-web`): Node.js serve `dist/frontend-an22/browser` + SPA fallback + cache header + proxy `/api` (ตัวอย่าง `deploy/`);
   ทดสอบได้ทันทีด้วย build ปัจจุบัน (`useMock: true` — mock ในเบราว์เซอร์)
+  — ✅ **เสร็จ 2026-10-19**: Node 24 + Express 5 (TypeScript), port 4000, Docker image; ทดสอบกับ build จริง: login DEMO, เปลี่ยนเมนู (full reload), reload URL ลึก, console สะอาด;
+  ตกลงว่า proxy **คง `/api`** (แก้ `deploy/nginx.conf` ที่เคยตัด `/api` ทิ้งให้ตรงกับ `proxy.conf.json`)
 - **C2 api** (`~/vscode/an22-api`): Spring Boot + PostgreSQL, **schema เป็น Flyway migration ใน repo นี้** (แทน repo db เดิม):
   ทุกตารางมี `tenant_id` + RLS (D7), ตาราง platform ไม่อยู่ใต้ RLS (`companies` + แพ็กเกจ / ตารางเก็บเงิน / คำขอลบ, `billing_invoices`, `platform_admins`, `password_reset_tokens`) และใช้ DB role แยก,
   `audit_log` insert-only, seed ตรงกับ mock (DEMO, HQ + BN, `admin` / `admin`, `somchai` / `1234`);

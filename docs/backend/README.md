@@ -7,7 +7,7 @@
 | repo                         | หน้าที่                                                                                  | อ่านอะไรจากที่นี่                                                                               |
 | ---------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | **FrontEnd-An22** (repo นี้) | Angular SPA + mock backend — **แหล่งความจริงของ spec**                                   | —                                                                                               |
-| **web**                      | Node.js serve ไฟล์ static ของหน้าบ้าน + proxy `/api`                                     | หัวข้อ "web" ด้านล่าง, `deploy/nginx.conf` / `deploy/web.config` (ตัวอย่าง)                     |
+| **web** (`an22-web`)         | Node.js serve ไฟล์ static ของหน้าบ้าน + proxy `/api`                                     | หัวข้อ "web" ด้านล่าง, `deploy/nginx.conf` / `deploy/web.config` (ตัวอย่าง)                     |
 | **api**                      | Java Spring Boot ต่อ PostgreSQL — ทำ API จริงแทน mock **และเป็นเจ้าของ schema** (Flyway) | `api-contract.md`, `domain-rules.md`, `data-model.md`, `docs/saas-plan.md` หัวข้อ 2, 3, 16 (D7) |
 
 ลำดับทำ: **web → api** (E47)
@@ -57,8 +57,12 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
 - serve `dist/frontend-an22/browser` (build ของ repo นี้: `npm run build`)
 - SPA fallback: path ที่ไม่ใช่ไฟล์ → `index.html` (ทุกเมนูเป็น full page reload — ดู "SPA per menu" ใน `CLAUDE.md`)
 - `index.html` → `Cache-Control: no-cache`; ไฟล์ที่มี hash (`*-<hash>.js|css`) → cache ยาว `immutable`
-- proxy `/api` → api (dev ของหน้าบ้านใช้ `proxy.conf.json` แบบเดียวกัน); ตัวอย่าง config ใน `deploy/nginx.conf`, `deploy/web.config`
+- proxy `/api` → api **โดยคง `/api` ไว้** (`/api/auth/login` → `http://<api>:8080/api/auth/login` — api ตั้ง context path `/api`;
+  dev ของหน้าบ้านใช้ `proxy.conf.json` แบบเดียวกัน); ตัวอย่าง config ใน `deploy/nginx.conf`, `deploy/web.config`
+- ไฟล์อื่นที่ไม่มี hash (`favicon.ico`) → `no-cache` ด้วย; path ที่ดูเป็นไฟล์แต่ไม่มีจริง → 404 (ไม่ตอบ `index.html` แทน JS)
 - ทดสอบได้ก่อนมี api: build ของ repo นี้ใช้ mock ในเบราว์เซอร์ (`useMock: true`) — ตรวจ fallback / cache header / ไม่มี request `/api` ออกไป
+- **ทำแล้ว (C1, 2026-10-19): repo `an22-web`** — Node 24 + Express 5 (TypeScript รันตรง), port `4000`, env `API_URL` / `DIST_DIR` / `LOG_LEVEL`,
+  health `GET /healthz`, deploy เป็น Docker image ที่มี dist ของหน้าบ้านอยู่ในตัว (`npm run docker:build`); รายละเอียดใน `CLAUDE.md` ของ repo นั้น
 
 **api** (รวมงาน db เดิม — E47)
 
