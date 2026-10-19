@@ -4,7 +4,7 @@
       <mat-icon>arrow_back</mat-icon>
       กลับ
     </a>
-    @if (isAdmin()) {
+    @if (isAdmin() && !scopeBlocker()) {
       @if (!started()) {
         <button mat-stroked-button (click)="remove(p)">
           <mat-icon>delete</mat-icon>
@@ -24,6 +24,8 @@
 
   @if (!isAdmin()) {
     <app-admin-only-note />
+  } @else if (scopeBlocker()) {
+    <app-admin-only-note [message]="scopeBlocker()" />
   }
 
   <div class="tags">

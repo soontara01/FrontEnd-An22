@@ -7,7 +7,7 @@
         <mat-label>เลขเครื่อง</mat-label>
         <input matInput type="number" min="1" step="1" formControlName="id" />
         <mat-hint>{{
-          editing ? 'เปลี่ยนไม่ได้หลังสร้าง' : 'ใช้รันเลขบิล POS1-…, POS2-…'
+          editing ? 'เปลี่ยนไม่ได้หลังสร้าง' : 'ใช้ในเลขบิล POS-<สาขา>-<เลขเครื่อง>-…'
         }}</mat-hint>
       </mat-form-field>
 

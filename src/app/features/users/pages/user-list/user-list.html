@@ -67,9 +67,16 @@
       <ng-container matColumnDef="actions">
         <th mat-header-cell *matHeaderCellDef></th>
         <td mat-cell *matCellDef="let u" class="actions">
-          <a mat-icon-button matTooltip="แก้ไข" [routerLink]="[u.id, 'edit']">
-            <mat-icon>edit</mat-icon>
-          </a>
+          <span [matTooltip]="scopeBlocker(u) || 'แก้ไข'">
+            <a
+              mat-icon-button
+              aria-label="แก้ไข"
+              [disabled]="!!scopeBlocker(u)"
+              [routerLink]="[u.id, 'edit']"
+            >
+              <mat-icon>edit</mat-icon>
+            </a>
+          </span>
           <span [matTooltip]="scopeBlocker(u) || 'ตั้งรหัสผ่านใหม่'">
             <button
               mat-icon-button

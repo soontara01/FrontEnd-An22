@@ -92,9 +92,11 @@ export default class UserForm implements OnInit {
   protected readonly accessProblem = computed(() => {
     const { allBranches = false, branchIds = [], password = '' } = this.value();
     const actor = this.auth.user();
+    // Scope first: a branch admin opening another branch's user is told why, not that the
+    // branch "does not exist" (it is only missing from their own branch list).
     return (
-      userBranchError({ allBranches, branchIds }, this.branches()) ??
       (actor ? userScopeError(actor, this.before(), { allBranches, branchIds }) : null) ??
+      userBranchError({ allBranches, branchIds }, this.branches()) ??
       (this.isEdit() ? null : passwordError(password))
     );
   });

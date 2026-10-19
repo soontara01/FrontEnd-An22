@@ -89,8 +89,42 @@
 - **ผู้จำหน่าย**: code ไม่ซ้ำ, taxId + branchType + branchNo ไม่ซ้ำ, สำนักงานใหญ่ → `branchNo = ''`
 - **การลบที่ถูกอ้าง**: SKU (stock > 0 / มีการขาย / อยู่ในโปรที่ยังไม่หมดอายุ), ช่องทางชำระ (มีการขาย), เครื่อง POS (มีกะ / เอกสาร), โปร (เริ่มแล้ว)
 - **void ต้องให้ admin อนุมัติ** (`approval`) และใบกำกับเต็มรูปของบิลถูกยกเลิก (`cancelledAt`)
-- **audit log — เหตุการณ์ไหนบันทึก** (E40, `recordAudit()` + `pushAudit()` ใน mock; ทุกเหตุการณ์ = request ที่**สำเร็จ**แล้วเท่านั้น):
-  `login` / `login_failed` (รหัสบริษัทถูก — ชื่อที่พิมพ์, `userId` null), `POST /sales` ที่มีส่วนลดพิเศษ, void, ใบลดหนี้, ออกใบกำกับใหม่, `PUT …/stock` ที่ `delta < 0`, `serials/remove`,
-  ยกเลิกใบโอน, เขียน `/prices`, `/promotions`, `/users` (+ password), `POST /company/owner`, `PUT /settings/menu-access`, `PUT /settings/company` (+ `store`), `PUT /settings/branch`,
-  เขียน `/branches`, `/pos-terminals`, ปิดกะของคนอื่น, อนุมัติ / ปรับปรุงกะ — `branchId` = สาขาของเอกสาร / ของ header, งานระดับบริษัท (ราคา, โปร, ผู้ใช้, สิทธิ์เมนู, ตั้งค่าบริษัท, owner) = `null`;
-  `detail` เป็นข้อความไทยสั้น ๆ (ไม่ใช่สัญญา — api เขียนเองได้ แต่ action / ref / branch ต้องตรง)
+- **audit log — เหตุการณ์ไหนบันทึก** (E40, `recordAudit()` + `pushAudit()` ใน mock): ทุกเหตุการณ์ = request ที่**สำเร็จ**แล้วเท่านั้น, append-only;
+  ค่า `action` = `AuditAction` (`core/models/audit.model.ts`, ป้ายไทย `AUDIT_ACTION_LABEL`) ต้องตรงตารางนี้ทุกตัว — ref / `branchId` / `actorKind` ต้องตรงเช่นกัน;
+  `detail` เป็นข้อความไทยสั้น ๆ (ไม่ใช่สัญญา — api เขียนเองได้); `terminalId` = `X-Terminal-Id` เมื่อเป็นเครื่องของบริษัทนั้น ไม่งั้น `null`
+
+| `action`              | เกิดเมื่อ (request ที่สำเร็จ)                                                         | `ref.kind`    | `branchId`     | `actorKind`         |
+| --------------------- | ------------------------------------------------------------------------------------- | ------------- | -------------- | ------------------- |
+| `login`               | `POST /auth/login` ถูก (ก่อนเช็กบริษัทถูกระงับไม่บันทึก)                              | —             | `null`         | `user`              |
+| `login_failed`        | `POST /auth/login` รหัสบริษัทถูกแต่ผู้ใช้ / รหัสผ่านผิด — `userId` null, ชื่อที่พิมพ์ | —             | `null`         | `user`              |
+| `manual_discount`     | `POST /sales` ที่มี `manualDiscount > 0`                                              | `sale`        | สาขาของบิล     | `user`              |
+| `sale_void`           | `POST /sales/:id/void` (detail มีผู้อนุมัติ)                                          | `sale`        | สาขาของบิล     | `user`              |
+| `credit_note`         | `POST /sales/:id/credit-notes`                                                        | `credit_note` | สาขาของบิล     | `user`              |
+| `tax_invoice_reissue` | `POST /sales/:id/tax-invoice/reissue`                                                 | `tax_invoice` | สาขาของบิล     | `user`              |
+| `stock_out`           | `PUT /products/:id/stock` ที่ `delta < 0`                                             | `product`     | สาขาของ header | `user`              |
+| `serial_remove`       | `POST /products/:id/serials/remove`                                                   | `product`     | สาขาของ header | `user`              |
+| `transfer_cancel`     | `POST /transfers/:id/cancel`                                                          | `transfer`    | สาขาต้นทาง     | `user`              |
+| `price_change`        | เขียน `/prices` (เพิ่ม / แก้ / ลบ)                                                    | `price`       | `null`         | `user`              |
+| `promotion_change`    | เขียน `/promotions` (รวมเปิด / ปิดใช้งาน, ลบ)                                         | `promotion`   | `null`         | `user`              |
+| `user_change`         | เขียน `/users` (เพิ่ม / แก้ / ลบ)                                                     | `user`        | `null`         | `user`              |
+| `user_password`       | `PUT /users/:id/password` หรือ `PUT /platform/companies/:id/owner-password`           | `user`        | `null`         | `user` / `platform` |
+| `owner_transfer`      | `POST /company/owner`                                                                 | `user`        | `null`         | `user`              |
+| `plan_change`         | `PUT /company/plan` (owner) หรือ `PUT /platform/companies/:id/plan`                   | `company`     | `null`         | `user` / `platform` |
+| `company_suspend`     | `POST /platform/companies/:id/suspend`                                                | `company`     | `null`         | `platform`          |
+| `company_reactivate`  | `POST /platform/companies/:id/reactivate`                                             | `company`     | `null`         | `platform`          |
+| `invoice_paid`        | `POST /platform/invoices/:id/pay`                                                     | `company`     | `null`         | `platform`          |
+| `company_export`      | `GET /company/export`                                                                 | `company`     | `null`         | `user`              |
+| `deletion_request`    | `POST /company/deletion`                                                              | `company`     | `null`         | `user`              |
+| `deletion_cancel`     | `DELETE /company/deletion`                                                            | `company`     | `null`         | `user`              |
+| `password_reset`      | `POST /auth/reset-password` (owner ตั้งรหัสด้วยลิงก์ทางอีเมล) — ผู้ทำ = owner         | `user`        | `null`         | `user`              |
+| `signup`              | `POST /auth/signup` — ผู้ทำ = owner คนใหม่                                            | `company`     | `null`         | `user`              |
+| `menu_access`         | `PUT /settings/menu-access`                                                           | —             | `null`         | `user`              |
+| `company_settings`    | `PUT /settings/company` (และ `PUT /settings/store` เดิม)                              | `company`     | `null`         | `user`              |
+| `branch_settings`     | `PUT /settings/branch`                                                                | `branch`      | สาขาของ header | `user`              |
+| `branch_change`       | เขียน `/branches`                                                                     | `branch`      | สาขานั้น       | `user`              |
+| `terminal_change`     | เขียน `/pos-terminals` (เพิ่ม / แก้ / ลบ)                                             | `terminal`    | สาขาของเครื่อง | `user`              |
+| `shift_close_other`   | `POST /shifts/:id/close` โดยคนที่ไม่ใช่แคชเชียร์ของกะ (ปิดกะแทน)                      | `shift`       | สาขาของกะ      | `user`              |
+| `shift_approve`       | `POST /shifts/:id/approve`                                                            | `shift`       | สาขาของกะ      | `user`              |
+| `shift_adjust`        | `POST /shifts/:id/adjustments`                                                        | `shift`       | สาขาของกะ      | `user`              |
+
+`branchId` null = ระดับบริษัท (เห็นเฉพาะ owner / ผู้ดูแลระบบทุกสาขา — `canSeeAuditEvent()`); `actorKind: 'system'` สงวนไว้สำหรับ job ของ api (mock ยังไม่ใช้)

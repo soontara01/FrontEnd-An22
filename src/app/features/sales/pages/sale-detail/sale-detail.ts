@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ElementRef,
+  Injector,
   computed,
   effect,
   inject,
@@ -16,7 +17,6 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDialog } from '@angular/material/dialog';
 import { AuthService } from '@core/auth/auth.service';
 import { Router, RouterLink } from '@angular/router';
-import { filter, switchMap } from 'rxjs';
 import {
   CreditNote,
   Exchange,
@@ -40,7 +40,6 @@ import {
   todayIso,
   soldWithVat,
   voidError,
-  VoidPayload,
   BranchHere,
   branchMismatchError,
   isFreeLine,
@@ -56,7 +55,6 @@ import { Receipt } from '@shared/components/receipt/receipt';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { printElement } from '@shared/utils/print-element';
-import { httpErrorShown } from '@core/http/http-error-shown';
 import { SalesStore } from '../../data/sales.store';
 import { VoidDialog, VoidDialogData } from '../../dialogs/void-dialog/void-dialog';
 
@@ -89,6 +87,7 @@ export default class SaleDetail {
   protected readonly isFreeLine = isFreeLine;
   protected readonly store = inject(SalesStore);
   private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
   private readonly router = inject(Router);
   private readonly notify = inject(NotificationService);
   private readonly auth = inject(AuthService);
@@ -330,25 +329,21 @@ export default class SaleDetail {
     if (el) printElement(el);
   }
 
+  /** The dialog voids the bill itself (stays open when refused) and closes with the voided sale. */
   protected voidSale(sale: Sale): void {
     this.dialog
-      .open<VoidDialog, VoidDialogData, VoidPayload>(VoidDialog, {
+      .open<VoidDialog, VoidDialogData, Sale>(VoidDialog, {
         data: { sale, needsApproval: !this.isAdmin() },
         width: '480px',
         maxWidth: '95vw',
+        injector: this.injector,
       })
       .afterClosed()
-      .pipe(
-        filter((payload): payload is VoidPayload => !!payload),
-        switchMap((payload) => this.store.void(sale.id, payload)),
-      )
-      .subscribe({
-        next: (voided) => {
-          this.sale.set(voided);
-          this.invoices.reload();
-          this.notify.success(`${voided.orderNo}: ยกเลิกบิลแล้ว สินค้ากลับเข้าคลัง`);
-        },
-        error: httpErrorShown,
+      .subscribe((voided) => {
+        if (!voided) return;
+        this.sale.set(voided);
+        this.invoices.reload();
+        this.notify.success(`${voided.orderNo}: ยกเลิกบิลแล้ว สินค้ากลับเข้าคลัง`);
       });
   }
 }

@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
-import { User } from '@core/models';
+import { Branch, User } from '@core/models';
 import { UsersApi } from './users-api.service';
 import { UsersStore } from './users.store';
 
@@ -25,6 +25,12 @@ describe('UsersStore', () => {
       of({ ...user(id, p.name), ...p }),
     ),
     remove: vi.fn(() => of(undefined)),
+    branches: vi.fn(() =>
+      of([
+        { id: 1, code: 'HQ' },
+        { id: 2, code: 'BN' },
+      ] as Branch[]),
+    ),
   };
 
   let store: UsersStore;
@@ -42,6 +48,8 @@ describe('UsersStore', () => {
     store.load();
     expect(api.list).toHaveBeenCalledTimes(1);
     expect(store.count()).toBe(2);
+    // every branch of the company, so another branch's users show by code (F-B6)
+    expect(store.branches().map((b) => b.code)).toEqual(['HQ', 'BN']);
 
     store.load(true);
     expect(api.list).toHaveBeenCalledTimes(2);

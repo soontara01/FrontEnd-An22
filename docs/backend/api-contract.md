@@ -121,7 +121,7 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 - `GET /company/subscription` (ขั้น 6.4) ตอบเพิ่ม `status` (`subscriptionStatus()`), `subscription { trialEndsOn, nextInvoiceOn }`, `invoices: BillingInvoice[]` (ของบริษัทนี้ ใหม่สุดก่อน)
 - server ออกใบแจ้งหนี้เมื่อถึง `nextInvoiceOn` (รอบละ 1 เดือน, ราคาแพ็กเกจ ณ วันออก รวม VAT, ครบกำหนด +7 วัน, เลข `SUB-YYYYMM-NNNN` ทั้งแพลตฟอร์ม) — ทำเป็น job รายวันได้ (mock ทำตอนรับ request)
 - ใบที่ค้างเกินครบกำหนด + 7 วัน → `Company.active = false`, `suspendedReason = 'overdue'`: token เดิม → 401, login ถูก → 401 "บริษัทนี้ถูกระงับการใช้งานเพราะค้างชำระค่าบริการ — เจ้าของบริษัทติดต่อผู้ให้บริการเพื่อชำระเงิน"
-  (ระงับโดย platform → ข้อความเดิม "…กรุณาติดต่อผู้ดูแลระบบของบริษัท")
+  (ระงับโดย platform → "บริษัทนี้ถูกผู้ให้บริการระงับการใช้งาน — เจ้าของบริษัทติดต่อผู้ให้บริการ")
 - `LoginResponse` / `MeResponse` มี `billing: BillingNotice | null` (`billingNotice()`) — ส่งเฉพาะ owner / admin, คนอื่น `null`; หน้าบ้านแสดงเป็นแถบบนทุกหน้า
 - เปลี่ยนแพ็กเกจกลางรอบ: ไม่คิดส่วนต่าง (ใบถัดไปใช้ราคาใหม่) — ชำระ / ยกเลิกใบแจ้งหนี้ทำที่ platform (ขั้น 6.7)
 

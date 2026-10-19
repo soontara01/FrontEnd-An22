@@ -5301,7 +5301,7 @@ function login(
 const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
 /** Told only after a correct login (E3), by why the company is suspended. */
 const SUSPENDED_MESSAGE: Record<CompanySuspendReason, string> = {
-  platform: 'บริษัทนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบของบริษัท',
+  platform: 'บริษัทนี้ถูกผู้ให้บริการระงับการใช้งาน — เจ้าของบริษัทติดต่อผู้ให้บริการ',
   overdue:
     'บริษัทนี้ถูกระงับการใช้งานเพราะค้างชำระค่าบริการ — เจ้าของบริษัทติดต่อผู้ให้บริการเพื่อชำระเงิน',
   deletion: 'บริษัทนี้อยู่ระหว่างรอลบข้อมูล — ติดต่อเจ้าของบริษัท',
