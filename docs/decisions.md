@@ -97,6 +97,10 @@
 - **E45** (2026-10-18) POS ของคนที่เห็นทุนไม่ได้ยังเตือน "ขายต่ำกว่าทุนหลังส่วนลดพิเศษ" โดยถาม server (`POST /sales/cost-check`) ไม่ส่งตัวเลข
 - **E46** (2026-10-18) Excel export (SKU / คลัง) ไม่มีคอลัมน์ทุนสำหรับคนที่เห็นทุนไม่ได้; แม่แบบใบรับยังมีช่องทุนให้กรอก (เว้นว่าง = error แทนการเติมทุนผู้จำหน่ายหลัก)
 - **E47** (2026-10-18, next-steps C) หลังบ้าน 3 repo: web + api — migration PostgreSQL (Flyway) อยู่ใน repo api แทน repo db แยก; ลำดับทำ web → api (`docs/backend/README.md`)
+- **E48** (2026-10-20, หลัง C1) session login อยู่ใน cookie httpOnly `an22.sid` แบบ BFF: an22-web ถือ token ใน session (store `memory` / `mongodb` ตั้งด้วย env), ไม่ใช้งาน 12 ชม. หลุด / สูงสุด 7 วัน,
+  CSRF = SameSite=Lax + cookie `XSRF-TOKEN` / header `X-XSRF-TOKEN` (Angular); api ยังเป็น JWT stateless; **ข้อมูลจริงไม่อยู่ใน localStorage** — เหลือเฉพาะค่าของเครื่อง
+  (theme, `companyCode`, `branch`, เลขเครื่อง POS, `onboarding.hidden.*`) + ข้อมูลของ mock; user / company / branches อยู่ใน memory (โหลดจาก `GET /me` ทุกหน้า);
+  บิลที่พักไว้ + ล็อก POS ย้ายไป api (`/pos/held-bills`, `/shifts/:id/lock|unlock`) — `api-contract.md` หัวข้อ "Session"
 
 ## บั๊ก / ข้อสังเกตก่อน SaaS — [`test-before-saas.md`](test-before-saas.md) ตาราง B1–B24, แผนแก้ [`before-do-saas-plan.md`](before-do-saas-plan.md)
 

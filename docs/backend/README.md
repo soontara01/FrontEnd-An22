@@ -61,6 +61,8 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
   dev ของหน้าบ้านใช้ `proxy.conf.json` แบบเดียวกัน); ตัวอย่าง config ใน `deploy/nginx.conf`, `deploy/web.config`
 - ไฟล์อื่นที่ไม่มี hash (`favicon.ico`) → `no-cache` ด้วย; path ที่ดูเป็นไฟล์แต่ไม่มีจริง → 404 (ไม่ตอบ `index.html` แทน JS)
 - ทดสอบได้ก่อนมี api: build ของ repo นี้ใช้ mock ในเบราว์เซอร์ (`useMock: true`) — ตรวจ fallback / cache header / ไม่มี request `/api` ออกไป
+- **session ของ login (E48, BFF)**: web ถือ token ที่ api ออกไว้ใน session (store `memory` / `mongodb` เลือกด้วย env), browser ได้แค่ cookie `an22.sid` (httpOnly, SameSite=Lax);
+  web ใส่ `Authorization` ให้ทุก request `/api`, ตอบ `auth/logout` / `platform/auth/logout` เอง, กัน CSRF ด้วย `XSRF-TOKEN` / `X-XSRF-TOKEN`, ไม่ใช้งาน 12 ชม. / สูงสุด 7 วัน — รายละเอียด `api-contract.md` หัวข้อ "Session"
 - **ทำแล้ว (C1, 2026-10-19): repo `an22-web`** — Node 24 + Express 5 (TypeScript รันตรง), port `4000`, env `API_URL` / `DIST_DIR` / `LOG_LEVEL`,
   health `GET /healthz`, deploy เป็น Docker image ที่มี dist ของหน้าบ้านอยู่ในตัว (`npm run docker:build`); รายละเอียดใน `CLAUDE.md` ของ repo นั้น
 
@@ -73,6 +75,6 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
 - ทุก unique key รวม `tenant_id`; เงินเป็น `numeric(14,2)`; เวลาเป็น `timestamptz`; วันที่ธุรกิจเป็น `date`
 - ตาราง platform (`companies`, ใบแจ้งหนี้, `platform_admins`, `password_reset_tokens`) ไม่อยู่ใต้ RLS และใช้ DB role แยก; `audit_log` insert-only
 - seed สำหรับ dev ตรงกับ seed ของ mock (บริษัท `DEMO`, สาขา `HQ` + `BN`, login `admin` / `admin`, พนักงาน `somchai` / `1234`, platform `platform` / `platform`)
-- tenant มาจาก JWT เท่านั้น; ทุก transaction `SET LOCAL app.tenant_id`; ตรวจ `X-Branch-Id` / `X-Terminal-Id` ทุก request
+- JWT ไม่ถึง browser (web ถือไว้ — E48) อายุ ≥ 7 วัน; tenant มาจาก JWT เท่านั้น; ทุก transaction `SET LOCAL app.tenant_id`; ตรวจ `X-Branch-Id` / `X-Terminal-Id` ทุก request
 - กฎใน `domain-rules.md` port เป็น class แยก (ไม่ผูก Spring) + test ด้วย `fixtures/` ของ repo นี้
 - ตอบ JSON ตาม `api-contract.md`: ไม่ละ field ที่เป็น `null` (`spring.jackson.default-property-inclusion=always`), วันที่เป็น ISO-8601
