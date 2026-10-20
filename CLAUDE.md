@@ -117,6 +117,8 @@ Run build + test + lint before calling a change done.
 
 ## Switching to a real backend
 
+The app runs under an22-web's Content-Security-Policy (E49): no `eval`, no new inline `<script>`, no resources from other origins except Google Fonts (`data:` / `blob:` images are fine) — changing that means changing the CSP in an22-web `src/security.ts`.
+
 Set `useMock: false` in `src/environments/environment*.ts`; dev proxy `proxy.conf.json` forwards `/api` → `http://localhost:8080`. SPA deploy configs are in `deploy/`.
 
 The real backend lives in two separate repos (E47, built in this order: web = Node.js static server + `/api` proxy, then api = Java Spring Boot that also owns the PostgreSQL schema as Flyway migrations); this repo is their spec. **Hand-off docs: `docs/backend/`** — `README.md` (repos, how they read this one), `api-contract.md` (every endpoint, headers, errors, 401/403 rules — the former endpoint list), `domain-rules.md` (rule functions the server must port, incl. mock-only rules), `data-model.md` (tables, keys, derived fields, document numbers); decision index `docs/decisions.md`.

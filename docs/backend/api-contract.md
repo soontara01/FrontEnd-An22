@@ -45,6 +45,18 @@ browser ถือแค่ cookie `an22.sid` (httpOnly, SameSite=Lax, Secure บ
 - CSRF: web ตั้ง cookie `XSRF-TOKEN` (อ่านได้) — POST / PUT / PATCH / DELETE ต้องมี header `X-XSRF-TOKEN` ตรงกัน (Angular `HttpClient` ส่งให้เอง) ไม่งั้น **403** "คำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่"
 - หน้าบ้านรู้ว่า login อยู่จาก `GET /me` ตอนเปิดทุกหน้า (401 = ยังไม่ login, ไม่ขึ้นข้อความ); platform ใช้ `GET /platform/me`
 - mock จำลองทั้ง web + api: token อยู่ใน `an22.mock.session` / `an22.mock.platformSession` (localStorage — เฉพาะ mock)
+- web จำกัดจำนวนครั้งต่อ IP (E49) ของ POST `auth/login`, `auth/signup`, `auth/forgot-password`, `auth/reset-password`, `auth/verify`, `platform/auth/login`,
+  `shifts/:id/unlock` → เกิน = **429** "พยายามบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่" (ไม่ถึง api) — api ยังต้องจำกัดต่อบัญชีเอง
+- web ใส่ `X-Real-IP` / `X-Forwarded-For` / `-Proto` / `-Host` ใหม่จาก IP ที่เชื่อถือได้ (ทิ้งค่าที่ browser ส่งมา) — api ใช้ `X-Real-IP` เป็น IP ของผู้ใช้ (จำกัดจำนวนครั้ง, audit)
+- คำตอบที่ api ไม่ได้ใส่ `Cache-Control` → web ใส่ `no-store`; หน้าเว็บอยู่ใต้ Content-Security-Policy ของ web (ห้าม `eval` / สคริปต์ inline ใหม่ / โหลดจากโดเมนอื่นนอกจาก Google Fonts)
+
+### ความปลอดภัยของ api (E49 — ข้อกำหนดสำหรับ C2)
+
+- **เข้าถึงได้จาก web เท่านั้น** (network ภายใน / firewall) — ห้ามเปิด api ออกอินเทอร์เน็ตตรง ๆ: header `X-Real-IP` / `X-Forwarded-*` เชื่อได้เพราะมาจาก web เท่านั้น
+- **ลิงก์ในอีเมล** (ตั้งรหัสผ่านใหม่ ฯลฯ) สร้างจาก base URL ที่ตั้งค่าไว้ของระบบ — ห้ามใช้ `Host` / `X-Forwarded-Host` ของ request (ไม่งั้นลิงก์ในอีเมลชี้ไปเว็บอื่นได้)
+- **GET / HEAD ห้ามแก้ข้อมูล** — การกัน CSRF ของ web ตรวจเฉพาะ POST / PUT / PATCH / DELETE
+- จำกัดจำนวนครั้ง login / `auth/verify` / ปลดล็อก POS ต่อบัญชี (+ ต่อ `X-Real-IP`) ตามแผน C2; ข้อความ error ของ login เหมือนกันทุกกรณี (E3)
+- ไม่ log รหัสผ่าน / token / body ของ auth
 
 ### Error
 
