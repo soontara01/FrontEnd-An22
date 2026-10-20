@@ -20,7 +20,6 @@ describe('AuthService', () => {
     active,
   });
   const response = (branches: Branch[] = [branch(1)]): LoginResponse => ({
-    token: 'mock-jwt-token.t1.u1',
     user: {
       id: 1,
       username: 'admin',
@@ -77,7 +76,24 @@ describe('AuthService', () => {
     expect(service.company()?.code).toBe('DEMO');
     expect(service.currentBranch()?.id).toBe(1);
     expect(service.companyCode()).toBe('DEMO');
-    expect(localStorage.getItem('an22.token')).toBe('"mock-jwt-token.t1.u1"');
+    // E48: the session stays in memory — only the company code / branch of the device are stored
+    expect(Object.keys(localStorage).sort()).toEqual(['an22.branch', 'an22.companyCode']);
+  });
+
+  it('restore() loads the session from /me, a 401 just means logged out (E48)', () => {
+    const service = create();
+    service.restore().subscribe();
+    http.expectOne({ method: 'GET', url: '/api/me' }).flush(response());
+    expect(service.isLoggedIn()).toBe(true);
+    expect(service.currentBranch()?.id).toBe(1);
+
+    const done = vi.fn();
+    service.restore().subscribe({ next: done, error: () => expect.unreachable() });
+    http
+      .expectOne({ method: 'GET', url: '/api/me' })
+      .flush({ message: 'x' }, { status: 401, statusText: 'Unauthorized' });
+    expect(done).toHaveBeenCalled();
+    expect(service.isLoggedIn()).toBe(false);
   });
 
   it('keeps a remembered branch that is still allowed, else none of several', () => {
@@ -99,8 +115,18 @@ describe('AuthService', () => {
 
     expect(service.isLoggedIn()).toBe(false);
     expect(service.company()).toBeNull();
-    expect(localStorage.getItem('an22.token')).toBeNull();
     expect(localStorage.getItem('an22.companyCode')).toBe('"DEMO"');
+    // the web server ends its session first (E48) — also when that fails
+    expect(assign).not.toHaveBeenCalled();
+    http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
+    expect(assign).toHaveBeenCalledWith('/auth/login');
+
+    assign.mockClear();
+    login(service);
+    service.logout();
+    http
+      .expectOne({ method: 'POST', url: '/api/auth/logout' })
+      .flush(null, { status: 500, statusText: 'Error' });
     expect(assign).toHaveBeenCalledWith('/auth/login');
   });
 
@@ -110,7 +136,6 @@ describe('AuthService', () => {
     staff.user = { ...staff.user, role: 'user' };
     login(service, { ...staff, canSeeCost: false });
     expect(service.canSeeCost()).toBe(false);
-    expect(localStorage.getItem('an22.canSeeCost')).toBe('false');
 
     // The company turned it on: the next page load's /me says so.
     const { user, company, branches } = staff;
@@ -123,16 +148,22 @@ describe('AuthService', () => {
     login(service, { ...response(), canSeeCost: false }); // an admin always sees it
     expect(service.canSeeCost()).toBe(true);
     service.logout();
-    expect(localStorage.getItem('an22.canSeeCost')).toBeNull();
+    expect(service.canSeeCost()).toBe(false);
+    http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
   });
 
-  it('treats a session saved without a company (before SaaS) as logged out (E1)', () => {
-    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token'));
+  it('removes the session it once kept in localStorage and does not use it (E48)', () => {
+    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u1'));
     localStorage.setItem('an22.user', JSON.stringify(response().user));
+    localStorage.setItem('an22.company', JSON.stringify(response().company));
+    localStorage.setItem('an22.branches', JSON.stringify([branch(1)]));
+    localStorage.setItem('an22.canSeeCost', 'true');
+    localStorage.setItem('an22.platformToken', JSON.stringify('mock-platform-token.p1'));
+    localStorage.setItem('an22.platformAdmin', JSON.stringify({ id: 1 }));
+    localStorage.setItem('an22.theme', JSON.stringify('dark'));
     const service = create();
     expect(service.isLoggedIn()).toBe(false);
-    expect(service.token()).toBeNull();
-    expect(localStorage.getItem('an22.user')).toBeNull();
+    expect(Object.keys(localStorage)).toEqual(['an22.theme']);
   });
 
   it('forgets the company code on request', () => {

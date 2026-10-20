@@ -19,7 +19,6 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AuthService } from '@core/auth/auth.service';
-import { httpErrorShown } from '@core/http/http-error-shown';
 import { MenuAccessService } from '@core/navigation/menu-access.service';
 import { MENU } from '@core/navigation/menu.config';
 import { LoadingService } from '@core/services/loading.service';
@@ -93,13 +92,8 @@ export class MainLayout {
   constructor() {
     // Non-admins: which menus to show (also used by `menuGuard`, fetched once per page load).
     if (!this.auth.isAdmin()) this.menus.load().subscribe();
-    // Fresh rights once per page load; a branch taken away sends the user to choose again.
-    this.auth.refresh().subscribe({
-      next: () => {
-        if (!this.auth.currentBranch()) this.document.location.assign('/auth/select-branch');
-      },
-      error: httpErrorShown,
-    });
+    // Fresh rights came with `AuthService.restore()` when the page opened; a branch taken away
+    // already sent the user to choose again (`branchGuard`).
   }
 
   /** Every menu's state belongs to one branch: switch, then reload the page. */

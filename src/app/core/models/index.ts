@@ -29,3 +29,4 @@ export * from './subscription.model';
 export * from './signup.model';
 export * from './platform.model';
 export * from './company-data.model';
+export * from './held-bill.model';

@@ -119,6 +119,11 @@ export interface Shift {
   approvedBy: string | null;
   approvedAt: string | null;
   note: string;
+  /**
+   * The POS screen of this shift is locked since (ISO; null = not locked) — until its cashier or an
+   * admin logs in again (`POST /shifts/:id/lock|unlock`, E48: kept by the server, not the device)
+   */
+  lockedAt: string | null;
   /** Read-only, server-derived: Σ adjustments made after closing (S8; missing = none) */
   adjustmentTotal?: number;
 }
@@ -141,6 +146,7 @@ export const SHIFT_DEFAULTS: Omit<
   approvedBy: null,
   approvedAt: null,
   note: '',
+  lockedAt: null,
 };
 
 /** Defaults per count line; `counted: null` keeps its meaning (`confirm` / `none`, no variance). */

@@ -70,13 +70,14 @@ collection ของ mock (`MockDb` ใน `mock-backend.interceptor.ts`) ≈ �
 
 ## กะ
 
-| ตาราง (TS type)                         | ระดับ                                | key / unique                                                                  | หมายเหตุ                                                                                     |
-| --------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `shifts` (`Shift`)                      | สาขา (`branch_id` = ของเครื่อง, E24) | `shift_no`; กะเปิดได้ 1 กะต่อเครื่อง (partial unique `WHERE status = 'open'`) | `adjustmentTotal` derived; `openingDenominations` / `cashDenominations` → child หรือ `jsonb` |
-| `shift_counts` (`ShiftCount`)           | สาขา                                 | (shift, method)                                                               | `counted` null = ยังไม่นับ / ไม่ต้องนับ; `first_count` เก็บยอดนับครั้งแรก                    |
-| `cash_movements` (`CashMovement`)       | สาขา                                 | `id`                                                                          | เงินเข้า / ออกลิ้นชัก                                                                        |
-| `drawer_opens` (`DrawerOpen`)           | สาขา                                 | `id`                                                                          | ไม่มีเงิน (S7)                                                                               |
-| `shift_adjustments` (`ShiftAdjustment`) | สาขา                                 | `id`                                                                          | append-only (S8)                                                                             |
+| ตาราง (TS type)                         | ระดับ                                | key / unique                                                                  | หมายเหตุ                                                                                                                         |
+| --------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `shifts` (`Shift`)                      | สาขา (`branch_id` = ของเครื่อง, E24) | `shift_no`; กะเปิดได้ 1 กะต่อเครื่อง (partial unique `WHERE status = 'open'`) | `adjustmentTotal` derived; `openingDenominations` / `cashDenominations` → child หรือ `jsonb`; `locked_at` (E48 — ล็อกหน้าจอ POS) |
+| `shift_counts` (`ShiftCount`)           | สาขา                                 | (shift, method)                                                               | `counted` null = ยังไม่นับ / ไม่ต้องนับ; `first_count` เก็บยอดนับครั้งแรก                                                        |
+| `cash_movements` (`CashMovement`)       | สาขา                                 | `id`                                                                          | เงินเข้า / ออกลิ้นชัก                                                                                                            |
+| `drawer_opens` (`DrawerOpen`)           | สาขา                                 | `id`                                                                          | ไม่มีเงิน (S7)                                                                                                                   |
+| `shift_adjustments` (`ShiftAdjustment`) | สาขา                                 | `id`                                                                          | append-only (S8)                                                                                                                 |
+| `held_bills` (`HeldBill`, E48)          | สาขา + เครื่อง (`terminal_id`)       | `id`                                                                          | บิลที่พักไว้ของ POS: `payload jsonb` (รายการ, ผู้ซื้อ, ส่วนลด), `held_at`, `created_by`; ลบเมื่อเรียกคืน                         |
 
 ## เลขรันเอกสาร
 

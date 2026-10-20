@@ -1,3 +1,5 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import {
@@ -10,6 +12,7 @@ import {
   Sale,
   Shift,
 } from '@core/models';
+import { signInForTest } from '@core/auth/auth.testing';
 import { TerminalService } from '@core/services/terminal.service';
 import { PosApi } from './pos-api.service';
 import { HeldBill, PosStore } from './pos.store';
@@ -39,6 +42,8 @@ describe('PosStore', () => {
   const sale = { ...SALE_DEFAULTS, id: 1, orderNo: 'POS-1' } as Sale;
   let api: Record<keyof PosApi, ReturnType<typeof vi.fn>>;
   let store: PosStore;
+  /** Parked bills on the fake server (E48: no longer in localStorage). */
+  let held: HeldBill[];
 
   const shift: Shift = {
     id: 7,
@@ -59,14 +64,12 @@ describe('PosStore', () => {
     approvedBy: null,
     approvedAt: null,
     note: '',
+    lockedAt: null,
   };
 
   beforeEach(() => {
     localStorage.clear();
-    // Logged in as a cashier (AuthService reads the stored user).
-    localStorage.setItem('an22.user', JSON.stringify({ id: 2, name: 'สมชาย ใจดี', role: 'user' }));
-    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u2'));
-    localStorage.setItem('an22.company', JSON.stringify({ id: 1, code: 'DEMO', name: 'DEMO' }));
+    held = [];
     // This device is set to terminal 1 of company 1 (Settings → "เครื่องนี้").
     localStorage.setItem('an22.pos.terminal.1', '1');
     api = {
@@ -104,8 +107,32 @@ describe('PosStore', () => {
       countCheck: vi.fn(),
       closeShift: vi.fn(() => of({ ...shift, status: 'closed' })),
       verify: vi.fn(() => of({ user: { name: 'สมชาย ใจดี', role: 'user' } })),
+      heldBills: vi.fn(() => of([...held])),
+      holdBill: vi.fn((bill: Omit<HeldBill, 'id'>) => {
+        const parked = { ...bill, id: `H${held.length + 1}` };
+        held = [...held, parked];
+        return of(parked);
+      }),
+      deleteHeldBill: vi.fn((id: string) => {
+        held = held.filter((b) => b.id !== id);
+        return of(undefined);
+      }),
+      lockShift: vi.fn((id: number) => of({ ...shift, id, lockedAt: '2026-10-20T09:00:00.000Z' })),
+      unlockShift: vi.fn((id: number) => of({ ...shift, id, lockedAt: null })),
     };
-    TestBed.configureTestingModule({ providers: [PosStore, { provide: PosApi, useValue: api }] });
+    TestBed.configureTestingModule({
+      providers: [
+        PosStore,
+        { provide: PosApi, useValue: api },
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    // Logged in as a cashier
+    signInForTest({
+      user: { id: 2, name: 'สมชาย ใจดี', role: 'user' },
+      company: { id: 1, code: 'DEMO', name: 'DEMO' },
+    });
     store = TestBed.inject(PosStore);
     store.load();
   });
@@ -141,24 +168,58 @@ describe('PosStore', () => {
     expect(store.blocker()).toBe('SKU-1 สต็อกไม่พอ (คงเหลือ 50 ชิ้น)');
   });
 
-  it('parks bills in storage and resumes them (parking the current one)', () => {
+  it('parks bills on the server and resumes them (parking the current one) — E48', () => {
     store.setCustomer('คุณเอ');
     store.add(1);
     store.hold();
     expect(store.items()).toEqual([]);
     expect(store.customer()).toBe('');
-    const [held] = store.holds();
-    expect(held).toMatchObject({ customer: 'คุณเอ', total: 100 });
-    expect(
-      JSON.parse(localStorage.getItem('an22.pos.held.1.0') ?? '[]') as HeldBill[],
-    ).toHaveLength(1);
+    const [parked] = store.holds();
+    expect(parked).toMatchObject({ customer: 'คุณเอ', total: 100 });
+    expect(held).toEqual([parked]);
+    expect(Object.keys(localStorage).some((k) => k.includes('held'))).toBe(false);
 
     store.add(1, 10);
-    store.resume(held.id);
+    store.resume(parked.id);
+    expect(api.deleteHeldBill).toHaveBeenCalledWith(parked.id);
     expect(store.customer()).toBe('คุณเอ');
     expect(store.items()).toEqual([{ productId: 1, factor: 1, qty: 1, serial: null }]);
     expect(store.holds()).toHaveLength(1); // the pack bill was parked instead
     store.discardHold(store.holds()[0].id);
+    expect(store.holds()).toEqual([]);
+    expect(held).toEqual([]);
+  });
+
+  it('moves bills parked in localStorage before E48 up to the server once', () => {
+    const old = {
+      id: 'H1-old',
+      heldAt: '2026-10-01T00:00:00.000Z',
+      customer: 'เก่า',
+      items: [],
+      freeSerials: [],
+      total: 50,
+    };
+    localStorage.setItem('an22.pos.held.1.0', JSON.stringify([old]));
+    localStorage.setItem('an22.pos.holds', JSON.stringify([{ ...old, id: 'H2-older' }]));
+    localStorage.setItem('an22.pos.locked', '7');
+    store.load();
+    expect(api.holdBill).toHaveBeenCalledTimes(2);
+    expect(api.holdBill).toHaveBeenCalledWith(
+      expect.not.objectContaining({ id: expect.anything() }),
+    );
+    expect(store.holds().map((b) => b.customer)).toEqual(['เก่า', 'เก่า']);
+    expect(localStorage.getItem('an22.pos.held.1.0')).toBeNull();
+    expect(localStorage.getItem('an22.pos.holds')).toBeNull();
+    expect(localStorage.getItem('an22.pos.locked')).toBeNull();
+    store.load(); // nothing left to move
+    expect(api.holdBill).toHaveBeenCalledTimes(2);
+  });
+
+  it('has no parked bills on a device that is no POS terminal', () => {
+    TestBed.inject(TerminalService).clear();
+    api.heldBills.mockClear();
+    store.load();
+    expect(api.heldBills).not.toHaveBeenCalled();
     expect(store.holds()).toEqual([]);
   });
 
@@ -321,8 +382,9 @@ describe('PosStore', () => {
     it('closes the shift, keeps it for the Z report and clears the lock', () => {
       withShifts(shift);
       store.lock();
+      expect(api.lockShift).toHaveBeenCalledWith(7);
       expect(store.locked()).toBe(true);
-      expect(localStorage.getItem('an22.pos.locked')).toBe('7');
+      expect(localStorage.getItem('an22.pos.locked')).toBeNull(); // the server keeps it (E48)
       store
         .closeShift({
           counts: [],
@@ -336,7 +398,6 @@ describe('PosStore', () => {
       expect(store.shift()).toBeNull();
       expect(store.closedShift()?.status).toBe('closed');
       expect(store.locked()).toBe(false);
-      expect(localStorage.getItem('an22.pos.locked')).toBeNull();
     });
 
     it("closes another terminal's shift without touching this terminal's shift or lock", () => {
@@ -357,23 +418,28 @@ describe('PosStore', () => {
       expect(api.countCheck).toHaveBeenCalledWith(9, []);
       expect(api.closeShift).toHaveBeenCalledWith(9, payload);
       expect(store.closedShift()?.id).toBe(9);
-      expect(store.shift()).toEqual(shift);
+      expect(store.shift()).toEqual({ ...shift, lockedAt: '2026-10-20T09:00:00.000Z' });
       expect(store.locked()).toBe(true);
       expect(store.terminalLabelOf(2)).toBe('เครื่อง 2 · ชั้น 2');
     });
 
-    it('unlocks only for the shift cashier or an admin', () => {
+    it('unlocks through the server, which checks the cashier or an admin (E48)', () => {
       withShifts(shift);
       store.lock();
       const unlock = () => {
         let result: string | null = 'pending';
-        store.unlock({ username: 'x', password: 'y' }).subscribe((r) => (result = r));
+        store.unlock({ username: 'x', password: 'y' }).subscribe({
+          next: (r) => (result = r),
+          error: () => (result = 'refused'),
+        });
         return result;
       };
-      api.verify.mockReturnValueOnce(of({ user: { name: 'สมหญิง รักงาน', role: 'user' } }));
-      expect(unlock()).toBe('ปลดล็อกได้เฉพาะ สมชาย ใจดี หรือผู้ดูแลระบบ');
+      // someone else / a wrong login: 400 from the server (the error interceptor shows it)
+      api.unlockShift.mockReturnValueOnce(throwError(() => ({ status: 400 })));
+      expect(unlock()).toBe('refused');
       expect(store.locked()).toBe(true);
       expect(unlock()).toBeNull();
+      expect(api.unlockShift).toHaveBeenLastCalledWith(7, { username: 'x', password: 'y' });
       expect(store.locked()).toBe(false);
     });
 

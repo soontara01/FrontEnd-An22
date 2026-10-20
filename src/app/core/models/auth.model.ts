@@ -10,11 +10,11 @@ export interface LoginRequest {
 }
 
 /**
- * The session: the token names the tenant + user (the company comes only from it); `branches` =
- * the active branches this user may work in.
+ * The session: user + company (the tenant comes only from the session's token, which the web
+ * server keeps — the browser never sees it, E48); `branches` = the active branches this user may
+ * work in.
  */
 export interface LoginResponse {
-  token: string;
   user: User;
   company: Company;
   branches: Branch[];
@@ -24,5 +24,5 @@ export interface LoginResponse {
   canSeeCost: boolean;
 }
 
-/** `GET /me`: the same session without a new token. */
-export type MeResponse = Omit<LoginResponse, 'token'>;
+/** `GET /me`: the current session (once per page load — how the app knows it is logged in). */
+export type MeResponse = LoginResponse;

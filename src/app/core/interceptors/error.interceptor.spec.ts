@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { DOCUMENT } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
+import { silentUnauthorized } from '../http/silent-unauthorized';
 import { NotificationService } from '../services/notification.service';
 import { errorInterceptor } from './error.interceptor';
 
@@ -16,9 +17,6 @@ describe('errorInterceptor', () => {
     localStorage.clear();
     assign.mockClear();
     notify.error.mockClear();
-    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u1'));
-    localStorage.setItem('an22.company', JSON.stringify({ id: 1, code: 'DEMO', name: 'ร้าน' }));
-    localStorage.setItem('an22.user', JSON.stringify({ id: 1, name: 'Admin', role: 'admin' }));
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([errorInterceptor])),
@@ -52,15 +50,25 @@ describe('errorInterceptor', () => {
     expect(await fail('PUT', '/api/settings/store', 403, 'เฉพาะผู้ดูแลระบบ')).toBe(403);
     expect(notify.error).toHaveBeenCalledTimes(3);
     expect(loggedOut()).toBe(false);
-    expect(localStorage.getItem('an22.token')).not.toBeNull();
   });
 
   it('logs out on 401 from any endpoint but login', async () => {
     expect(await fail('GET', '/api/products', 401, 'เซสชันหมดอายุ')).toBe(401);
     expect(notify.error).toHaveBeenCalledWith('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+    // AuthService.logout(): the web server's session first (E48), then the login page
+    backend.expectOne('/api/auth/logout').flush(null);
     expect(assign).toHaveBeenCalledWith('/auth/login');
-    expect(localStorage.getItem('an22.token')).toBeNull();
-    expect(localStorage.getItem('an22.user')).toBeNull();
+  });
+
+  it('stays quiet on a 401 marked silent (GET /me when a page opens, logout — E48)', async () => {
+    const result = firstValueFrom(http.get('/api/me', { context: silentUnauthorized() })).then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+    backend.expectOne('/api/me').flush(null, { status: 401, statusText: 'Unauthorized' });
+    expect(await result).toBe(401);
+    expect(notify.error).not.toHaveBeenCalled();
+    expect(loggedOut()).toBe(false);
   });
 
   it('does not log out on a refused login (401)', async () => {
@@ -76,14 +84,11 @@ describe('errorInterceptor', () => {
       400,
     );
     expect(loggedOut()).toBe(false);
-    expect(localStorage.getItem('an22.token')).not.toBeNull();
   });
 
   it('ends only the platform admin session on a 401 of the platform API (E36)', async () => {
-    localStorage.setItem('an22.platformToken', JSON.stringify('mock-platform-token.p1'));
     expect(await fail('GET', '/api/platform/companies', 401, 'หมดอายุ')).toBe(401);
     expect(assign).toHaveBeenCalledWith('/platform/login');
-    expect(localStorage.getItem('an22.platformToken')).toBeNull();
-    expect(localStorage.getItem('an22.token')).not.toBeNull();
+    // the shop session is not logged out (no POST /api/auth/logout — verify() checks)
   });
 });

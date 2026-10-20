@@ -3,6 +3,7 @@ import { Observable, map } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import {
   ApprovalCredentials,
+  HeldBill,
   CartIssue,
   CashMovement,
   CashMovementPayload,
@@ -139,6 +140,29 @@ export class PosApi {
 
   closeShift(shiftId: number, payload: ShiftClosePayload): Observable<Shift> {
     return this.api.post<Shift>(`shifts/${shiftId}/close`, payload).pipe(map(normalizeShift));
+  }
+
+  /** Locks the screen of a shift (E48: the lock lives on the server, not on the device). */
+  lockShift(shiftId: number): Observable<Shift> {
+    return this.api.post<Shift>(`shifts/${shiftId}/lock`, null).pipe(map(normalizeShift));
+  }
+
+  /** Unlocks with the cashier's or an admin's login (wrong / not allowed → 400). */
+  unlockShift(shiftId: number, credentials: ApprovalCredentials): Observable<Shift> {
+    return this.api.post<Shift>(`shifts/${shiftId}/unlock`, credentials).pipe(map(normalizeShift));
+  }
+
+  /** Parked bills of this branch + terminal (E48: kept on the server — they hold buyer data). */
+  heldBills(): Observable<HeldBill[]> {
+    return this.api.get<HeldBill[]>('pos/held-bills');
+  }
+
+  holdBill(bill: Omit<HeldBill, 'id'>): Observable<HeldBill> {
+    return this.api.post<HeldBill>('pos/held-bills', bill);
+  }
+
+  deleteHeldBill(id: string): Observable<void> {
+    return this.api.delete(`pos/held-bills/${encodeURIComponent(id)}`);
   }
 
   /** Checks a login without starting a session (wrong → 400, never a 401 logout). */

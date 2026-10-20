@@ -1,5 +1,6 @@
 import { inject } from '@angular/core';
 import { CanMatchFn, Router, Routes } from '@angular/router';
+import { map } from 'rxjs';
 import { PlatformApi } from './data/platform-api.service';
 import { PlatformAuth } from './data/platform-auth.service';
 import CompanyDetail from './pages/company-detail/company-detail';
@@ -8,11 +9,19 @@ import Outbox from './pages/outbox/outbox';
 import PlatformLayout from './pages/platform-layout/platform-layout';
 import PlatformLogin from './pages/platform-login/platform-login';
 
-/** Platform admin logged in (own token, E36), else its login page. */
-const platformAuthGuard: CanMatchFn = () =>
-  inject(PlatformAuth).isLoggedIn() || inject(Router).parseUrl('/platform/login');
-const platformGuestGuard: CanMatchFn = () =>
-  !inject(PlatformAuth).isLoggedIn() || inject(Router).parseUrl('/platform');
+/** Platform admin logged in (own session slot, E36 / E48), else its login page. */
+const platformAuthGuard: CanMatchFn = () => {
+  const router = inject(Router);
+  return inject(PlatformAuth)
+    .load()
+    .pipe(map((loggedIn) => loggedIn || router.parseUrl('/platform/login')));
+};
+const platformGuestGuard: CanMatchFn = () => {
+  const router = inject(Router);
+  return inject(PlatformAuth)
+    .load()
+    .pipe(map((loggedIn) => !loggedIn || router.parseUrl('/platform')));
+};
 
 /**
  * The SaaS operator's pages (E36): one lazy chunk under `/platform`, not a `MENU` entry, never
