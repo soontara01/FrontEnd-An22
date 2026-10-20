@@ -2,6 +2,9 @@ import { printElement } from './print-element';
 
 describe('printElement', () => {
   afterEach(() => document.body.replaceChildren());
+  // Other specs leave component styles in <head>: look for the @page rule printElement adds.
+  const pageRule = () =>
+    [...document.head.querySelectorAll('style')].find((s) => s.textContent?.startsWith('@page'));
 
   it('hides everything but the element while printing, sizes the page, then restores', () => {
     document.body.innerHTML = `
@@ -19,7 +22,7 @@ describe('printElement', () => {
         hidden: [...document.querySelectorAll('.print-hide')].map((e) => e.id),
         chain: [...document.querySelectorAll('.print-chain')].map((e) => e.tagName),
         mode: document.documentElement.classList.contains('print-receipt'),
-        page: document.head.querySelector('style')?.textContent ?? '',
+        page: pageRule()?.textContent ?? '',
       };
       window.dispatchEvent(new Event('afterprint'));
     });
@@ -32,6 +35,6 @@ describe('printElement', () => {
     expect(during?.page).toBe('@page { size: 80mm 105mm; margin: 0; }');
     expect(document.querySelectorAll('.print-hide, .print-chain')).toHaveLength(0);
     expect(document.documentElement.classList.contains('print-receipt')).toBe(false);
-    expect(document.head.querySelector('style')).toBeNull();
+    expect(pageRule()).toBeUndefined();
   });
 });
