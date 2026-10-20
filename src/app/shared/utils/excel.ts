@@ -36,3 +36,16 @@ export function styleHeaderRow(
   });
   sheet.views = [{ state: 'frozen', ySplit: rowNumber }];
 }
+
+/**
+ * An ISO timestamp as an Excel date cell that shows the **local** time — ExcelJS turns a `Date`
+ * into a serial from its UTC value, so a 12:42 sale in Bangkok would read 05:42. Use with a
+ * date `numFmt` such as `EXCEL_DATETIME`.
+ */
+export function excelDate(iso: string): Date {
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000);
+}
+
+export const EXCEL_DATETIME = 'dd/mm/yyyy hh:mm';
+export const EXCEL_MONEY = '#,##0.00';

@@ -8,7 +8,7 @@ import {
   stockInPacks,
   stockLevel,
 } from '@core/models';
-import { loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
+import { excelDate, loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
 
 export const STOCK_LEVEL_LABEL: Record<StockLevel, string> = {
   ok: 'ปกติ',
@@ -184,7 +184,7 @@ function addSerialSheet(
     const row = sheet.addRow(
       kept(
         SERIAL_COLUMNS,
-        [i + 1, p?.sku ?? '', p?.name ?? '', s.serial, s.cost, new Date(s.receivedAt), s.note],
+        [i + 1, p?.sku ?? '', p?.name ?? '', s.serial, s.cost, excelDate(s.receivedAt), s.note],
         seeCost,
       ),
     );
