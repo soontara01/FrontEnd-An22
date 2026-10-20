@@ -101,6 +101,10 @@
   CSRF = SameSite=Lax + cookie `XSRF-TOKEN` / header `X-XSRF-TOKEN` (Angular); api ยังเป็น JWT stateless; **ข้อมูลจริงไม่อยู่ใน localStorage** — เหลือเฉพาะค่าของเครื่อง
   (theme, `companyCode`, `branch`, เลขเครื่อง POS, `onboarding.hidden.*`) + ข้อมูลของ mock; user / company / branches อยู่ใน memory (โหลดจาก `GET /me` ทุกหน้า);
   บิลที่พักไว้ + ล็อก POS ย้ายไป api (`/pos/held-bills`, `/shifts/:id/lock|unlock`) — `api-contract.md` หัวข้อ "Session"
+- **E49** (2026-10-20, ก่อน C2) ความปลอดภัยของ web: CSP + header ความปลอดภัยทุกคำตอบ (ห้ามฝัง frame, `Referrer-Policy: same-origin`, HSTS บน https),
+  log ไม่มีค่าลับใน query, จำกัดจำนวนครั้งต่อ IP ของ login / ตรวจรหัส (`AUTH_RATE_LIMIT`), web ส่ง `X-Real-IP` ที่เชื่อถือได้ให้ api,
+  คำตอบ `/api` ไม่ลง cache (`no-store` ถ้า api ไม่กำหนด), cookie `__Host-an22.sid` บน https; ข้อกำหนดของ api: เข้าถึงได้จาก web เท่านั้น,
+  ลิงก์อีเมลสร้างจาก base URL ที่ตั้งค่า (ไม่ใช่ header `Host`), GET ห้ามแก้ข้อมูล — `api-contract.md` หัวข้อ "Session" / "ความปลอดภัยของ api"
 
 ## บั๊ก / ข้อสังเกตก่อน SaaS — [`test-before-saas.md`](test-before-saas.md) ตาราง B1–B24, แผนแก้ [`before-do-saas-plan.md`](before-do-saas-plan.md)
 
