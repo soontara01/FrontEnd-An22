@@ -153,7 +153,7 @@ export async function readReceiveRows(file: File): Promise<RawReceiveRow[]> {
   sheet.getRow(1).eachCell((cell, col) => {
     const text = cell.text.trim();
     const match = RECEIVE_COLUMNS.find(
-      (c) => c.header === text || c.header.replace('*', '') === text,
+      (c) => c.header === text || c.header.replaceAll('*', '') === text,
     );
     if (match) columnOf.set(col, match.key);
   });
