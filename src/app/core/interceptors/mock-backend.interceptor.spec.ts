@@ -44,6 +44,7 @@ import {
   PlatformCompanyRow,
   PlatformLoginResponse,
   SignupPayload,
+  HeldBill,
   SubscriptionInfo,
   SerialNumber,
   SerialReceiveResult,
@@ -1546,6 +1547,71 @@ describe('mockBackendInterceptor – shifts', () => {
     expect(check.needsApproval).toBe(false);
     const closed = await call<Shift>('POST', `shifts/${shift.id}/close`, body, { terminal: null });
     expect(closed).toMatchObject({ status: 'closed', closedBy: 'Admin', cashier: 'สมชาย ใจดี' });
+  });
+
+  it('keeps the POS screen lock on the shift; only its cashier or an admin unlocks (E48)', async () => {
+    const shift = await open(500, { token: STAFF });
+    expect(shift.lockedAt).toBeNull();
+    expect(await errorOf(call('POST', `shifts/${shift.id}/lock`, null, { terminal: 2 }))).toBe(
+      'กะนี้ไม่ได้เปิดที่เครื่องนี้',
+    );
+    const locked = await call<Shift>('POST', `shifts/${shift.id}/lock`, null, { token: STAFF });
+    expect(locked.lockedAt).toBe(new Date(2026, 9, 4, 10, 0).toISOString());
+    // a reload / another browser storage does not unlock: the server answers the lock
+    expect(
+      (await call<Shift>('GET', 'shifts/current', undefined, { token: STAFF }))?.lockedAt,
+    ).toBe(locked.lockedAt);
+    expect(await errorOf(sellMouse({ token: STAFF }))).toBe('หน้าจอถูกล็อก — ปลดล็อกก่อน');
+
+    const unlock = (username: string, password: string) =>
+      call<Shift>('POST', `shifts/${shift.id}/unlock`, { username, password }, { token: STAFF });
+    expect(await errorOf(unlock('somchai', 'x'))).toBe('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+    expect(await errorOf(unlock('john', '1234'))).toBe(
+      'ปลดล็อกได้เฉพาะ สมชาย ใจดี หรือผู้ดูแลระบบ',
+    );
+    expect((await call<Shift>('GET', `shifts/${shift.id}`))?.lockedAt).toBe(locked.lockedAt);
+    expect((await unlock('admin', 'admin')).lockedAt).toBeNull();
+
+    await call('POST', `shifts/${shift.id}/lock`, null, { token: STAFF });
+    expect((await unlock(' Somchai ', '1234')).lockedAt).toBeNull();
+    expect(await sellMouse({ token: STAFF })).toMatchObject({ cashier: 'สมชาย ใจดี' });
+  });
+
+  it('keeps parked bills per branch + terminal on the server (E48)', async () => {
+    const bill = {
+      heldAt: '2026-10-04T03:00:00.000Z',
+      customer: 'คุณเอ',
+      items: [{ productId: MOUSE, factor: 1, qty: 1, serial: null }],
+      freeSerials: [],
+      buyer: {
+        name: 'บริษัท บี จำกัด',
+        taxId: '0105550123451',
+        branchType: 'head',
+        branchNo: '',
+        address: 'กรุงเทพฯ',
+      },
+      billManual: null,
+      manualReason: '',
+      total: 531,
+    };
+    expect(await call<HeldBill[]>('GET', 'pos/held-bills')).toEqual([]);
+    const parked = await call<HeldBill>('POST', 'pos/held-bills', bill);
+    expect(parked).toEqual({ ...bill, id: expect.any(String) });
+    expect(await call<HeldBill[]>('GET', 'pos/held-bills')).toEqual([parked]);
+    // another terminal / no terminal / no items
+    expect(await call<HeldBill[]>('GET', 'pos/held-bills', undefined, { terminal: 2 })).toEqual([]);
+    expect(
+      await errorOf(call('GET', 'pos/held-bills', undefined, { terminal: null })),
+    ).toBeTruthy();
+    expect(await errorOf(call('POST', 'pos/held-bills', { ...bill, items: [] }))).toBe(
+      'ไม่มีรายการในบิลที่จะพัก',
+    );
+    expect(
+      await errorOf(call('DELETE', `pos/held-bills/${parked.id}`, undefined, { terminal: 2 })),
+    ).toBe('ไม่พบบิลที่พักไว้');
+
+    expect(await call('DELETE', `pos/held-bills/${parked.id}`)).toBeNull();
+    expect(await call<HeldBill[]>('GET', 'pos/held-bills')).toEqual([]);
   });
 });
 

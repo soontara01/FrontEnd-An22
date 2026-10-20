@@ -93,6 +93,8 @@ import {
   userBranchError,
   userChangeError,
   hasAdminRights,
+  HeldBill,
+  ApprovalCredentials,
   isOwner,
   ROLE_LABEL,
   CompanyDeletion,
@@ -302,6 +304,8 @@ interface MockDb {
   /** Drawer opened without a sale (S7) and corrections of closed shifts (S8). */
   drawerOpens: DrawerOpen[];
   shiftAdjustments: ShiftAdjustment[];
+  /** Parked POS bills per branch + terminal (E48 — they once lived in the device's localStorage). */
+  heldBills: StoredHeldBill[];
   /** Set once shifts were switched on for this stored db (see `enableShifts()`). */
   shiftsEnabled?: boolean;
   /** POS terminal registry: number + Revenue Dept POS ID per cash drawer (terminal plan). */
@@ -391,6 +395,9 @@ const PLATFORM_KEY = 'mock.platform';
  */
 const SESSION_KEY = 'mock.session';
 const PLATFORM_SESSION_KEY = 'mock.platformSession';
+
+/** A parked bill as the mock keeps it: with the branch + terminal it belongs to. */
+type StoredHeldBill = HeldBill & { branchId: number; terminalId: number };
 
 /** What the api answers a login with: the session + the token, which the web server keeps. */
 type ApiLoginResponse = LoginResponse & { token: string };
@@ -1034,6 +1041,7 @@ const seedDb = (): MockDb => ({
   cashMovements: [],
   drawerOpens: [],
   shiftAdjustments: [],
+  heldBills: [],
   posTerminals: SEED_POS_TERMINALS.map((t) => ({ ...t })),
   branches: SEED_BRANCHES.map((b) => ({ ...b })),
   nextBranchId: SEED_BRANCHES.length + 1,
@@ -1081,6 +1089,7 @@ const blankDb = (): MockDb => ({
   cashMovements: [],
   drawerOpens: [],
   shiftAdjustments: [],
+  heldBills: [],
   shiftsEnabled: true,
   posTerminals: [],
   branches: [],
@@ -2158,6 +2167,9 @@ function handle(
   }
   if (path === 'settings/menu-access') return handleMenuAccess(req, path, db);
   if (path === 'shifts' || path.startsWith('shifts/')) return handleShifts(req, path, db);
+  if (path === 'pos/held-bills' || path.startsWith('pos/held-bills/')) {
+    return handleHeldBills(req, path, db);
+  }
   if (path === 'pos-terminals' || path.startsWith('pos-terminals/')) {
     return handlePosTerminals(req, path, db);
   }
@@ -2195,7 +2207,8 @@ function needsBranch(req: HttpRequest<unknown>, path: string): boolean {
     /^products(\/\d+(\/stock|\/serials(\/remove)?)?)?$/.test(path) ||
     /^sales(\/\d+\/(void|credit-notes|exchanges|tax-invoice|tax-invoice\/reissue))?$/.test(path) ||
     /^shifts(\/.*)?$/.test(path) ||
-    /^transfers(\/.*)?$/.test(path)
+    /^transfers(\/.*)?$/.test(path) ||
+    /^pos\/held-bills(\/.*)?$/.test(path)
   );
 }
 
@@ -3826,6 +3839,7 @@ function checkout(body: SalePayload, db: MockDb): Observable<HttpResponse<unknow
     db.branches,
   );
   if (terminalProblem) return error(400, terminalProblem);
+  if (openShiftOf(db, terminalId)?.lockedAt) return error(400, 'หน้าจอถูกล็อก — ปลดล็อกก่อน');
   const shift = moneyShift(db, 'sell');
   if (shift.problem) return error(400, shift.problem);
   const today = todayIso();
@@ -4965,6 +4979,7 @@ function handleShifts(
       approvedBy: null,
       approvedAt: null,
       note: '',
+      lockedAt: null,
     };
     db.shifts.push(shift);
     return ok(shift);
@@ -5012,7 +5027,7 @@ function handleShifts(
   }
 
   const match =
-    /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|count-check|close|approve|drawer-opens|adjustments))?$/.exec(
+    /^shifts\/(\d+)(?:\/(movements|cash-movements|summary|count-check|close|approve|drawer-opens|adjustments|lock|unlock))?$/.exec(
       path,
     );
   if (!match) return notFound(req, path);
@@ -5028,6 +5043,24 @@ function handleShifts(
   }
 
   if (!action && req.method === 'GET') return ok(withAdjustmentTotal(db, shift));
+  // E48: the POS screen lock is the shift's (`lockedAt`), not the device's — clearing the
+  // browser's storage no longer unlocks it.
+  if (action === 'lock' && req.method === 'POST') {
+    if (shift.status !== 'open') return error(400, 'กะนี้ปิดไปแล้ว');
+    if (shift.terminalId !== terminalId) return error(400, 'กะนี้ไม่ได้เปิดที่เครื่องนี้');
+    shift.lockedAt ??= now;
+    return ok(withAdjustmentTotal(db, shift));
+  }
+  if (action === 'unlock' && req.method === 'POST') {
+    const { username, password } = (req.body ?? {}) as Partial<ApprovalCredentials>;
+    const who = checkCredentials(username, password, db);
+    if (typeof who === 'string') return error(400, who);
+    if (who.name !== shift.cashier && !hasAdminRights(who)) {
+      return error(400, `ปลดล็อกได้เฉพาะ ${shift.cashier} หรือผู้ดูแลระบบ`);
+    }
+    shift.lockedAt = null;
+    return ok(withAdjustmentTotal(db, shift));
+  }
   if (action === 'movements' && req.method === 'GET') {
     return ok(db.cashMovements.filter((m) => m.shiftId === shift.id));
   }
@@ -5148,6 +5181,7 @@ function handleShifts(
     const approval = approvalStatusFor(counts, db.storeInfo.shiftVarianceLimit, approver);
     Object.assign(shift, {
       status: 'closed',
+      lockedAt: null,
       closedAt: now,
       closedBy: user,
       counts,
@@ -5170,6 +5204,67 @@ function handleShifts(
 }
 
 /** GET/PUT /settings/menu-access — menus the `user` role sees (PUT: admin only, `menuAccessError()`). */
+/**
+ * /pos/held-bills (E48): the POS's parked bills, per branch (`X-Branch-Id`) + terminal
+ * (`X-Terminal-Id`) — on the server because they may hold the buyer's tax ID / address.
+ */
+function handleHeldBills(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+): Observable<HttpResponse<unknown>> {
+  const branchId = requestBranchId();
+  if (branchId === null) return error(400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน');
+  const problem = terminalError(terminalId, db.posTerminals, branchId, db.branches);
+  if (problem) return error(400, problem);
+  const here = (b: StoredHeldBill) => b.branchId === branchId && b.terminalId === terminalId;
+  const answer = (stored: StoredHeldBill): HeldBill => {
+    const bill: Partial<StoredHeldBill> = { ...stored };
+    delete bill.branchId;
+    delete bill.terminalId;
+    return bill as HeldBill;
+  };
+
+  if (path === 'pos/held-bills' && req.method === 'GET') {
+    return ok(
+      db.heldBills
+        .filter(here)
+        .sort((a, b) => a.heldAt.localeCompare(b.heldAt))
+        .map(answer),
+    );
+  }
+  if (path === 'pos/held-bills' && req.method === 'POST') {
+    const body = (req.body ?? {}) as Partial<HeldBill>;
+    if (!Array.isArray(body.items) || !body.items.length) {
+      return error(400, 'ไม่มีรายการในบิลที่จะพัก');
+    }
+    const bill: StoredHeldBill = {
+      id: `H${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      heldAt: body.heldAt ?? new Date().toISOString(),
+      customer: body.customer ?? '',
+      items: body.items,
+      freeSerials: body.freeSerials ?? [],
+      buyer: body.buyer ?? null,
+      billManual: body.billManual ?? null,
+      manualReason: body.manualReason ?? '',
+      total: Number(body.total) || 0,
+      branchId,
+      terminalId: terminalId!,
+    };
+    db.heldBills.push(bill);
+    return ok(answer(bill));
+  }
+  const m = /^pos\/held-bills\/([^/]+)$/.exec(path);
+  if (m && req.method === 'DELETE') {
+    const id = decodeURIComponent(m[1]);
+    const index = db.heldBills.findIndex((b) => b.id === id && here(b));
+    if (index < 0) return error(404, 'ไม่พบบิลที่พักไว้');
+    db.heldBills.splice(index, 1);
+    return ok(null);
+  }
+  return notFound(req, path);
+}
+
 function handleMenuAccess(
   req: HttpRequest<unknown>,
   path: string,

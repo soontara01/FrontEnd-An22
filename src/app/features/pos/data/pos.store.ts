@@ -23,6 +23,7 @@ import {
   DrawerOpen,
   DrawerOpenPayload,
   FreeSerial,
+  HeldBill,
   ManualDiscount,
   PaymentInput,
   PaymentMethod,
@@ -48,7 +49,6 @@ import {
   terminalError,
   terminalLabel,
   todayIso,
-  hasAdminRights,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
 import { StorageService } from '@core/services/storage.service';
@@ -56,27 +56,15 @@ import { TerminalService } from '@core/services/terminal.service';
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { CostCheckPayload, PosApi } from './pos-api.service';
 
-/** A parked bill, kept in localStorage so it survives reloads and menu switches. */
-export interface HeldBill {
-  id: string;
-  /** ISO timestamp */
-  heldAt: string;
-  customer: string;
-  items: CartItem[];
-  freeSerials: FreeSerial[];
-  /** Full tax invoice requested for the bill (missing in bills parked before it existed) */
-  buyer?: TaxInvoiceBuyer | null;
-  /** Manual discount on the whole bill + its reason (missing in bills parked before it existed) */
-  billManual?: ManualDiscount | null;
-  manualReason?: string;
-  /** Total when parked (display only; re-priced on resume) */
-  total: number;
-}
+export type { HeldBill } from '@core/models';
 
-/** Bills parked before SaaS step 2 (one store): moved once into the branch that opens the POS. */
+/**
+ * Where this device once parked bills (before E48 they lived in localStorage): `pos.holds`
+ * (before SaaS step 2) and `pos.held.<company>.<branch>` — moved up to the server once, then
+ * removed. `pos.locked` was the device's screen lock (now `Shift.lockedAt`).
+ */
 const LEGACY_HOLDS_KEY = 'pos.holds';
-/** Id of the shift whose screen is locked (survives reloads / menu switches). */
-const LOCK_KEY = 'pos.locked';
+const OLD_LOCK_KEY = 'pos.locked';
 
 /**
  * State of the POS screen (provided in pos.routes.ts): master data loaded once per page load,
@@ -103,16 +91,16 @@ export class PosStore {
   private readonly _buyer = signal<TaxInvoiceBuyer | null>(null);
   private readonly _billManual = signal<ManualDiscount | null>(null);
   private readonly _manualReason = signal('');
-  /** Parked bills belong to this device's company + branch (saas-plan section 3). */
-  private readonly holdsKey = `pos.held.${this.auth.company()?.id ?? 0}.${this.auth.currentBranch()?.id ?? 0}`;
-  private readonly _holds = signal<HeldBill[]>(this.loadHolds());
+  /** Bills this device parked before E48, per company + branch (moved to the server on load). */
+  private readonly oldHoldsKey = `pos.held.${this.auth.company()?.id ?? 0}.${this.auth.currentBranch()?.id ?? 0}`;
+  /** Parked bills of this branch + terminal, from the server (E48). */
+  private readonly _holds = signal<HeldBill[]>([]);
   private readonly _lastSale = signal<Sale | null>(null);
   private readonly _lastInvoice = signal<TaxInvoice | null>(null);
   private readonly _shift = signal<Shift | null>(null);
   private readonly _shiftLoaded = signal(false);
   /** The shift closed on this page load (Z report) */
   private readonly _closedShift = signal<Shift | null>(null);
-  private readonly _lockedShiftId = signal<number | null>(this.storage.get<number>(LOCK_KEY));
 
   readonly products = this._products.asReadonly();
   readonly promotions = this._promotions.asReadonly();
@@ -248,11 +236,8 @@ export class PosStore {
   readonly userName = computed(() => this.auth.user()?.name ?? '');
   /** Username to prefill on the lock screen (the part of the e-mail before @) */
   readonly loginHint = computed(() => this.auth.user()?.username ?? '');
-  /** The screen is locked for the open shift (a lock of another / closed shift is ignored). */
-  readonly locked = computed(() => {
-    const id = this._lockedShiftId();
-    return id !== null && this._shift()?.id === id;
-  });
+  /** The screen of the open shift is locked (`Shift.lockedAt`, kept by the server — E48). */
+  readonly locked = computed(() => !!this._shift()?.lockedAt);
   /** Its cashier or an admin may close the open shift (S1). */
   readonly canCloseShift = computed(() => {
     const shift = this._shift();
@@ -307,6 +292,7 @@ export class PosStore {
         },
         error: httpErrorShown,
       });
+    this.loadHolds();
   }
 
   /** Opens a shift at this device's terminal (the number comes from Settings, not the cashier). */
@@ -377,37 +363,35 @@ export class PosStore {
     return this.api.closeShift(shift.id, payload).pipe(
       tap((closed) => {
         this._closedShift.set(closed);
-        if (!own) return;
-        this._shift.set(null);
-        this.setLock(null);
+        if (own) this._shift.set(null);
       }),
     );
   }
 
-  /** Locks the screen of the open shift until its cashier (or an admin) logs in again. */
+  /**
+   * Locks the screen of the open shift until its cashier (or an admin) logs in again — on the
+   * server (E48), so clearing the browser's storage does not unlock it.
+   */
   lock(): void {
     const shift = this._shift();
-    if (shift) this.setLock(shift.id);
+    if (!shift) return;
+    this.api.lockShift(shift.id).subscribe({
+      next: (locked) => this._shift.set(locked),
+      error: httpErrorShown,
+    });
   }
 
-  /** Unlocks with a verified login; returns why not (null = unlocked). */
+  /**
+   * Unlocks with the cashier's or an admin's login, checked by the server (wrong / someone else →
+   * 400, shown by the error interceptor). Emits null when unlocked (no shift = nothing to do).
+   */
   unlock(credentials: ApprovalCredentials): Observable<string | null> {
-    return this.api.verify(credentials).pipe(
-      map(({ user }) => {
-        const shift = this._shift();
-        if (shift && user.name !== shift.cashier && !hasAdminRights(user)) {
-          return `ปลดล็อกได้เฉพาะ ${shift.cashier} หรือผู้ดูแลระบบ`;
-        }
-        this.setLock(null);
-        return null;
-      }),
+    const shift = this._shift();
+    if (!shift) return of(null);
+    return this.api.unlockShift(shift.id, credentials).pipe(
+      tap((unlocked) => this._shift.set(unlocked)),
+      map(() => null),
     );
-  }
-
-  private setLock(shiftId: number | null): void {
-    this._lockedShiftId.set(shiftId);
-    if (shiftId === null) this.storage.remove(LOCK_KEY);
-    else this.storage.set(LOCK_KEY, shiftId);
   }
 
   product(id: number): Product | undefined {
@@ -494,12 +478,55 @@ export class PosStore {
     this._manualReason.set('');
   }
 
-  /** Parks the current bill and starts an empty one. */
+  /** Parks the current bill on the server and starts an empty one. */
   hold(): void {
-    if (!this._items().length) return;
-    const bill: HeldBill = {
-      // Unique even for two parks within the same millisecond.
-      id: `H${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    const bill = this.billToHold();
+    if (!bill) return;
+    this.api.holdBill(bill).subscribe({
+      next: (held) => {
+        this._holds.update((holds) => [...holds, held]);
+        this.clear();
+      },
+      error: httpErrorShown,
+    });
+  }
+
+  /** Brings a parked bill back; the current bill (if any) is parked in its place. */
+  resume(id: string): void {
+    const bill = this._holds().find((b) => b.id === id);
+    if (!bill) return;
+    const current = this.billToHold();
+    this.api
+      .deleteHeldBill(id)
+      .pipe(switchMap(() => (current ? this.api.holdBill(current) : of(null))))
+      .subscribe({
+        next: (parked) => {
+          this._holds.update((holds) => [
+            ...holds.filter((b) => b.id !== id),
+            ...(parked ? [parked] : []),
+          ]);
+          this._items.set(bill.items);
+          this._freeSerials.set(bill.freeSerials);
+          this._customer.set(bill.customer);
+          this._buyer.set(bill.buyer ?? null);
+          this._billManual.set(bill.billManual ?? null);
+          this._manualReason.set(bill.manualReason ?? '');
+        },
+        error: httpErrorShown,
+      });
+  }
+
+  discardHold(id: string): void {
+    this.api.deleteHeldBill(id).subscribe({
+      next: () => this._holds.update((holds) => holds.filter((b) => b.id !== id)),
+      error: httpErrorShown,
+    });
+  }
+
+  /** The current bill as a parked one (null = empty cart). */
+  private billToHold(): Omit<HeldBill, 'id'> | null {
+    if (!this._items().length) return null;
+    return {
       heldAt: new Date().toISOString(),
       customer: this._customer(),
       items: this._items(),
@@ -509,26 +536,6 @@ export class PosStore {
       manualReason: this._manualReason(),
       total: this.cart().total,
     };
-    this.saveHolds([...this._holds(), bill]);
-    this.clear();
-  }
-
-  /** Brings a parked bill back; the current bill (if any) is parked in its place. */
-  resume(id: string): void {
-    const bill = this._holds().find((b) => b.id === id);
-    if (!bill) return;
-    this.saveHolds(this._holds().filter((b) => b.id !== id));
-    this.hold();
-    this._items.set(bill.items);
-    this._freeSerials.set(bill.freeSerials);
-    this._customer.set(bill.customer);
-    this._buyer.set(bill.buyer ?? null);
-    this._billManual.set(bill.billManual ?? null);
-    this._manualReason.set(bill.manualReason ?? '');
-  }
-
-  discardHold(id: string): void {
-    this.saveHolds(this._holds().filter((b) => b.id !== id));
   }
 
   /** Submits the bill; on success the cart is cleared and stock is reloaded. */
@@ -566,17 +573,38 @@ export class PosStore {
       );
   }
 
-  private saveHolds(holds: HeldBill[]): void {
-    this._holds.set(holds);
-    this.storage.set(this.holdsKey, holds);
+  /**
+   * Parked bills of this branch + terminal (a device that is no POS terminal has none). Bills
+   * this device parked in localStorage before E48 go up to the server first, then are removed.
+   */
+  private loadHolds(): void {
+    this.storage.remove(OLD_LOCK_KEY);
+    if (this.terminal.terminalId() === null) {
+      this._holds.set([]);
+      return;
+    }
+    const old = [
+      ...(this.storage.get<HeldBill[]>(this.oldHoldsKey) ?? []),
+      ...(this.storage.get<HeldBill[]>(LEGACY_HOLDS_KEY) ?? []),
+    ];
+    const moveUp = old.length
+      ? forkJoin(old.map((bill) => this.api.holdBill(withoutId(bill)))).pipe(
+          tap(() => {
+            this.storage.remove(this.oldHoldsKey);
+            this.storage.remove(LEGACY_HOLDS_KEY);
+          }),
+        )
+      : of([]);
+    moveUp.pipe(switchMap(() => this.api.heldBills())).subscribe({
+      next: (holds) => this._holds.set(holds),
+      error: httpErrorShown,
+    });
   }
+}
 
-  private loadHolds(): HeldBill[] {
-    const holds = this.storage.get<HeldBill[]>(this.holdsKey) ?? [];
-    const legacy = this.storage.get<HeldBill[]>(LEGACY_HOLDS_KEY);
-    if (!legacy) return holds;
-    this.storage.remove(LEGACY_HOLDS_KEY);
-    this.storage.set(this.holdsKey, [...holds, ...legacy]);
-    return [...holds, ...legacy];
-  }
+/** A parked bill to send up again: the server issues the id. */
+function withoutId(bill: HeldBill): Omit<HeldBill, 'id'> {
+  const copy: Partial<HeldBill> = { ...bill };
+  delete copy.id;
+  return copy as Omit<HeldBill, 'id'>;
 }
