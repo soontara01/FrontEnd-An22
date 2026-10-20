@@ -1,6 +1,7 @@
 import { HttpClient, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { signInForTest } from '../auth/auth.testing';
 import { TerminalService } from '../services/terminal.service';
 import { terminalInterceptor } from './terminal.interceptor';
 
@@ -10,9 +11,6 @@ describe('terminalInterceptor', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    // Logged in to company 1 (AuthService reads the stored session).
-    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u1'));
-    localStorage.setItem('an22.company', JSON.stringify({ id: 1, code: 'DEMO', name: 'DEMO' }));
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(withInterceptors([terminalInterceptor])),
@@ -21,6 +19,8 @@ describe('terminalInterceptor', () => {
     });
     http = TestBed.inject(HttpClient);
     backend = TestBed.inject(HttpTestingController);
+    // Logged in to company 1
+    signInForTest({ user: { id: 1 }, company: { id: 1, code: 'DEMO', name: 'DEMO' } });
   });
 
   it('sends no terminal until the device is set, then the stored number', () => {

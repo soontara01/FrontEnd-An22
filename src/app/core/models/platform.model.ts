@@ -17,8 +17,8 @@ export interface PlatformAdmin {
   name: string;
 }
 
+/** The platform admin's token stays in the web server's session (E48). */
 export interface PlatformLoginResponse {
-  token: string;
   admin: PlatformAdmin;
 }
 

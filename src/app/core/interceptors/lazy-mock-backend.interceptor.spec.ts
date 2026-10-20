@@ -23,13 +23,10 @@ describe('lazyMockBackendInterceptor', () => {
         password: 'admin',
       }),
     );
-    expect(login.token).toBe('mock-jwt-token.t1.u1');
-    // Second request reuses the loaded module (and its injected services).
-    const methods = await firstValueFrom(
-      http.get<PaymentMethod[]>('/api/payment-methods', {
-        headers: { Authorization: `Bearer ${login.token}` },
-      }),
-    );
+    expect(login.company.code).toBe('DEMO');
+    expect('token' in login).toBe(false); // the mock's web part keeps it (E48)
+    // Second request reuses the loaded module (and its injected services) — and the session.
+    const methods = await firstValueFrom(http.get<PaymentMethod[]>('/api/payment-methods'));
     expect(methods[0].type).toBe('cash');
   });
 });

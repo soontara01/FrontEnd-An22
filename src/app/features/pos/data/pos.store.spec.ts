@@ -1,3 +1,5 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { of, throwError } from 'rxjs';
 import {
@@ -10,6 +12,7 @@ import {
   Sale,
   Shift,
 } from '@core/models';
+import { signInForTest } from '@core/auth/auth.testing';
 import { TerminalService } from '@core/services/terminal.service';
 import { PosApi } from './pos-api.service';
 import { HeldBill, PosStore } from './pos.store';
@@ -63,10 +66,6 @@ describe('PosStore', () => {
 
   beforeEach(() => {
     localStorage.clear();
-    // Logged in as a cashier (AuthService reads the stored user).
-    localStorage.setItem('an22.user', JSON.stringify({ id: 2, name: 'สมชาย ใจดี', role: 'user' }));
-    localStorage.setItem('an22.token', JSON.stringify('mock-jwt-token.t1.u2'));
-    localStorage.setItem('an22.company', JSON.stringify({ id: 1, code: 'DEMO', name: 'DEMO' }));
     // This device is set to terminal 1 of company 1 (Settings → "เครื่องนี้").
     localStorage.setItem('an22.pos.terminal.1', '1');
     api = {
@@ -105,7 +104,19 @@ describe('PosStore', () => {
       closeShift: vi.fn(() => of({ ...shift, status: 'closed' })),
       verify: vi.fn(() => of({ user: { name: 'สมชาย ใจดี', role: 'user' } })),
     };
-    TestBed.configureTestingModule({ providers: [PosStore, { provide: PosApi, useValue: api }] });
+    TestBed.configureTestingModule({
+      providers: [
+        PosStore,
+        { provide: PosApi, useValue: api },
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
+    });
+    // Logged in as a cashier
+    signInForTest({
+      user: { id: 2, name: 'สมชาย ใจดี', role: 'user' },
+      company: { id: 1, code: 'DEMO', name: 'DEMO' },
+    });
     store = TestBed.inject(PosStore);
     store.load();
   });

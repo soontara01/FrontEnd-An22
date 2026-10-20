@@ -1,6 +1,7 @@
 import { DOCUMENT, Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { Observable, catchError, map, of, tap } from 'rxjs';
 import { ApiService } from '../http/api.service';
+import { silentUnauthorized } from '../http/silent-unauthorized';
 import type {
   BillingNotice,
   Branch,
@@ -13,20 +14,29 @@ import type {
 } from '../models';
 import { StorageService } from '../services/storage.service';
 
-const TOKEN_KEY = 'token';
-const USER_KEY = 'user';
-const COMPANY_KEY = 'company';
-/** `canSeeCost` of the last session (E43), so the first render of a page load is right. */
-const SEE_COST_KEY = 'canSeeCost';
-const BRANCHES_KEY = 'branches';
+/**
+ * Keys of the session this service once kept in localStorage (token, user, company …) — removed
+ * on start: the session is an httpOnly cookie of the web server now, and its data stays in memory
+ * (E48). Includes the platform admin's (`PlatformAuth`).
+ */
+const OLD_SESSION_KEYS = [
+  'token',
+  'user',
+  'company',
+  'canSeeCost',
+  'branches',
+  'platformToken',
+  'platformAdmin',
+];
 /** This device's working branch; kept on logout so the next login stays in it when allowed. */
 const BRANCH_KEY = 'branch';
 /** Company code the device remembers for the login page (D4); kept on logout. */
 const COMPANY_CODE_KEY = 'companyCode';
 
 /**
- * Session: token, user, company and the branches the user may work in (saas-plan section 8).
- * A session saved without a company (before SaaS step 1) counts as logged out (E1).
+ * Session: user, company and the branches the user may work in (saas-plan section 8) — in memory
+ * only, loaded by `restore()` (`GET /me`) when each page opens. The token stays in the web
+ * server's session behind an httpOnly cookie (E48); only device preferences go to localStorage.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -34,26 +44,22 @@ export class AuthService {
   private readonly storage = inject(StorageService);
   private readonly document = inject(DOCUMENT);
 
-  private readonly _token = signal<string | null>(this.storage.get<string>(TOKEN_KEY));
-  private readonly _user = signal<User | null>(this.storage.get<User>(USER_KEY));
-  private readonly _company = signal<Company | null>(this.storage.get<Company>(COMPANY_KEY));
-  private readonly _branches = signal<Branch[]>(this.storage.get<Branch[]>(BRANCHES_KEY) ?? []);
-  private readonly _branchId = signal<number | null>(
-    pickBranch(this._branches(), this.storage.get<number>(BRANCH_KEY)),
-  );
+  private readonly _user = signal<User | null>(null);
+  private readonly _company = signal<Company | null>(null);
+  private readonly _branches = signal<Branch[]>([]);
+  private readonly _branchId = signal<number | null>(null);
   private readonly _companyCode = signal(this.storage.get<string>(COMPANY_CODE_KEY) ?? '');
   /** Billing banner of this page load (from login / `GET /me`, not stored). */
   private readonly _billing = signal<BillingNotice | null>(null);
-  private readonly _seeCost = signal(this.storage.get<boolean>(SEE_COST_KEY) === true);
+  private readonly _seeCost = signal(false);
 
-  readonly token = this._token.asReadonly();
   readonly user = this._user.asReadonly();
   readonly company = this._company.asReadonly();
   readonly branches = this._branches.asReadonly();
   /** Company code remembered on this device ('' = none). */
   readonly companyCode = this._companyCode.asReadonly();
   readonly billing = this._billing.asReadonly();
-  readonly isLoggedIn = computed(() => !!this._token() && !!this._company());
+  readonly isLoggedIn = computed(() => !!this._user() && !!this._company());
   /**
    * Admin-only screens and buttons (the server checks the same rules → 403): an admin or the owner.
    * Same rules as `hasAdminRights()` / `isOwner()` / `isCompanyAdmin()` in `user.model.ts`,
@@ -82,7 +88,23 @@ export class AuthService {
   );
 
   constructor() {
-    if (this._token() && !this._company()) this.clearSession();
+    for (const key of OLD_SESSION_KEYS) this.storage.remove(key);
+  }
+
+  /**
+   * Who is logged in, once when a page opens (`provideAppInitializer` in app.config.ts) — also
+   * picks up role / branch rights an admin changed. 401 = logged out (no snackbar); any other
+   * error is shown and the page opens logged out.
+   */
+  restore(): Observable<void> {
+    return this.api.get<MeResponse>('me', undefined, silentUnauthorized()).pipe(
+      tap((session) => this.setSession(session)),
+      map(() => undefined),
+      catchError(() => {
+        this.clearSession();
+        return of(undefined);
+      }),
+    );
   }
 
   login(credentials: LoginRequest): Observable<LoginResponse> {
@@ -99,15 +121,13 @@ export class AuthService {
   }
 
   private startSession(session: LoginResponse): void {
-    this.storage.set(TOKEN_KEY, session.token);
-    this._token.set(session.token);
     this.setSession(session);
     this.setCompanyCode(session.company.code);
   }
 
   /**
-   * Reloads user / company / branches (`GET /me`, once per page load and on the branch page):
-   * role or branch rights changed by an admin take effect; a branch no longer allowed is dropped.
+   * Reloads user / company / branches (`GET /me`) on the branch page: rights changed by an admin
+   * take effect; a branch no longer allowed is dropped. Page loads use `restore()`.
    */
   refresh(): Observable<MeResponse> {
     return this.api.get<MeResponse>('me').pipe(tap((session) => this.setSession(session)));
@@ -126,10 +146,6 @@ export class AuthService {
   private setSession({ user, company, branches, billing, canSeeCost }: MeResponse): void {
     this._billing.set(billing ?? null);
     this._seeCost.set(canSeeCost === true);
-    this.storage.set(SEE_COST_KEY, canSeeCost === true);
-    this.storage.set(USER_KEY, user);
-    this.storage.set(COMPANY_KEY, company);
-    this.storage.set(BRANCHES_KEY, branches);
     this._user.set(user);
     this._company.set(company);
     this._branches.set(branches);
@@ -147,19 +163,21 @@ export class AuthService {
     else this.storage.remove(COMPANY_CODE_KEY);
   }
 
+  /**
+   * Ends the session on the web server (`POST /auth/logout` drops its token and cookie), then a
+   * full page reload to the login page (SPA per menu) — also when that call fails.
+   */
   logout(): void {
     this.clearSession();
-    // Full page reload to the login page (SPA per menu)
-    this.document.location.assign('/auth/login');
+    const toLogin = () => this.document.location.assign('/auth/login');
+    this.api
+      .post('auth/logout', null, silentUnauthorized())
+      .subscribe({ next: toLogin, error: toLogin });
   }
 
-  /** Drops the session; the remembered company code and this device's branch stay. */
+  /** Forgets the session in memory; the remembered company code and this device's branch stay. */
   private clearSession(): void {
-    for (const key of [TOKEN_KEY, USER_KEY, COMPANY_KEY, BRANCHES_KEY, SEE_COST_KEY]) {
-      this.storage.remove(key);
-    }
     this._seeCost.set(false);
-    this._token.set(null);
     this._user.set(null);
     this._company.set(null);
     this._branches.set([]);

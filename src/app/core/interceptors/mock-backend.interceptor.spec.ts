@@ -43,6 +43,7 @@ import {
   PlatformCompanyDetail,
   PlatformCompanyRow,
   PlatformLoginResponse,
+  SignupPayload,
   SubscriptionInfo,
   SerialNumber,
   SerialReceiveResult,
@@ -62,12 +63,19 @@ import {
 } from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backend.interceptor';
 
+/** The token the mock's web part keeps after a login — the browser never gets it (E48). */
+const sessionToken = (platform = false): string =>
+  JSON.parse(
+    localStorage.getItem(platform ? 'an22.mock.platformSession' : 'an22.mock.session') ?? 'null',
+  );
+
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
 const atTerminal1: HttpInterceptorFn = (req, next) =>
   next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
 
 /**
- * What `authInterceptor` + `branchInterceptor` add after an admin login in branch 1 (HQ); requests
+ * What the web server (the session's token, E48) + `branchInterceptor` add after an admin login in
+ * branch 1 (HQ); requests
  * that name another user / branch keep theirs, `X-Branch-Id: none` sends no branch (E2 / E17).
  */
 const asAdminByDefault: HttpInterceptorFn = (req, next) => {
@@ -1114,7 +1122,7 @@ describe('mockBackendInterceptor – POS sales', () => {
 
   it('logs staff in by username and applies their name and role to the sale', async () => {
     const login = (username: string, password: string) =>
-      post<{ token: string; user: { name: string } }>('auth/login', {
+      post<{ user: { name: string } }>('auth/login', {
         companyCode: 'DEMO',
         username,
         password,
@@ -1123,7 +1131,8 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(await errorOf(login('somchai', 'wrong'))).toBe(wrong);
     expect(await errorOf(login('somchai@example.com', '1234'))).toBe(wrong);
     expect(await errorOf(login('somying', '1234'))).toBe(wrong);
-    const { token, user } = await login(' Somchai ', '1234');
+    const { user } = await login(' Somchai ', '1234');
+    const token = sessionToken();
     expect(user.name).toBe('สมชาย ใจดี');
 
     const round = (n: number) => Math.round(n * 100) / 100;
@@ -1980,7 +1989,10 @@ describe('mockBackendInterceptor – auth (B3)', () => {
       username: 'somchai',
       password: '1234',
     });
-    expect(login.token).toBe(STAFF);
+    expect('token' in login).toBe(false); // kept by the web server's session (E48)
+    expect(sessionToken()).toBe(STAFF);
+    await call('POST', 'auth/logout');
+    expect(sessionToken()).toBeNull();
     const verify = (password: string, token?: string) =>
       statusOf(call('POST', 'auth/verify', { username: 'admin', password }, token));
     expect(await verify('x', ADMIN)).toBe(400);
@@ -2010,7 +2022,7 @@ describe('mockBackendInterceptor – auth (B3)', () => {
       ['HQ', '00000'],
       ['BN', '00001'],
     ]);
-    const me = await call<MeResponse>('GET', 'me', undefined, session.token);
+    const me = await call<MeResponse>('GET', 'me', undefined, sessionToken());
     expect(me).toEqual({
       user: session.user,
       company: session.company,
@@ -3064,11 +3076,12 @@ describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
     const login = (companyCode: string, password: string) =>
       call<LoginResponse>('POST', 'auth/login', { companyCode, username: 'admin', password });
     const acme = await login('acme', 'acme-pass');
-    expect(acme.token).toBe(ACME_ADMIN);
+    expect(sessionToken()).toBe(ACME_ADMIN);
     expect(acme.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
     expect(acme.branches.map((b) => b.code)).toEqual(['MAIN']);
     expect(await statusOf(login('ACME', 'admin'))).toBe(401); // DEMO's password
-    expect((await login('DEMO', 'admin')).token).toBe(DEMO_ADMIN);
+    await login('DEMO', 'admin');
+    expect(sessionToken()).toBe(DEMO_ADMIN);
   });
 
   it("never serves one company's data to another company's token", async () => {
@@ -3598,22 +3611,22 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
     expect(session.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
     expect(session.user).toMatchObject({ username: 'boss', role: 'owner', allBranches: true });
     expect(session.branches.map((b) => b.code)).toEqual(['HQ']);
-    expect(session.token).toBe(mockToken(2, 1));
-    const info = await get<SubscriptionInfo>('company/subscription', session.token);
+    expect(sessionToken()).toBe(mockToken(2, 1));
+    const info = await get<SubscriptionInfo>('company/subscription', sessionToken());
     expect(info).toMatchObject({ planId: 'starter', status: 'trial' });
     expect(info.subscription.trialEndsOn).toBe(addDaysIso(todayIso(), 14));
-    expect(await get<Product[]>('products', session.token)).toEqual([]);
+    expect(await get<Product[]>('products', sessionToken())).toEqual([]);
     expect(
-      (await get<PaymentMethod[]>('payment-methods', session.token)).map((m) => m.type),
+      (await get<PaymentMethod[]>('payment-methods', sessionToken())).map((m) => m.type),
     ).toEqual(['cash']);
-    expect(await get<unknown>('company/onboarding', session.token)).toEqual({
+    expect(await get<unknown>('company/onboarding', sessionToken())).toEqual({
       terminals: 0,
       categories: 0,
       products: 0,
       prices: 0,
       users: 1,
     });
-    const events = await get<AuditEvent[]>('audit-log', session.token);
+    const events = await get<AuditEvent[]>('audit-log', sessionToken());
     expect(events.map((e) => e.action)).toEqual(['signup']);
     // the new owner logs in with their own code; DEMO is untouched
     const login = await post<LoginResponse>('auth/login', {
@@ -3679,12 +3692,10 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
       (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
     );
   const loginPlatform = async () =>
-    (
-      await call<PlatformLoginResponse>('POST', 'platform/auth/login', {
-        username: 'platform',
-        password: 'platform',
-      })
-    ).token;
+    (await call<PlatformLoginResponse>('POST', 'platform/auth/login', {
+      username: 'platform',
+      password: 'platform',
+    })) && sessionToken(true);
   const plantOverdue = () =>
     localStorage.setItem(
       'an22.mock.platform',
@@ -3815,7 +3826,7 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
       password: 'owner-new',
     });
     expect(login.user.role).toBe('owner');
-    const actions = (await call<AuditEvent[]>('GET', 'audit-log', undefined, login.token)).map(
+    const actions = (await call<AuditEvent[]>('GET', 'audit-log', undefined, sessionToken())).map(
       (e) => e.action,
     );
     expect(actions).toEqual(
@@ -3850,14 +3861,12 @@ describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
       http.post<LoginResponse>('/api/auth/login', { companyCode: 'DEMO', username, password }),
     );
   const platformToken = async () =>
-    (
-      await firstValueFrom(
-        http.post<PlatformLoginResponse>('/api/platform/auth/login', {
-          username: 'platform',
-          password: 'platform',
-        }),
-      )
-    ).token;
+    (await firstValueFrom(
+      http.post<PlatformLoginResponse>('/api/platform/auth/login', {
+        username: 'platform',
+        password: 'platform',
+      }),
+    )) && sessionToken(true);
 
   beforeEach(() => {
     localStorage.clear();
@@ -4104,5 +4113,96 @@ describe('mockBackendInterceptor – cost visibility (P5, E43–E45)', () => {
     expect(below.issues[0].cartIndex).toBe(0);
     expect(below.issues[0].message).toContain('ขายต่ำกว่าทุนหลังส่วนลดพิเศษ');
     expect(JSON.stringify(below)).not.toMatch(/cost/i);
+  });
+});
+
+describe('mockBackendInterceptor – web server session (E48)', () => {
+  let http: HttpClient;
+
+  const call = <T>(method: string, url: string, body?: unknown) =>
+    firstValueFrom(http.request<T>(method, `/api/${url}`, { body }));
+  const statusOf = (p: Promise<unknown>) =>
+    p.then(
+      () => 200,
+      (e: { status: number }) => e.status,
+    );
+  const shopLogin = () =>
+    call<LoginResponse>('POST', 'auth/login', {
+      companyCode: 'DEMO',
+      username: 'admin',
+      password: 'admin',
+    });
+  const platformLogin = () =>
+    call<PlatformLoginResponse>('POST', 'platform/auth/login', {
+      username: 'platform',
+      password: 'platform',
+    });
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('keeps the login token in the session and answers without it', async () => {
+    expect(await statusOf(call('GET', 'me'))).toBe(401);
+    const login = await shopLogin();
+    expect(login).not.toHaveProperty('token');
+    expect(sessionToken()).toBe(mockToken(1, 1));
+    // later requests carry no Authorization of their own: the session's token is used
+    expect((await call<MeResponse>('GET', 'me')).user.username).toBe('admin');
+  });
+
+  it('logout drops only its own session; the shop and platform sessions are apart', async () => {
+    await shopLogin();
+    const platform = await platformLogin();
+    expect(platform).not.toHaveProperty('token');
+    expect(sessionToken(true)).toBe('mock-platform-token.p1');
+    expect(await statusOf(call('GET', 'platform/me'))).toBe(200);
+
+    expect(await call('POST', 'platform/auth/logout')).toBeNull();
+    expect(await statusOf(call('GET', 'platform/me'))).toBe(401);
+    expect(await statusOf(call('GET', 'me'))).toBe(200);
+
+    expect(await call('POST', 'auth/logout')).toBeNull();
+    expect(await statusOf(call('GET', 'me'))).toBe(401);
+    expect(sessionToken()).toBeNull();
+  });
+
+  it('a 401 drops the session; a refused login keeps the current one', async () => {
+    await shopLogin();
+    expect(
+      await statusOf(
+        call('POST', 'auth/login', { companyCode: 'DEMO', username: 'admin', password: 'x' }),
+      ),
+    ).toBe(401);
+    expect(sessionToken()).toBe(mockToken(1, 1));
+
+    // the user was deactivated meanwhile → 401 → the session's token is gone
+    localStorage.setItem('an22.mock.session', JSON.stringify(mockToken(1, 999)));
+    expect(await statusOf(call('GET', 'products'))).toBe(401);
+    expect(sessionToken()).toBeNull();
+  });
+
+  it('signing up logs the new owner in through the session', async () => {
+    const session = await call<LoginResponse>('POST', 'auth/signup', {
+      companyCode: 'ACME',
+      companyName: 'บริษัท แอคมี จำกัด',
+      taxId: '',
+      vatRegistered: false,
+      branch: {
+        code: 'HQ',
+        name: 'สำนักงานใหญ่',
+        branchNo: '00000',
+        address: 'กรุงเทพฯ',
+        phone: '',
+      },
+      owner: { name: 'บอส', username: 'boss', email: 'boss@acme.test', password: 'acme1234' },
+      planId: 'starter',
+    } satisfies SignupPayload);
+    expect(session).not.toHaveProperty('token');
+    expect((await call<MeResponse>('GET', 'me')).company.code).toBe('ACME');
   });
 });

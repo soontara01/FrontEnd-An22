@@ -1,20 +1,17 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { signInForTest } from '../auth/auth.testing';
 import { TerminalService } from './terminal.service';
 
 describe('TerminalService', () => {
   function create(companyId: number | null): TerminalService {
-    if (companyId !== null) {
-      localStorage.setItem('an22.token', JSON.stringify(`mock-jwt-token.t${companyId}.u1`));
-      localStorage.setItem(
-        'an22.company',
-        JSON.stringify({ id: companyId, code: `C${companyId}` }),
-      );
-    }
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
+    if (companyId !== null) {
+      signInForTest({ user: { id: 1 }, company: { id: companyId, code: `C${companyId}` } });
+    }
     return TestBed.inject(TerminalService);
   }
 
