@@ -331,7 +331,9 @@ export async function readSkuRows(file: File): Promise<RawRow[]> {
   const columnOf = new Map<number, ColumnKey>();
   sheet.getRow(1).eachCell((cell, col) => {
     const text = cell.text.trim();
-    const match = SKU_COLUMNS.find((c) => c.header === text || c.header.replace('*', '') === text);
+    const match = SKU_COLUMNS.find(
+      (c) => c.header === text || c.header.replaceAll('*', '') === text,
+    );
     if (match && !match.info) columnOf.set(col, match.key);
   });
   if (![...columnOf.values()].includes('sku')) {
