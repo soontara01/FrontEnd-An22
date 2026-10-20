@@ -5,6 +5,18 @@
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="reload()">
     <mat-icon>refresh</mat-icon>
   </button>
+  <button
+    mat-stroked-button
+    [disabled]="
+      exporting() ||
+      !sales.hasValue() ||
+      (!dataSource.filteredData.length && !creditNotes.value()?.length)
+    "
+    (click)="exportExcel()"
+  >
+    <mat-icon>download</mat-icon>
+    ส่งออก Excel
+  </button>
   <a mat-stroked-button routerLink="/sales/shifts">
     <mat-icon>schedule</mat-icon>
     กะขาย

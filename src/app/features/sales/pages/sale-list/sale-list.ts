@@ -50,7 +50,9 @@ import {
 } from '@shared/utils/date-range';
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { MenuAccessService } from '@core/navigation/menu-access.service';
+import { saveBlob, timestampedName } from '@shared/utils/download';
 import { summarizeSales } from '../../data/sale-summary';
+import { salesXlsx } from '../../data/sales-excel';
 import { SalesStore } from '../../data/sales.store';
 import { BranchScopeSelect } from '../../components/branch-scope-select';
 
@@ -221,6 +223,47 @@ export default class SaleList {
         { emitEvent: false },
       );
     });
+  }
+
+  protected readonly exporting = signal(false);
+
+  /**
+   * Excel of what the list shows (range / shift, branch scope, status, terminal, search): bills,
+   * their lines and payments, + the credit notes of the same range and scope. Cost / gross
+   * profit only for who may see cost (E46).
+   */
+  protected async exportExcel(): Promise<void> {
+    this.exporting.set(true);
+    try {
+      const scope = this.scope();
+      const code =
+        scope === 'all' ? '' : (this.auth.branches().find((b) => b.id === scope)?.code ?? '');
+      const terminal = this.terminalFilter();
+      const filters = [
+        this.statusFilter() === 'all'
+          ? ''
+          : `สถานะ: ${this.statusFilter() === 'returned' ? 'มีการคืนสินค้า' : SALE_STATUS_LABEL[this.statusFilter() as SaleStatus]}`,
+        terminal === null ? '' : this.store.terminalLabel(terminal),
+        this.filterText().trim() ? `ค้นหา: ${this.filterText().trim()}` : '',
+      ].filter(Boolean);
+      const scopeText = [
+        scope === 'all' ? 'ทุกสาขา' : `สาขา ${code || '-'}`,
+        this.shiftId() ? `กะ ${this.shiftNo()}` : `ช่วงวันที่: ${this.rangeText()}`,
+        ...filters,
+      ].join(' · ');
+      const blob = await salesXlsx({
+        sales: this.filtered(),
+        creditNotes: this.creditNotes.hasValue() ? this.creditNotes.value() : [],
+        scopeText,
+        seeCost: this.canSeeCost(),
+        showBranch: scope === 'all',
+        branchCode: (id) => this.auth.branches().find((b) => b.id === id)?.code ?? '-',
+        terminalLabel: (id) => this.store.terminalLabel(id),
+      });
+      saveBlob(blob, `${timestampedName(`sales-${code || 'all'}`)}.xlsx`);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   protected statusText(sale: Sale): string {
