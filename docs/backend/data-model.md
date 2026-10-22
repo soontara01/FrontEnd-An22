@@ -12,7 +12,8 @@ collection ของ mock (`MockDb` ใน `mock-backend.interceptor.ts`) ≈ �
 - ทุกตารางข้อมูลมี `tenant_id` (SaaS D7: ฐานเดียว + RLS) — เพิ่มตั้งแต่ migration แรก แม้ตอนนี้มีบริษัทเดียว
 - คอลัมน์ "ระดับ" ด้านล่าง: **บริษัท** = `tenant_id` อย่างเดียว · **สาขา** = `tenant_id` + `branch_id` (`docs/saas-plan.md` หัวข้อ 3)
 - ทุก unique key รวม `tenant_id` (รหัส SKU, บาร์โค้ด, รหัสผู้จำหน่าย, เลขเอกสาร, username)
-- เงิน `numeric(14,2)`, ทุน / ทุนเฉลี่ย `numeric(14,4)` ถ้าต้องการ (หน้าบ้านปัด 2 ตำแหน่ง — ตกลงก่อนทำ, ดู `domain-rules.md` เรื่องการปัด)
+- เงิน `numeric(14,2)`; ทุนเฉลี่ย (`branch_stock.avg_cost`, `stock_movements.balance_avg_cost`) `numeric(14,4)` — `movingAverage()` ปัด 4 ตำแหน่ง (`round4`),
+  มูลค่า / COGS ปัด 2 ตำแหน่ง (`round2`) (ตกลง 2026-10-22, an22-api ขั้น 5; ดู `domain-rules.md` เรื่องการปัด)
 - เวลา `timestamptz` · วันที่ธุรกิจ (`startDate`, `endDate`) `date` · enum เป็น `text` + `CHECK` (ค่าตาม type union ใน TS)
 - **ห้ามลบเอกสาร** (บิล, ใบลดหนี้, ใบเปลี่ยน, ใบกำกับ, กะ, movement) — มีแต่เปลี่ยนสถานะ / เพิ่มรายการใหม่
 - array ใน TS → child table เมื่อมีโครงสร้าง (`packUnits`, `suppliers`, `lines`, `payments`, `counts`); array ของ id / string เล็ก ๆ
