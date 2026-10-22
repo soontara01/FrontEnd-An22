@@ -55,7 +55,13 @@ browser ถือแค่ cookie `an22.sid` (httpOnly, SameSite=Lax, Secure บ
 - **เข้าถึงได้จาก web เท่านั้น** (network ภายใน / firewall) — ห้ามเปิด api ออกอินเทอร์เน็ตตรง ๆ: header `X-Real-IP` / `X-Forwarded-*` เชื่อได้เพราะมาจาก web เท่านั้น
 - **ลิงก์ในอีเมล** (ตั้งรหัสผ่านใหม่ ฯลฯ) สร้างจาก base URL ที่ตั้งค่าไว้ของระบบ — ห้ามใช้ `Host` / `X-Forwarded-Host` ของ request (ไม่งั้นลิงก์ในอีเมลชี้ไปเว็บอื่นได้)
 - **GET / HEAD ห้ามแก้ข้อมูล** — การกัน CSRF ของ web ตรวจเฉพาะ POST / PUT / PATCH / DELETE
-- จำกัดจำนวนครั้ง login / `auth/verify` / ปลดล็อก POS ต่อบัญชี (+ ต่อ `X-Real-IP`) ตามแผน C2; ข้อความ error ของ login เหมือนกันทุกกรณี (E3)
+- จำกัดจำนวนครั้งที่ api (ตกลง 2026-10-22, ทำใน C2 ขั้น 2) ของ `POST /auth/login`, `/auth/verify`, `/platform/auth/login`, `/shifts/:id/unlock` — นับใน DB (ทุก instance เห็นเหมือนกัน):
+  - ต่อบัญชี = รหัสบริษัท + ชื่อผู้ใช้ที่พิมพ์ (platform: ชื่อผู้ใช้; `auth/verify` / unlock: บริษัทของ token + ชื่อที่พิมพ์) — นับแม้ไม่มีบัญชีนี้ (ไม่บอกว่ามีหรือไม่):
+    ผิดครบ **5 ครั้งใน 15 นาที → ล็อก 15 นาที**; login สำเร็จล้างตัวนับของบัญชี
+  - ต่อ `X-Real-IP`: ผิดครบ **30 ครั้งใน 15 นาที → ล็อก 15 นาที** (รวมทุกบัญชี)
+  - ระหว่างล็อก → **429** "พยายามบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่" (ข้อความเดียวกับ web; รหัสผ่านถูกก็ไม่ผ่าน) — ไม่ใช่ 401 จึงไม่ logout คนหน้าเครื่อง POS
+  - mock ไม่จำลองข้อนี้
+- ข้อความ error ของ login เหมือนกันทุกกรณี (E3)
 - ไม่ log รหัสผ่าน / token / body ของ auth
 
 ### Error
@@ -70,6 +76,7 @@ browser ถือแค่ cookie `an22.sid` (httpOnly, SameSite=Lax, Secure บ
 | 403 (web) | CSRF ไม่ผ่าน (หัวข้อ "Session") — ข้อความ "คำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่"                                               |
 | 403       | ไม่มีสิทธิ์ (หัวข้อ "สิทธิ์") — หน้าบ้านไม่ logout                                                                         |
 | 404       | ไม่พบ record                                                                                                               |
+| 429       | พยายาม login / ตรวจรหัสผิดบ่อยเกินไป (หัวข้อ "ความปลอดภัยของ api") — web ตอบเองด้วยเมื่อเกินเพดานต่อ IP                     |
 
 `POST /auth/login` ผิด → 401 (หน้าบ้านยกเว้น path นี้ไม่ logout) · token ที่ไม่มี tenant (ก่อน SaaS) หรือบริษัทถูกระงับ → 401 · `POST /auth/verify` ผิด → **400 เสมอ** (ห้าม 401: จะ logout คนที่ยืนอยู่หน้าเครื่อง)
 
@@ -319,4 +326,4 @@ token แยก (mock `mock-platform-token.p<id>`; อยู่ใน session �
 ขั้น 1–6 ทำครบแล้วฝั่งหน้าบ้าน + mock (2026-10-18; หัวข้อด้านบน): login รหัสบริษัท, token มี tenant, `X-Branch-Id`, สิทธิ์สาขา, เอกสาร / สต็อกต่อสาขา, ใบโอน,
 owner, แพ็กเกจ, billing, platform admin, สมัครใช้, ลืมรหัสผ่าน owner, export / ลบบริษัท, audit log
 
-ยังไม่ทำ (เลื่อน): subdomain (D4), payment gateway (webhook ชำระเงิน), รายงานยื่นภาษีรวม (`vatFilingCombined`), จำกัดการ login ผิดต่อบัญชี / IP (หลังบ้านทำได้เลย)
+ยังไม่ทำ (เลื่อน): subdomain (D4), payment gateway (webhook ชำระเงิน), รายงานยื่นภาษีรวม (`vatFilingCombined`)
