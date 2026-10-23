@@ -71,8 +71,8 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
 **api** (รวมงาน db เดิม — E47)
 
 - เวอร์ชัน Java / Spring Boot, โครง package, คำสั่ง build / test
-- **schema = migration ของ Flyway ใน repo นี้เท่านั้น** (`src/main/resources/db/migration/V<n>__<desc>.sql`, ไม่แก้ไฟล์ที่ apply แล้ว) —
-  ห้ามใช้ Hibernate `ddl-auto` (`validate` ได้); คำสั่งรัน / รีเซ็ต PostgreSQL local และ test ด้วย Testcontainers
+- **schema = migration ของ Flyway ใน repo นี้เท่านั้น** (`db/migration/V<n>__<desc>.sql` — SQL ล้วน รันได้ทั้งแอปและ `scripts/db-apply.sh`, ไม่แก้ไฟล์ที่ apply แล้ว) —
+  ไม่มี JPA / Hibernate `ddl-auto`; คำสั่งรัน / รีเซ็ต PostgreSQL local และ test ด้วย Testcontainers
 - ทุกตารางข้อมูลมี `tenant_id` (+ `branch_id` ตามระดับใน `data-model.md`), เปิด RLS, policy อ่านจาก `current_setting('app.tenant_id')` (D7)
 - ทุก unique key รวม `tenant_id`; เงินเป็น `numeric(14,2)`; เวลาเป็น `timestamptz`; วันที่ธุรกิจเป็น `date`
 - ตาราง platform (`companies`, ใบแจ้งหนี้, `platform_admins`, `password_reset_tokens`) ไม่อยู่ใต้ RLS และใช้ DB role แยก; `audit_log` insert-only
@@ -82,3 +82,7 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
 - JWT ไม่ถึง browser (web ถือไว้ — E48) อายุ ≥ 7 วัน; tenant มาจาก JWT เท่านั้น; ทุก transaction `SET LOCAL app.tenant_id`; ตรวจ `X-Branch-Id` / `X-Terminal-Id` ทุก request
 - กฎใน `domain-rules.md` port เป็น class แยก (ไม่ผูก Spring) + test ด้วย `fixtures/` ของ repo นี้
 - ตอบ JSON ตาม `api-contract.md`: ไม่ละ field ที่เป็น `null` (`spring.jackson.default-property-inclusion=always`), วันที่เป็น ISO-8601
+- **ทำแล้ว (C2, 2026-10-23): repo `an22-api`** — Java 25 + Spring Boot 4.1 (JdbcClient, ไม่มี JPA), PostgreSQL 18 ผ่าน PgBouncer (transaction pooling — production
+  = Azure Database for PostgreSQL Flexible Server), port `8080` context path `/api`, health `GET /api/healthz` / `GET /api/readyz`, Docker image;
+  ทุก endpoint ใน `api-contract.md` ยกเว้น `GET /platform/outbox` (mock เท่านั้น — api จริงส่งอีเมล; ตอนนี้ยังแค่ log ไม่ส่งจริง);
+  export บริษัทตอบตรง (ไม่ใช่ job), purge ทำโดย platform admin; test หลาย instance: `scripts/multi-instance-check.sh` — รายละเอียดใน `CLAUDE.md` / `docs/plan-step.md` ของ repo นั้น
