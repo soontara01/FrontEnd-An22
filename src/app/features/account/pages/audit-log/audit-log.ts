@@ -26,7 +26,7 @@ import {
 import { AccountApi } from '../../data/account-api.service';
 
 /**
- * Audit log (E40): `/account/audit-log?from=&to=&action=&user=&branch=` (`?all=1`; default the last
+ * Audit log (E40): `/account/audit-log?from=&to=&action=&user=&branch=` (at most 366 days; default the last
  * 7 days). The server decides what this admin may see — a branch admin only their branches.
  */
 @Component({
@@ -45,7 +45,6 @@ export default class AuditLog {
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();
   readonly to = input<string>();
-  readonly all = input<string>();
   readonly action = input<string>();
   readonly user = input<string>();
   readonly branch = input<string>();
@@ -62,14 +61,12 @@ export default class AuditLog {
   });
 
   protected readonly range = computed<DateRange>(() => {
-    if (this.all()) return presetRange('all');
     if (!this.from() && !this.to()) return presetRange('last7');
     return { from: this.from() || null, to: this.to() || null };
   });
   protected readonly activePreset = computed(() => matchingPreset(this.range()));
   protected readonly rangeText = computed(() => {
     const { from, to } = this.range();
-    if (!from && !to) return 'ทั้งหมด';
     return formatDateRange({ startDate: from ?? to ?? '', endDate: to });
   });
 
@@ -105,7 +102,7 @@ export default class AuditLog {
 
   protected applyPreset(preset: DatePreset): void {
     const { from, to } = presetRange(preset);
-    this.setParams(preset === 'all' ? { all: '1', from: null, to: null } : { all: null, from, to });
+    this.setParams({ all: null, from, to });
   }
 
   protected setParams(params: Record<string, string | number | null>): void {

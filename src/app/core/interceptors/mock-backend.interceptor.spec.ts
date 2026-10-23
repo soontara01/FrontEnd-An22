@@ -64,6 +64,27 @@ import {
 } from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backend.interceptor';
 
+const DATED_LISTS = [
+  'sales',
+  'shifts',
+  'shifts/variance-report',
+  'credit-notes',
+  'tax-invoices',
+  'audit-log',
+];
+
+/**
+ * Dated lists need `?from=&to=` of at most 366 days (api limit): a GET without a range / shift asks
+ * for the last 366 days, so the cases below keep reading "everything" of the seed and the test.
+ */
+function withRange(url: string): string {
+  const [path, query = ''] = url.split('?');
+  const dated = DATED_LISTS.includes(path) || /^products\/\d+\/movements$/.test(path);
+  if (!dated || /(^|&)(from|to|shiftId)=/.test(query)) return url;
+  const range = `from=${addDaysIso(todayIso(), -365)}&to=${todayIso()}`;
+  return `${path}?${query ? `${query}&` : ''}${range}`;
+}
+
 /** The token the mock's web part keeps after a login — the browser never gets it (E48). */
 const sessionToken = (platform = false): string =>
   JSON.parse(
@@ -103,7 +124,7 @@ describe('mockBackendInterceptor – serials', () => {
     http = TestBed.inject(HttpClient);
   });
 
-  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${url}`));
+  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${withRange(url)}`));
   const post = <T>(url: string, body: unknown) => firstValueFrom(http.post<T>(`/api/${url}`, body));
   const put = <T>(url: string, body: unknown) => firstValueFrom(http.put<T>(`/api/${url}`, body));
   const errorOf = (p: Promise<unknown>) =>
@@ -201,7 +222,7 @@ describe('mockBackendInterceptor – prices', () => {
 
   afterEach(() => vi.useRealTimers());
 
-  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${url}`));
+  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${withRange(url)}`));
   const post = <T>(url: string, body: unknown) => firstValueFrom(http.post<T>(`/api/${url}`, body));
   const errorOf = (p: Promise<unknown>) =>
     p.then(
@@ -270,7 +291,7 @@ describe('mockBackendInterceptor – retail SKU master', () => {
     http = TestBed.inject(HttpClient);
   });
 
-  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${url}`));
+  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${withRange(url)}`));
   const post = <T>(url: string, body: unknown) => firstValueFrom(http.post<T>(`/api/${url}`, body));
   const put = <T>(url: string, body: unknown) => firstValueFrom(http.put<T>(`/api/${url}`, body));
   const del = (url: string) => firstValueFrom(http.delete(`/api/${url}`));
@@ -376,7 +397,7 @@ describe('mockBackendInterceptor – suppliers', () => {
     http = TestBed.inject(HttpClient);
   });
 
-  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${url}`));
+  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${withRange(url)}`));
   const post = <T>(url: string, body: unknown) => firstValueFrom(http.post<T>(`/api/${url}`, body));
   const put = <T>(url: string, body: unknown) => firstValueFrom(http.put<T>(`/api/${url}`, body));
   const del = (url: string) => firstValueFrom(http.delete(`/api/${url}`));
@@ -445,7 +466,7 @@ describe('mockBackendInterceptor – costing', () => {
     http = TestBed.inject(HttpClient);
   });
 
-  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${url}`));
+  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${withRange(url)}`));
   const post = <T>(url: string, body: unknown) => firstValueFrom(http.post<T>(`/api/${url}`, body));
   const put = <T>(url: string, body: unknown) => firstValueFrom(http.put<T>(`/api/${url}`, body));
 
@@ -585,7 +606,7 @@ describe('mockBackendInterceptor – POS sales', () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${url}`));
+  const get = <T>(url: string) => firstValueFrom(http.get<T>(`/api/${withRange(url)}`));
   const post = <T>(url: string, body: unknown) => firstValueFrom(http.post<T>(`/api/${url}`, body));
   const put = <T>(url: string, body: unknown) => firstValueFrom(http.put<T>(`/api/${url}`, body));
   const del = (url: string) => firstValueFrom(http.delete(`/api/${url}`));
@@ -1213,7 +1234,9 @@ describe('mockBackendInterceptor – shifts', () => {
     if (as.token) headers = headers.set('Authorization', `Bearer ${as.token}`);
     const terminal = as.terminal === undefined ? 1 : as.terminal;
     if (terminal) headers = headers.set('X-Terminal-Id', String(terminal));
-    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   };
   const errorOf = (p: Promise<unknown>) =>
     p.then(
@@ -1631,7 +1654,9 @@ describe('mockBackendInterceptor – POS terminals', () => {
     let headers = new HttpHeaders();
     if (terminal) headers = headers.set('X-Terminal-Id', String(terminal));
     if (token) headers = headers.set('Authorization', `Bearer ${token}`);
-    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   };
   const errorOf = (p: Promise<unknown>) =>
     p.then(
@@ -1799,7 +1824,9 @@ describe('mockBackendInterceptor – permissions', () => {
   const call = <T>(method: string, url: string, body?: unknown, token?: string, terminal = 1) => {
     let headers = new HttpHeaders().set('X-Terminal-Id', String(terminal));
     if (token) headers = headers.set('Authorization', `Bearer ${token}`);
-    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   };
   const failure = (p: Promise<unknown>) =>
     p.then(
@@ -2014,7 +2041,9 @@ describe('mockBackendInterceptor – auth (B3)', () => {
   // No `asAdminByDefault`: a request without a token must not be served as the admin.
   const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
     const headers = token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined;
-    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   };
   const statusOf = (p: Promise<unknown>) =>
     p.then(
@@ -2142,7 +2171,9 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
   let http: HttpClient;
 
   const call = <T>(method: string, url: string, body?: unknown) =>
-    firstValueFrom(http.request<T>(method, `/api/${url}`, { body }));
+    firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body }),
+    );
   const errorOf = (p: Promise<unknown>) =>
     p.then(
       () => null,
@@ -2258,7 +2289,7 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
     const boss = await newUser('boss', '', { role: 'admin' });
     const asBoss = (method: string, url: string, body?: unknown) =>
       firstValueFrom(
-        http.request(method, `/api/${url}`, {
+        http.request(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
           body,
           headers: { Authorization: `Bearer ${mockToken(1, boss.id)}` },
         }),
@@ -2285,7 +2316,10 @@ describe('mockBackendInterceptor – company / branch settings (E11)', () => {
     url: string,
     body?: unknown,
     headers: Record<string, string> = {},
-  ) => firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+  ) =>
+    firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   const failure = (p: Promise<unknown>) =>
     p.then(
       () => null,
@@ -2517,7 +2551,7 @@ describe('mockBackendInterceptor – branch stock', () => {
 
   const call = <T>(method: string, url: string, branch = HQ, body?: unknown) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: new HttpHeaders({ 'X-Branch-Id': branch }),
       }),
@@ -2628,7 +2662,7 @@ describe('mockBackendInterceptor – branch stock', () => {
   it('shows the stock card of another branch only to users of that branch (E15)', async () => {
     const card = await call<StockCardResult>('GET', `products/${MOUSE}/movements?branchId=2`);
     expect(card.closing).toEqual({ qty: 8, avgCost: 380, value: 3040 });
-    const asStaff = http.get(`/api/products/${MOUSE}/movements?branchId=2`, {
+    const asStaff = http.get(`/api/${withRange(`products/${MOUSE}/movements?branchId=2`)}`, {
       headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': HQ },
     });
     expect(await errorOf(firstValueFrom(asStaff))).toEqual([
@@ -2677,7 +2711,9 @@ describe('mockBackendInterceptor – selling per branch', () => {
 
   function call<T>(method: string, url: string, at: At = HQ, body?: unknown): Promise<T> {
     const headers = new HttpHeaders({ 'X-Branch-Id': at.branch, 'X-Terminal-Id': at.terminal });
-    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   }
   const errorOf = (p: Promise<unknown>) =>
     p.then(
@@ -2781,7 +2817,7 @@ describe('mockBackendInterceptor – selling per branch', () => {
     const asStaff = (url: string) =>
       errorOf(
         firstValueFrom(
-          http.get(`/api/${url}`, {
+          http.get(`/api/${withRange(url)}`, {
             headers: { Authorization: `Bearer ${mockToken(1, 2)}`, 'X-Branch-Id': '1' },
           }),
         ),
@@ -2843,7 +2879,7 @@ describe('mockBackendInterceptor – documents per branch', () => {
 
   const call = <T>(method: string, url: string, branch = '1', terminal = '1', body?: unknown) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: new HttpHeaders({ 'X-Branch-Id': branch, 'X-Terminal-Id': terminal }),
       }),
@@ -2938,7 +2974,9 @@ describe('mockBackendInterceptor – transfers', () => {
   const call = <T>(method: string, url: string, branch = HQ, body?: unknown, token?: string) => {
     let headers = new HttpHeaders({ 'X-Branch-Id': branch });
     if (token) headers = headers.set('Authorization', `Bearer ${token}`);
-    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   };
   const errorOf = (p: Promise<unknown>) =>
     p.then(
@@ -3046,7 +3084,9 @@ describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
 
   const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
     const headers = token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined;
-    return firstValueFrom(http.request<T>(method, `/api/${url}`, { body, headers }));
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
   };
   const statusOf = (p: Promise<unknown>) =>
     p.then(
@@ -3186,7 +3226,7 @@ describe('mockBackendInterceptor – owner (E33)', () => {
 
   const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
       }),
@@ -3316,7 +3356,7 @@ describe('mockBackendInterceptor – audit log (E40)', () => {
 
   const call = <T>(method: string, url: string, body?: unknown, token = OWNER, branch = '1') =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': branch },
       }),
@@ -3441,7 +3481,7 @@ describe('mockBackendInterceptor – packages (E34)', () => {
 
   const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
       }),
@@ -3549,7 +3589,7 @@ describe('mockBackendInterceptor – billing (E35)', () => {
 
   const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
       }),
@@ -3644,7 +3684,7 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
     );
   const get = <T>(url: string, token: string) =>
     firstValueFrom(
-      http.get<T>(`/api/${url}`, {
+      http.get<T>(`/api/${withRange(url)}`, {
         headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
       }),
     );
@@ -3747,7 +3787,7 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
   let http: HttpClient;
   const call = <T>(method: string, url: string, body?: unknown, token?: string) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }),
@@ -3912,7 +3952,7 @@ describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
   const STAFF = mockToken(1, 2);
   const call = <T>(method: string, url: string, body?: unknown, token = OWNER) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: { Authorization: `Bearer ${token}`, 'X-Branch-Id': '1' },
       }),
@@ -4044,13 +4084,13 @@ describe('mockBackendInterceptor – cost visibility (P5, E43–E45)', () => {
 
   const get = <T>(url: string, token?: string) =>
     firstValueFrom(
-      http.get<T>(`/api/${url}`, {
+      http.get<T>(`/api/${withRange(url)}`, {
         headers: token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined,
       }),
     );
   const send = <T>(method: string, url: string, body: unknown, token?: string) =>
     firstValueFrom(
-      http.request<T>(method, `/api/${url}`, {
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, {
         body,
         headers: token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined,
       }),
@@ -4186,7 +4226,9 @@ describe('mockBackendInterceptor – web server session (E48)', () => {
   let http: HttpClient;
 
   const call = <T>(method: string, url: string, body?: unknown) =>
-    firstValueFrom(http.request<T>(method, `/api/${url}`, { body }));
+    firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body }),
+    );
   const statusOf = (p: Promise<unknown>) =>
     p.then(
       () => 200,
@@ -4270,5 +4312,65 @@ describe('mockBackendInterceptor – web server session (E48)', () => {
     } satisfies SignupPayload);
     expect(session).not.toHaveProperty('token');
     expect((await call<MeResponse>('GET', 'me')).company.code).toBe('ACME');
+  });
+});
+
+/** Response size limits of the lists (api plan "จำกัดขนาดคำตอบ", decided 2026-10-23). */
+describe('mockBackendInterceptor – list limits', () => {
+  let http: HttpClient;
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  /** The raw request (no `withRange()`): the 400 message, or null when it passed. */
+  const messageOf = (url: string) =>
+    firstValueFrom(http.get(`/api/${url}`)).then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => `${e.status} ${e.error.message}`,
+    );
+
+  it('needs from + to of at most 366 days on every dated list', async () => {
+    const today = todayIso();
+    const yearAgo = addDaysIso(today, -365);
+    for (const path of [
+      'sales',
+      'shifts',
+      'shifts/variance-report',
+      'credit-notes',
+      'tax-invoices',
+      'audit-log',
+      'products/1/movements',
+    ]) {
+      expect(await messageOf(path)).toBe('400 กรุณาเลือกช่วงวันที่ (ไม่เกิน 366 วัน)');
+      expect(await messageOf(`${path}?from=${today}`)).toBe(
+        '400 กรุณาเลือกช่วงวันที่ (ไม่เกิน 366 วัน)',
+      );
+      expect(await messageOf(`${path}?from=${addDaysIso(yearAgo, -1)}&to=${today}`)).toBe(
+        '400 ช่วงวันที่ต้องไม่เกิน 366 วัน',
+      );
+      expect(await messageOf(`${path}?from=${yearAgo}&to=${today}`)).toBeNull();
+    }
+    // Format and order are checked first.
+    expect(await messageOf('sales?from=2026-1-1&to=2026-02-01')).toBe(
+      '400 รูปแบบวันที่ต้องเป็น YYYY-MM-DD',
+    );
+    expect(await messageOf(`sales?from=${today}&to=${yearAgo}`)).toBe(
+      '400 วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด',
+    );
+  }, 30_000);
+
+  it("takes one shift's bills / credit notes without a range", async () => {
+    expect(await messageOf('sales?shiftId=1')).toBeNull();
+    expect(await messageOf('credit-notes?shiftId=1')).toBeNull();
+  });
+
+  it('keeps undated lists open', async () => {
+    expect(await messageOf('products')).toBeNull();
+    expect(await messageOf('transfers')).toBeNull();
   });
 });

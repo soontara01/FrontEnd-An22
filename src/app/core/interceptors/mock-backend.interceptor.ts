@@ -30,6 +30,8 @@ import {
   receiveTransferError,
   transferError,
   branchScopeError,
+  dateRangeError,
+  rowLimitError,
   parseBranchScope,
   BRANCH_DEFAULTS,
   BranchDetails,
@@ -2140,7 +2142,9 @@ function handle(
   if (path === 'audit-log' && req.method === 'GET') {
     // Admins only (`adminOnlyError()`); a branch admin sees only their branches' events (E40).
     const query = parseAuditQuery((name) => req.params.get(name));
-    return ok(filterAuditEvents(db.auditLog, query, actor as User));
+    const rangeProblem = dateRangeError(query.from, query.to);
+    if (rangeProblem) return error(400, rangeProblem);
+    return limitedList(filterAuditEvents(db.auditLog, query, actor as User), true);
   }
   if (path === 'products' || path.startsWith('products/')) return handleProducts(req, path, db);
   if (path === 'prices' || path.startsWith('prices/')) return handlePrices(req, path, db);
@@ -2178,14 +2182,17 @@ function handle(
     // Full tax invoices issued within a local-date range (oldest first, for the tax report).
     const from = req.params.get('from') || null;
     const to = req.params.get('to') || null;
+    const problem = rangeParamsError(from, to);
+    if (problem) return error(400, problem);
     const day = (t: TaxInvoice) => toIsoDate(new Date(t.date));
     const inScope = listScope(req, db);
     if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
-    return ok(
+    return limitedList(
       db.taxInvoices
         .filter(inScope)
-        .filter((t) => (!from || day(t) >= from) && (!to || day(t) <= to))
+        .filter((t) => day(t) >= from! && day(t) <= to!)
         .sort((a, b) => a.date.localeCompare(b.date)),
+      true,
     );
   }
   if (path === 'tax-invoices/buyer' && req.method === 'GET') {
@@ -2557,7 +2564,7 @@ function handleProducts(
 ): Observable<HttpResponse<unknown>> {
   const { products } = db;
   if (path === 'products' && req.method === 'GET') {
-    return ok([...products]);
+    return limitedList([...products], false);
   }
   if (path === 'products' && req.method === 'POST') {
     const payload = withServiceRules(
@@ -2582,9 +2589,8 @@ function handleProducts(
     if (!products.some((p) => p.id === productId)) return error(404, 'ไม่พบ SKU');
     const from = req.params.get('from') || null;
     const to = req.params.get('to') || null;
-    const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
-    if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
-    if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    const rangeProblem = rangeParamsError(from, to);
+    if (rangeProblem) return error(400, rangeProblem);
     // One branch's card only (E15): another branch the user may work in via `?branchId=`.
     const asked = req.params.get('branchId');
     const branchId = asked ? Number(asked) : stockBranch;
@@ -2592,7 +2598,9 @@ function handleProducts(
       return error(403, 'ไม่มีสิทธิ์ดูบัตรสต็อกของสาขานี้');
     }
     const own = db.movements.filter((m) => m.productId === productId && m.branchId === branchId);
-    return ok(buildStockCard(own, from, to));
+    const card = buildStockCard(own, from, to);
+    const rows = rowLimitError(card.movements, true);
+    return rows ? error(400, rows) : ok(card);
   }
   const branchStockMatch = /^products\/(\d+)\/branch-stock$/.exec(path);
   if (branchStockMatch && req.method === 'GET') {
@@ -3714,20 +3722,20 @@ function handleSales(
     // Optional local-date range on the day of sale; newest first.
     const from = req.params.get('from') || null;
     const to = req.params.get('to') || null;
-    const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
-    if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
-    if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
-    // Optional shift: bills sold or voided in it.
+    // Optional shift: bills sold or voided in it (then no date range is needed).
     const shiftId = Number(req.params.get('shiftId')) || null;
+    const problem = shiftId ? null : rangeParamsError(from, to);
+    if (problem) return error(400, problem);
     const inScope = listScope(req, db);
     if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
-    return ok(
+    return limitedList(
       sales
         .filter(inScope)
         .filter((s) => (!from || saleDay(s) >= from) && (!to || saleDay(s) <= to))
         .filter((s) => !shiftId || s.shiftId === shiftId || s.voidShiftId === shiftId)
         .sort((a, b) => b.date.localeCompare(a.date))
         .map(withReturns),
+      !shiftId,
     );
   }
   if (path === 'sales' && req.method === 'POST') return checkout(req.body as SalePayload, db);
@@ -3952,6 +3960,23 @@ function fixDocumentBranches(db: MockDb): boolean {
   return true;
 }
 
+/** A list answer within `MAX_LIST_ROWS` (400 beyond it, never cut); `dated` = takes a date range. */
+function limitedList(rows: unknown[], dated: boolean): Observable<HttpResponse<unknown>> {
+  const problem = rowLimitError(rows, dated);
+  return problem ? error(400, problem) : ok(rows);
+}
+
+/**
+ * `?from=&to=` of a dated list: 'YYYY-MM-DD', from ≤ to, then `dateRangeError()` (both ends,
+ * ≤ `MAX_RANGE_DAYS`). null = fine.
+ */
+function rangeParamsError(from: string | null, to: string | null): string | null {
+  const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (!isDate(from) || !isDate(to)) return 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD';
+  if (from && to && from > to) return 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด';
+  return dateRangeError(from, to);
+}
+
 /**
  * Branch filter of a list (E23): `?branchId=<id>|all`, missing = the request's branch; a list of one
  * shift's documents takes that shift's branch. A string = why it is refused (400 / 403).
@@ -4026,16 +4051,19 @@ function listCreditNotes(req: HttpRequest<unknown>, db: MockDb): Observable<Http
   const from = req.params.get('from') || null;
   const to = req.params.get('to') || null;
   const day = (n: CreditNote) => saleDay(n);
-  // Optional shift: the notes whose refund was paid from it.
+  // Optional shift: the notes whose refund was paid from it (then no date range is needed).
   const shiftId = Number(req.params.get('shiftId')) || null;
+  const problem = shiftId ? null : rangeParamsError(from, to);
+  if (problem) return error(400, problem);
   const inScope = listScope(req, db);
   if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
-  return ok(
+  return limitedList(
     db.creditNotes
       .filter(inScope)
       .filter((n) => (!from || day(n) >= from) && (!to || day(n) <= to))
       .filter((n) => !shiftId || n.shiftId === shiftId)
       .sort((a, b) => b.date.localeCompare(a.date)),
+    !shiftId,
   );
 }
 
@@ -4643,12 +4671,13 @@ function handleTransfers(
     const direction = req.params.get('direction');
     const out = (t: Transfer) => inScope({ branchId: t.fromBranchId });
     const into = (t: Transfer) => inScope({ branchId: t.toBranchId });
-    return ok(
+    return limitedList(
       db.transfers
         .filter((t) =>
           direction === 'out' ? out(t) : direction === 'in' ? into(t) : out(t) || into(t),
         )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+      false,
     );
   }
   if (path === 'transfers' && req.method === 'POST') return createTransfer(req, db);
@@ -4988,9 +5017,8 @@ function handleShifts(
     // Local-date range on the opening day of the shift (S5).
     const from = req.params.get('from') || null;
     const to = req.params.get('to') || null;
-    const isDate = (d: string | null) => d === null || /^\d{4}-\d{2}-\d{2}$/.test(d);
-    if (!isDate(from) || !isDate(to)) return error(400, 'รูปแบบวันที่ต้องเป็น YYYY-MM-DD');
-    if (from && to && from > to) return error(400, 'วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+    const problem = rangeParamsError(from, to);
+    if (problem) return error(400, problem);
     const inScope = listScope(req, db);
     if (typeof inScope !== 'function') return error(inScope.status, inScope.message);
     // Non-admins see only their own shifts (P6).
@@ -5010,11 +5038,12 @@ function handleShifts(
       );
     }
     const openOnly = req.params.get('openOnly') === '1';
-    return ok(
+    return limitedList(
       inRange
         .filter((s) => !openOnly || s.status === 'open')
         .sort((a, b) => b.openedAt.localeCompare(a.openedAt))
         .map((s) => withAdjustmentTotal(db, s)),
+      true,
     );
   }
 

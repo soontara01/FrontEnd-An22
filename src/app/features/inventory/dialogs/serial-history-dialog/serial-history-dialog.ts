@@ -11,6 +11,9 @@ import {
   SerialStatus,
   StockMovement,
   serialMovements,
+  MAX_RANGE_DAYS,
+  addDaysIso,
+  todayIso,
 } from '@core/models';
 import { AuthService } from '@core/auth/auth.service';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
@@ -86,6 +89,8 @@ export class SerialHistoryDialog {
   );
   protected readonly movementLabel = MOVEMENT_TYPE_LABEL;
 
+  /** First day of the history shown (the stock card takes at most `MAX_RANGE_DAYS`). */
+  protected readonly historyFrom = addDaysIso(todayIso(), -(MAX_RANGE_DAYS - 1));
   protected readonly loading = signal(true);
   private readonly serials = signal<SerialNumber[]>([]);
   private readonly movements = signal<StockMovement[]>([]);
@@ -115,7 +120,8 @@ export class SerialHistoryDialog {
   constructor() {
     forkJoin({
       serials: this.store.serials(this.product.id),
-      card: this.store.movements(this.product.id),
+      // The stock card takes at most MAX_RANGE_DAYS (api limit): the history of the last year.
+      card: this.store.movements(this.product.id, this.historyFrom, todayIso()),
     }).subscribe({
       next: ({ serials, card }) => {
         this.serials.set(serials);

@@ -9,6 +9,7 @@ export * from './menu-access.model';
 export * from './credit-note.model';
 export * from './exchange.model';
 export * from './price.model';
+export * from './list-limit.model';
 export * from './payment-method.model';
 export * from './pos-payment.model';
 export * from './pos-pricing.model';

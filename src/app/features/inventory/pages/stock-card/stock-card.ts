@@ -45,7 +45,7 @@ const TYPE_BADGE: Record<MovementType, string> = {
 
 /**
  * Stock card (inventory ledger) of one SKU for a date range
- * (`/inventory/stock-card/:productId?from=YYYY-MM-DD&to=YYYY-MM-DD`, or `?all=1`).
+ * (`/inventory/stock-card/:productId?from=YYYY-MM-DD&to=YYYY-MM-DD`, at most 366 days).
  * The range lives in the URL so reload / print / shared links keep it; default = this month.
  */
 @Component({
@@ -74,7 +74,6 @@ export default class StockCard {
   readonly productId = input.required<string>();
   readonly from = input<string>();
   readonly to = input<string>();
-  readonly all = input<string>();
   /** Query param: another branch the user works in (E15); none = the working branch */
   readonly branch = input<string>();
 
@@ -94,7 +93,6 @@ export default class StockCard {
 
   /** Effective range from the URL; no params → this month. */
   protected readonly range = computed<DateRange>(() => {
-    if (this.all()) return presetRange('all');
     if (!this.from() && !this.to()) return presetRange('thisMonth');
     return { from: this.from() || null, to: this.to() || null };
   });
@@ -103,7 +101,6 @@ export default class StockCard {
 
   protected readonly rangeText = computed(() => {
     const { from, to } = this.range();
-    if (!from && !to) return 'ทั้งหมด';
     if (from && to) return formatDateRange({ startDate: from, endDate: to });
     return from ? `ตั้งแต่ ${formatDateRange({ startDate: from, endDate: null })}` : `ถึง ${to}`;
   });
@@ -144,18 +141,13 @@ export default class StockCard {
   }
 
   protected applyPreset(preset: DatePreset): void {
-    if (preset === 'all') {
-      this.navigate({ all: '1', from: null, to: null });
-    } else {
-      const { from, to } = presetRange(preset);
-      this.navigate({ all: null, from, to });
-    }
+    const { from, to } = presetRange(preset);
+    this.navigate({ all: null, from, to });
   }
 
   protected search(): void {
     const { start, end } = this.rangeForm.getRawValue();
     this.navigate({
-      all: start || end ? null : '1',
       from: start ? toIsoDate(start) : null,
       to: end ? toIsoDate(end) : null,
     });

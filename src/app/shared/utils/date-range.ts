@@ -1,7 +1,7 @@
 import { addDaysIso, todayIso } from '@core/models';
 
 /** Quick date ranges for report pages (local 'YYYY-MM-DD', both ends inclusive). */
-export type DatePreset = 'today' | 'last7' | 'thisMonth' | 'lastMonth' | 'all';
+export type DatePreset = 'today' | 'last7' | 'thisMonth' | 'lastMonth';
 
 export interface DateRange {
   from: string | null;
@@ -13,12 +13,14 @@ export const DATE_PRESETS: readonly { id: DatePreset; label: string }[] = [
   { id: 'last7', label: '7 วันล่าสุด' },
   { id: 'thisMonth', label: 'เดือนนี้' },
   { id: 'lastMonth', label: 'เดือนก่อน' },
-  { id: 'all', label: 'ทั้งหมด' },
 ];
 
 const firstOfMonth = (iso: string): string => `${iso.slice(0, 7)}-01`;
 
-/** Local-date range for a preset ('all' = unbounded). */
+/**
+ * Local-date range for a preset. No 'all': dated lists take at most `MAX_RANGE_DAYS` (api limit,
+ * decided 2026-10-23).
+ */
 export function presetRange(preset: DatePreset, today = todayIso()): DateRange {
   switch (preset) {
     case 'today':
@@ -31,8 +33,6 @@ export function presetRange(preset: DatePreset, today = todayIso()): DateRange {
       const lastDay = addDaysIso(firstOfMonth(today), -1);
       return { from: firstOfMonth(lastDay), to: lastDay };
     }
-    case 'all':
-      return { from: null, to: null };
   }
 }
 

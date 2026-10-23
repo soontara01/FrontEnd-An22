@@ -31,7 +31,7 @@ import { SalesStore } from '../../data/sales.store';
 import { BranchScopeSelect } from '../../components/branch-scope-select';
 
 /**
- * POS shifts opened within a local-date range (`/sales/shifts?from=&to=`, `?all=1`; default this
+ * POS shifts opened within a local-date range (`/sales/shifts?from=&to=`, at most 366 days; default this
  * month): status, variance, approval (pending first to act on) and the variance per cashier (S3).
  */
 @Component({
@@ -62,7 +62,6 @@ export default class ShiftList {
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();
   readonly to = input<string>();
-  readonly all = input<string>();
   /** `?branch=<id>|all` (E23); none = the working branch */
   readonly branch = input<string>();
   protected readonly scope = computed<BranchScope>(() =>
@@ -94,14 +93,12 @@ export default class ShiftList {
   protected readonly pendingOnly = signal(false);
 
   protected readonly range = computed<DateRange>(() => {
-    if (this.all()) return presetRange('all');
     if (!this.from() && !this.to()) return presetRange('thisMonth');
     return { from: this.from() || null, to: this.to() || null };
   });
   protected readonly activePreset = computed(() => matchingPreset(this.range()));
   protected readonly rangeText = computed(() => {
     const { from, to } = this.range();
-    if (!from && !to) return 'ทั้งหมด';
     return formatDateRange({ startDate: from ?? to ?? '', endDate: to });
   });
 
@@ -166,7 +163,7 @@ export default class ShiftList {
   protected applyPreset(preset: DatePreset): void {
     const { from, to } = presetRange(preset);
     void this.router.navigate([], {
-      queryParams: preset === 'all' ? { all: '1', from: null, to: null } : { all: null, from, to },
+      queryParams: { all: null, from, to },
       queryParamsHandling: 'merge',
     });
   }

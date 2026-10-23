@@ -57,7 +57,7 @@ import { SalesStore } from '../../data/sales.store';
 import { BranchScopeSelect } from '../../components/branch-scope-select';
 
 /**
- * Bills of a local-date range (`/sales?from=&to=`, `?all=1`; default = today) with totals,
+ * Bills of a local-date range (`/sales?from=&to=`, at most 366 days; default = today) with totals,
  * gross profit and money in per payment method (for closing the drawer), net of the credit notes
  * issued in the same range.
  */
@@ -100,7 +100,6 @@ export default class SaleList {
   /** Query params (withComponentInputBinding). */
   readonly from = input<string>();
   readonly to = input<string>();
-  readonly all = input<string>();
   /** `?shift=<id>`: bills sold or voided in that shift (the date range is ignored) */
   readonly shift = input<string>();
   /** `?branch=<id>|all` (E23); none = the working branch */
@@ -146,14 +145,12 @@ export default class SaleList {
 
   /** Effective range from the URL; no params → today. */
   protected readonly range = computed<DateRange>(() => {
-    if (this.all()) return presetRange('all');
     if (!this.from() && !this.to()) return presetRange('today');
     return { from: this.from() || null, to: this.to() || null };
   });
   protected readonly activePreset = computed(() => matchingPreset(this.range()));
   protected readonly rangeText = computed(() => {
     const { from, to } = this.range();
-    if (!from && !to) return 'ทั้งหมด';
     if (from && to) return formatDateRange({ startDate: from, endDate: to });
     return from ? `ตั้งแต่ ${formatDateRange({ startDate: from, endDate: null })}` : `ถึง ${to}`;
   });
@@ -308,18 +305,13 @@ export default class SaleList {
   }
 
   protected applyPreset(preset: DatePreset): void {
-    if (preset === 'all') {
-      this.navigate({ all: '1', from: null, to: null, shift: null });
-    } else {
-      const { from, to } = presetRange(preset);
-      this.navigate({ all: null, from, to, shift: null });
-    }
+    const { from, to } = presetRange(preset);
+    this.navigate({ all: null, from, to, shift: null });
   }
 
   protected search(): void {
     const { start, end } = this.rangeForm.getRawValue();
     this.navigate({
-      all: start || end ? null : '1',
       from: start ? toIsoDate(start) : null,
       to: end ? toIsoDate(end) : null,
       shift: null,

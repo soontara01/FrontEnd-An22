@@ -73,7 +73,8 @@
       @if (selected(); as serial) {
         <section class="timeline">
           <h3>
-            ประวัติของ <span class="mono">{{ serial }}</span> (จากบัตรสต็อก)
+            ประวัติของ <span class="mono">{{ serial }}</span> (จากบัตรสต็อก ตั้งแต่
+            {{ historyFrom | thaiDate }})
           </h3>
           @if (timeline().length) {
             <ol>
@@ -92,7 +93,7 @@
         </section>
       } @else {
         <div class="text-muted small timeline">
-          กดที่ Serial เพื่อดูประวัติการรับเข้า / ตัดออกทั้งหมด
+          กดที่ Serial เพื่อดูประวัติการรับเข้า / ตัดออก (ย้อนหลังไม่เกิน 1 ปี)
         </div>
       }
     } @else {
