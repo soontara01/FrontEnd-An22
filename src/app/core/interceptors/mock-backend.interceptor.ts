@@ -365,8 +365,6 @@ interface MockPlatform {
   nextEmailId: number;
   /** The SaaS operator's admins (E36) — not users of any company */
   platformAdmins: PlatformAdmin[];
-  /** Passwords by platform admin id; none = `platform` */
-  platformPasswords: Record<number, string>;
 }
 
 interface ResetToken {
@@ -1135,7 +1133,6 @@ function loadPlatform(storage: StorageService): { platform: MockPlatform; change
       platformAdmins: stored?.platformAdmins ?? [
         { id: 1, username: 'platform', name: 'ผู้ดูแลแพลตฟอร์ม' },
       ],
-      platformPasswords: stored?.platformPasswords ?? {},
     },
     changed: !stored?.companies || raw.some((c) => !c.subscription || !c.planId),
   };
@@ -1276,9 +1273,11 @@ let platform: MockPlatform = {
   outbox: [],
   nextEmailId: 1,
   platformAdmins: [],
-  platformPasswords: {},
 };
 let platformChanged = false;
+
+/** The mock platform admins' password (seed `platform` / `platform`). */
+const MOCK_PLATFORM_PASSWORD = 'platform';
 /** The user of the request being handled (set by the interceptor before `handle()`). */
 let actor: User | undefined;
 /** Name recorded as cashier / issuer on documents. */
@@ -1579,8 +1578,8 @@ function platformResponse(
   if (path === 'platform/auth/login' && req.method === 'POST') {
     const name = normalizeUsername(String(body['username'] ?? ''));
     const admin = platform.platformAdmins.find((a) => a.username === name);
-    const password = admin ? (platform.platformPasswords[admin.id] ?? 'platform') : null;
-    if (!admin || body['password'] !== password) return error(401, WRONG_LOGIN);
+    // Every mock platform admin logs in with MOCK_PLATFORM_PASSWORD — no password is ever stored.
+    if (!admin || body['password'] !== MOCK_PLATFORM_PASSWORD) return error(401, WRONG_LOGIN);
     return ok({ token: mockPlatformToken(admin.id), admin } satisfies ApiPlatformLoginResponse);
   }
   const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
