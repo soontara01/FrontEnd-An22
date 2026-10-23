@@ -293,7 +293,7 @@ token แยก (mock `mock-platform-token.p<id>`; อยู่ใน session �
 4. `manualDiscountError()` (เหตุผล, เพดาน % ของ staff)
 5. serial ทุกบรรทัดต้อง `in_stock` และเป็นของ SKU นั้น
 6. `expectedTotal` ≠ `cart.total` → 400 "ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง…"
-7. `paymentError(total, payments, methods)` แล้ว `paymentSummary()` (เงินทอน, ปัดเศษ)
+7. `paymentError(total, payments, methods)` แล้ว `paymentSummary()` (เงินทอน, ปัดเศษ) — `reference` ที่เป็นเลขบัตรเต็ม (`isFullCardNumber()`: 13–19 หลัก + Luhn) → 400 "<ช่องทาง>: ห้ามกรอกเลขบัตรเต็ม — กรอกเฉพาะเลขอนุมัติหรือเลขบัตร 4 หลักท้าย" (PCI DSS: ห้ามเก็บเลขบัตรเต็ม)
 8. `buyer` (ถ้ามี) → `checkoutBuyerError()` แล้วออกใบกำกับเต็มรูปพร้อมบิล (`atSale: true`)
 
 จากนั้น: เลข `POS<เครื่อง>-YYYYMMDD-NNNN`, ตัดสต็อกทีละบรรทัดพร้อม COGS (serial = ทุนของเครื่องนั้น, อื่น = `avgCost` ขณะนั้น,

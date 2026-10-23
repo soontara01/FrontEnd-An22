@@ -1,5 +1,5 @@
 import { PAYMENT_METHOD_DEFAULTS, PaymentMethod } from './payment-method.model';
-import { cashDueFor, paymentError, paymentSummary } from './pos-payment.model';
+import { cashDueFor, isFullCardNumber, paymentError, paymentSummary } from './pos-payment.model';
 import { PaymentInput } from './sale.model';
 
 const method = (id: number, over: Partial<PaymentMethod>): PaymentMethod => ({
@@ -105,5 +105,18 @@ describe('pos payment', () => {
   it('needs no payment for a zero bill', () => {
     expect(paymentError(0, [], methods)).toBeNull();
     expect(paymentError(0, [pay(1, 10)], methods)).toBe('บิลยอด 0 บาทไม่ต้องรับชำระ');
+  });
+
+  it('refuses a full card number in a reference (PCI DSS)', () => {
+    expect(isFullCardNumber('4111 1111 1111 1111')).toBe(true);
+    expect(isFullCardNumber('4111-1111-1111-1111')).toBe(true);
+    expect(isFullCardNumber('4111111111111112')).toBe(false);
+    expect(isFullCardNumber('1111')).toBe(false);
+    expect(isFullCardNumber('AB123456')).toBe(false);
+    const card = methods.find((m) => m.id === 2)!;
+    expect(paymentError(1000, [pay(2, 1000, { reference: '4111 1111 1111 1111' })], methods)).toBe(
+      `${card.name}: ห้ามกรอกเลขบัตรเต็ม — กรอกเฉพาะเลขอนุมัติหรือเลขบัตร 4 หลักท้าย`,
+    );
+    expect(paymentError(1000, [pay(2, 1000, { reference: '1111' })], methods)).toBeNull();
   });
 });

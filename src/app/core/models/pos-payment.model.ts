@@ -82,6 +82,26 @@ export function paymentSummary(
 }
 
 const isMoney = (n: number) => Number.isFinite(n) && n >= 0 && round2(n) === n;
+
+/**
+ * A full payment-card number (PAN) typed into a reference: 13–19 digits once spaces / '-' are
+ * removed, passing the Luhn check. Never stored (PCI DSS) — only the approval code or the last 4
+ * digits may be kept.
+ */
+export function isFullCardNumber(reference: string): boolean {
+  const digits = (reference ?? '').replace(/[\s-]/g, '');
+  if (!/^\d{13,19}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
 const baht = (n: number) => `฿${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 
 /** The single payment rule (POS + server). Returns a Thai message, or null when the bill is paid. */
@@ -99,6 +119,9 @@ export function paymentError(
     if (!method) return `ไม่พบช่องทางชำระเงิน #${input.methodId}`;
     if (!method.active) return `${method.name} ปิดใช้งาน`;
     if (!isMoney(input.amount)) return `${method.name}: จำนวนเงินไม่ถูกต้อง`;
+    if (isFullCardNumber(input.reference)) {
+      return `${method.name}: ห้ามกรอกเลขบัตรเต็ม — กรอกเฉพาะเลขอนุมัติหรือเลขบัตร 4 หลักท้าย`;
+    }
     if (allowsChange(method)) {
       cashLines++;
       continue;

@@ -510,6 +510,16 @@ const PAYMENT_CASES: { name: string; total: number; payments: PaymentInput[] }[]
   },
   { name: 'installment without months', total: 4590, payments: [pay(4, 4590)] },
   { name: 'card without reference', total: 500, payments: [pay(2, 500)] },
+  {
+    name: 'card reference is a full card number (PCI DSS)',
+    total: 500,
+    payments: [pay(2, 500, { reference: '4111-1111-1111-1111' })],
+  },
+  {
+    name: 'card reference of 16 digits failing Luhn (not a card number)',
+    total: 500,
+    payments: [pay(2, 500, { reference: '4111111111111112' })],
+  },
   { name: 'card under its minimum', total: 50, payments: [pay(2, 50, { reference: 'X' })] },
   { name: 'QR over its maximum', total: 6000, payments: [pay(3, 6000)] },
   { name: 'inactive method', total: 100, payments: [pay(5, 100)] },

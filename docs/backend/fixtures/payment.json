@@ -1518,6 +1518,340 @@
     }
   },
   {
+    "name": "card reference is a full card number (PCI DSS)",
+    "input": {
+      "total": 500,
+      "payments": [
+        {
+          "methodId": 2,
+          "amount": 500,
+          "reference": "4111-1111-1111-1111",
+          "installmentMonths": null
+        }
+      ],
+      "methods": [
+        {
+          "active": true,
+          "sortOrder": 1,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "0.25",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 1,
+          "code": "M1",
+          "name": "เงินสด",
+          "type": "cash"
+        },
+        {
+          "active": true,
+          "sortOrder": 2,
+          "requireReference": true,
+          "referenceLabel": "เลขอนุมัติ",
+          "minAmount": 100,
+          "maxAmount": null,
+          "feePercent": 1.5,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 2,
+          "code": "M2",
+          "name": "บัตร",
+          "type": "card"
+        },
+        {
+          "active": true,
+          "sortOrder": 3,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": 5000,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 3,
+          "code": "M3",
+          "name": "QR",
+          "type": "qr"
+        },
+        {
+          "active": true,
+          "sortOrder": 4,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [3, 6],
+          "note": "",
+          "id": 4,
+          "code": "M4",
+          "name": "ผ่อน",
+          "type": "installment"
+        },
+        {
+          "active": false,
+          "sortOrder": 5,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 5,
+          "code": "M5",
+          "name": "ปิด",
+          "type": "transfer"
+        },
+        {
+          "active": true,
+          "sortOrder": 6,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "1",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 6,
+          "code": "M6",
+          "name": "เงินสดปัดบาท",
+          "type": "cash"
+        },
+        {
+          "active": true,
+          "sortOrder": 7,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 7,
+          "code": "M7",
+          "name": "เงินสดไม่ปัด",
+          "type": "cash"
+        }
+      ]
+    },
+    "expected": {
+      "summary": {
+        "payments": [
+          {
+            "methodId": 2,
+            "name": "บัตร",
+            "type": "card",
+            "amount": 500,
+            "tendered": 500,
+            "reference": "4111-1111-1111-1111",
+            "installmentMonths": null
+          }
+        ],
+        "nonCash": 500,
+        "remaining": 0,
+        "cashDue": 0,
+        "rounding": 0,
+        "tendered": 0,
+        "change": 0,
+        "balance": 0,
+        "complete": true,
+        "opensDrawer": false
+      },
+      "error": "บัตร: ห้ามกรอกเลขบัตรเต็ม — กรอกเฉพาะเลขอนุมัติหรือเลขบัตร 4 หลักท้าย"
+    }
+  },
+  {
+    "name": "card reference of 16 digits failing Luhn (not a card number)",
+    "input": {
+      "total": 500,
+      "payments": [
+        {
+          "methodId": 2,
+          "amount": 500,
+          "reference": "4111111111111112",
+          "installmentMonths": null
+        }
+      ],
+      "methods": [
+        {
+          "active": true,
+          "sortOrder": 1,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "0.25",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 1,
+          "code": "M1",
+          "name": "เงินสด",
+          "type": "cash"
+        },
+        {
+          "active": true,
+          "sortOrder": 2,
+          "requireReference": true,
+          "referenceLabel": "เลขอนุมัติ",
+          "minAmount": 100,
+          "maxAmount": null,
+          "feePercent": 1.5,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 2,
+          "code": "M2",
+          "name": "บัตร",
+          "type": "card"
+        },
+        {
+          "active": true,
+          "sortOrder": 3,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": 5000,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 3,
+          "code": "M3",
+          "name": "QR",
+          "type": "qr"
+        },
+        {
+          "active": true,
+          "sortOrder": 4,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [3, 6],
+          "note": "",
+          "id": 4,
+          "code": "M4",
+          "name": "ผ่อน",
+          "type": "installment"
+        },
+        {
+          "active": false,
+          "sortOrder": 5,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 5,
+          "code": "M5",
+          "name": "ปิด",
+          "type": "transfer"
+        },
+        {
+          "active": true,
+          "sortOrder": 6,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "1",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 6,
+          "code": "M6",
+          "name": "เงินสดปัดบาท",
+          "type": "cash"
+        },
+        {
+          "active": true,
+          "sortOrder": 7,
+          "requireReference": false,
+          "referenceLabel": "",
+          "minAmount": 0,
+          "maxAmount": null,
+          "feePercent": 0,
+          "cashRounding": "none",
+          "promptPayId": "",
+          "bankAccount": "",
+          "installmentMonths": [],
+          "note": "",
+          "id": 7,
+          "code": "M7",
+          "name": "เงินสดไม่ปัด",
+          "type": "cash"
+        }
+      ]
+    },
+    "expected": {
+      "summary": {
+        "payments": [
+          {
+            "methodId": 2,
+            "name": "บัตร",
+            "type": "card",
+            "amount": 500,
+            "tendered": 500,
+            "reference": "4111111111111112",
+            "installmentMonths": null
+          }
+        ],
+        "nonCash": 500,
+        "remaining": 0,
+        "cashDue": 0,
+        "rounding": 0,
+        "tendered": 0,
+        "change": 0,
+        "balance": 0,
+        "complete": true,
+        "opensDrawer": false
+      },
+      "error": null
+    }
+  },
+  {
     "name": "card under its minimum",
     "input": {
       "total": 50,
