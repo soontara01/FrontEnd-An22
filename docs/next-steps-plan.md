@@ -103,7 +103,14 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
   ทุกตารางมี `tenant_id` + RLS (D7), ตาราง platform ไม่อยู่ใต้ RLS (`companies` + แพ็กเกจ / ตารางเก็บเงิน / คำขอลบ, `billing_invoices`, `platform_admins`, `password_reset_tokens`) และใช้ DB role แยก,
   `audit_log` insert-only, seed ตรงกับ mock (DEMO, HQ + BN, `admin` / `admin`, `somchai` / `1234`);
   port กฎใน `domain-rules.md` ให้ผ่าน `fixtures/*.json`; export / ลบบริษัทเป็น job; จำกัด login ผิดต่อบัญชี / IP; ส่งอีเมลจริง (แทน outbox ของ mock)
+  — ✅ **เสร็จ 2026-10-23** (ขั้น 0–13 ใน `an22-api/docs/plan-step.md`): Java 25 + Spring Boot 4.1 + PostgreSQL 18 ผ่าน PgBouncer, migration ที่ `db/migration`,
+  ผ่าน fixtures ทั้งหมด, test ข้าม tenant ทุก endpoint, test หลาย instance (api 2 ตัวหลัง load balancer: token ข้าม instance, ขายพร้อมกันเลขบิลไม่ซ้ำ, job billing ออกใบเดียว);
+  ทดลองผ่าน an22-web ด้วย build `useMock: false` ชั่วคราว: login DEMO → เปิดกะ → ขาย → ปิดกะ → logout.
+  ต่างจากข้อความเดิม: export ตอบตรง (ไม่ใช่ job), purge = platform admin สั่ง (ไม่ใช่ job), อีเมลยังไม่ส่งจริง (log อย่างเดียว — ต้องเลือกผู้ให้บริการ),
+  `GET /platform/outbox` ไม่มีใน api จริง (เมนู "อีเมลที่ส่ง (mock)" ได้ 404 — ตกลงปล่อยไว้), จำกัดจำนวนครั้งเพิ่มที่ signup / ลืมรหัสผ่าน
 - **C3** สลับหน้าบ้านไป api จริง (`useMock: false`) เมื่อ api ตอบครบ — ทดสอบตาม `docs/test-plan.md` / ผลทดสอบของแต่ละขั้นใน `saas-plan.md`
+  — ทดลองก่อนสลับถาวร: `an22-api/scripts/multi-instance-check.sh` (KEEP=1 เก็บ stack) + build หน้าบ้าน `useMock: false` → image an22-web → `compose.multi.yaml --profile web`
+  (http://localhost:14000)
 
 ## เลื่อนไว้ / รอคนอื่น (ไม่อยู่ในแผนนี้)
 
