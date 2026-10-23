@@ -1,10 +1,15 @@
+import creditNote from '../../../../../docs/backend/fixtures/credit-note.json';
 import payment from '../../../../../docs/backend/fixtures/payment.json';
 import priceCart from '../../../../../docs/backend/fixtures/price-cart.json';
 import { buildGoldenFixtures } from './golden-fixtures';
 
 // The JSON is what the API's tests read; it must stay what the rules produce today.
 // A rule or case changed on purpose → `npm run fixtures`, then review the JSON diff.
-const written: Record<string, unknown[]> = { 'price-cart': priceCart, payment };
+const written: Record<string, unknown[]> = {
+  'price-cart': priceCart,
+  payment,
+  'credit-note': creditNote,
+};
 
 describe('golden fixtures (docs/backend/fixtures)', () => {
   // Through JSON like the files themselves: drops undefined fields, -0 becomes 0.

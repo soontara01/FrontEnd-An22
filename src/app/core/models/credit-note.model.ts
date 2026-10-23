@@ -1,5 +1,6 @@
 import { round2 } from './costing.model';
 import { PaymentMethod, allowsChange } from './payment-method.model';
+import { isFullCardNumber } from './pos-payment.model';
 import { freeSets } from './pos-pricing.model';
 import { VatType, vatBreakdown } from './product.model';
 import type { Promotion } from './promotion.model';
@@ -360,6 +361,9 @@ export function creditNoteError(
     if (seen.has(method.id)) return `${method.name} ซ้ำ`;
     seen.add(method.id);
     if (!isMoney(refund.amount)) return `${method.name}: จำนวนเงินไม่ถูกต้อง`;
+    if (isFullCardNumber(refund.reference)) {
+      return `${method.name}: ห้ามกรอกเลขบัตรเต็ม — กรอกเฉพาะเลขอนุมัติหรือเลขบัตร 4 หลักท้าย`;
+    }
     if (option.max !== null && refund.amount > option.max) {
       return `${method.name}: คืนได้ไม่เกิน ${option.max.toLocaleString('en-US')} บาท`;
     }

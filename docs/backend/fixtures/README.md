@@ -31,6 +31,22 @@ spec `golden-fixtures.spec.ts` แดงทันทีถ้า JSON ไม่�
    expected: { summary: PaymentSummary, error: string | null } }]
 ```
 
+### `credit-note.json` — `draftCreditNote()`, `creditNoteError()`, `refundOptions()`, `toRefunds()`, `returnSummary()` (`core/models/credit-note.model.ts`)
+
+```text
+[{ name,
+   input: { sale: Sale, notes: CreditNote[] (ใบก่อนหน้าของบิล), payload: CreditNotePayload,
+            promotions: Promotion[], methods: PaymentMethod[], today: 'YYYY-MM-DD',
+            exchanges: Exchange[], here: BranchHere | null },
+   expected: { draft: CreditNoteDraft,                       // draftCreditNote(sale, notes, payload.lines, promotions, exchanges)
+               error: string | null,                         // = 400 ตอน POST /sales/:id/credit-notes
+               refundOptions: { methodId, max }[],
+               refunds: SalePayment[],                       // toRefunds(payload.refunds, methods)
+               returnSummary: { returnStatus, creditedTotal, creditNoteNos } } }]  // ของ notes ก่อนหน้า
+```
+
+บิลลงเวลา `2026-10-01T03:00:00Z` (= 10:00 ท้องถิ่น) — วันขายเหมือนกันทั้ง UTC และ Asia/Bangkok
+
 ## ใช้ใน repo api (JUnit 5)
 
 ```java
@@ -55,5 +71,5 @@ Stream<DynamicTest> priceCartMatchesFrontEnd() throws IOException {
 ## เพิ่มเคส
 
 ทุกครั้งที่เจอบั๊กคำนวณไม่ตรงกันระหว่างหน้าบ้าน / หลังบ้าน → เพิ่มเคสนั้นที่นี่ก่อนแก้ ไฟล์ต่อไปที่ควรมี (ตามความเสี่ยง):
-`credit-note.json` (`draftCreditNote()`), `stock-card.json` (`movingAverage()` / `buildStockCard()`), `shift.json` (`expectedByMethod()` / `countCheck()`)
+`stock-card.json` (`movingAverage()` / `buildStockCard()`), `shift.json` (`expectedByMethod()` / `countCheck()`)
 — เพิ่ม key ใน `buildGoldenFixtures()` + import ใน `golden-fixtures.spec.ts`

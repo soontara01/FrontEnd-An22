@@ -10,7 +10,28 @@ import {
 } from '../pos-pricing.model';
 import { PRODUCT_DEFAULTS, Product } from '../product.model';
 import { PROMOTION_DEFAULTS, Promotion } from '../promotion.model';
-import type { CartItem, FreeSerial, ManualDiscount, PaymentInput } from '../sale.model';
+import {
+  CreditNote,
+  CreditNoteDraft,
+  CreditNotePayload,
+  creditNoteError,
+  draftCreditNote,
+  refundOptions,
+  returnSummary,
+  toRefunds,
+} from '../credit-note.model';
+import type { Exchange } from '../exchange.model';
+import {
+  SALE_DEFAULTS,
+  type BranchHere,
+  type CartItem,
+  type FreeSerial,
+  type ManualDiscount,
+  type PaymentInput,
+  type Sale,
+  type SaleLine,
+  type SalePayment,
+} from '../sale.model';
 
 /**
  * Golden fixtures (`docs/backend/fixtures/`): inputs → the exact outputs of the shared rules, so
@@ -33,6 +54,34 @@ export interface PriceCartFixture {
     cart: PricedCart;
     cartError: string | null;
     manualDiscountError: string | null;
+  };
+}
+
+export interface CreditNoteFixture {
+  name: string;
+  input: {
+    sale: Sale;
+    /** Earlier credit notes of the bill */
+    notes: CreditNote[];
+    payload: CreditNotePayload;
+    promotions: Promotion[];
+    methods: PaymentMethod[];
+    /** Local 'YYYY-MM-DD' (the bill is 2026-10-01 10:00 +07) */
+    today: string;
+    exchanges: Exchange[];
+    here: BranchHere | null;
+  };
+  expected: {
+    /** `draftCreditNote(sale, notes, payload.lines, promotions, exchanges)` */
+    draft: CreditNoteDraft;
+    /** `creditNoteError()` = 400 at POST /sales/:id/credit-notes */
+    error: string | null;
+    /** `refundOptions()` as { methodId, max } */
+    refundOptions: { methodId: number; max: number | null }[];
+    /** `toRefunds(payload.refunds, methods)` — stored refund lines */
+    refunds: SalePayment[];
+    /** `returnSummary(sale, notes)` — derived Sale fields from the earlier notes */
+    returnSummary: Pick<Sale, 'returnStatus' | 'creditedTotal' | 'creditNoteNos'>;
   };
 }
 
@@ -552,8 +601,417 @@ const paymentFixture = (c: (typeof PAYMENT_CASES)[number]): PaymentFixture => ({
   },
 });
 
+// ---------------------------------------------------------------- credit note
+
+const saleLine = (over: Partial<SaleLine>): SaleLine => ({
+  productId: 1,
+  sku: 'SKU',
+  name: 'สินค้า',
+  shortName: 'สินค้า',
+  unit: 'ชิ้น',
+  factor: 1,
+  qty: 1,
+  unitPrice: 0,
+  listPrice: 0,
+  itemDiscount: 0,
+  billDiscount: 0,
+  manualDiscount: 0,
+  amount: 0,
+  vatType: 'vat7',
+  itemType: 'stock',
+  vat: 0,
+  promotionIds: [],
+  freeOfPromotionId: null,
+  serial: null,
+  warrantyMonths: 0,
+  cogs: 0,
+  ...over,
+});
+
+const salePay = (methodId: number, name: string, type: PaymentMethod['type'], amt: number) => ({
+  methodId,
+  name,
+  type,
+  amount: amt,
+  tendered: amt,
+  reference: '',
+  installmentMonths: null,
+});
+
+/** Notebook (earns a free mouse + setup service), 3 mice at −10%, paid by card + cash, at HQ. */
+const CN_SALE: Sale = {
+  ...SALE_DEFAULTS,
+  id: 1,
+  orderNo: 'POS-HQ-1-20261001-0001',
+  date: '2026-10-01T03:00:00.000Z',
+  customer: '',
+  status: 'paid',
+  lines: [
+    saleLine({
+      productId: 1,
+      sku: 'NB',
+      unitPrice: 24900,
+      listPrice: 24900,
+      billDiscount: 300,
+      amount: 24600,
+      vat: 1609.35,
+      cogs: 19900,
+      serial: 'NB-1',
+      promotionIds: [3],
+    }),
+    saleLine({
+      productId: 2,
+      sku: 'MS',
+      qty: 3,
+      unitPrice: 590,
+      listPrice: 590,
+      itemDiscount: 177,
+      amount: 1593,
+      vat: 104.21,
+      cogs: 1050,
+      promotionIds: [1],
+    }),
+    saleLine({
+      productId: 2,
+      sku: 'MS',
+      listPrice: 590,
+      cogs: 350,
+      promotionIds: [3],
+      freeOfPromotionId: 3,
+    }),
+    saleLine({
+      productId: 9,
+      sku: 'SETUP',
+      unit: 'ครั้ง',
+      listPrice: 500,
+      itemType: 'service',
+      promotionIds: [3],
+      freeOfPromotionId: 3,
+    }),
+  ],
+  payments: [
+    { ...salePay(2, 'บัตร', 'card', 20000), reference: 'A' },
+    { ...salePay(1, 'เงินสด', 'cash', 6193), tendered: 6200 },
+  ],
+  subtotal: 26670,
+  itemDiscount: 177,
+  billDiscount: 300,
+  total: 26193,
+  itemCount: 6,
+  branchId: 1,
+  vatRegistered: true,
+};
+
+/** A cheap main item earning an expensive free item: returning it alone would refund below 0. */
+const CN_CHEAP_SALE: Sale = {
+  ...CN_SALE,
+  id: 2,
+  orderNo: 'POS-HQ-1-20261001-0002',
+  lines: [
+    saleLine({
+      productId: 5,
+      sku: 'CABLE',
+      unitPrice: 100,
+      listPrice: 100,
+      amount: 100,
+      vat: 6.54,
+      cogs: 40,
+      promotionIds: [4],
+    }),
+    saleLine({
+      productId: 6,
+      sku: 'BAG',
+      listPrice: 590,
+      cogs: 200,
+      promotionIds: [4],
+      freeOfPromotionId: 4,
+    }),
+  ],
+  payments: [salePay(1, 'เงินสด', 'cash', 100)],
+  subtotal: 100,
+  itemDiscount: 0,
+  billDiscount: 0,
+  total: 100,
+  itemCount: 2,
+};
+
+const CN_PROMOTIONS: Promotion[] = [
+  promo(3, {
+    code: 'NB-GIFT',
+    startDate: '2026-09-01',
+    type: 'free_goods',
+    minQty: 1,
+    discount: null,
+    scope: { all: false, productIds: [1], categoryIds: [] },
+    freeGoods: {
+      items: [
+        { productId: 2, qty: 1 },
+        { productId: 9, qty: 1 },
+      ],
+      repeat: true,
+      maxSets: null,
+    },
+  }),
+  promo(4, {
+    code: 'BAG-GIFT',
+    startDate: '2026-09-01',
+    type: 'free_goods',
+    minQty: 1,
+    discount: null,
+    scope: { all: false, productIds: [5], categoryIds: [] },
+    freeGoods: { items: [{ productId: 6, qty: 1 }], repeat: false, maxSets: null },
+  }),
+];
+
+const CN_METHODS: PaymentMethod[] = [
+  method(1, { code: 'CASH', name: 'เงินสด', type: 'cash' }),
+  method(2, {
+    code: 'CARD',
+    name: 'บัตร',
+    type: 'card',
+    requireReference: true,
+    referenceLabel: 'เลขอนุมัติ',
+  }),
+  method(3, { code: 'QR', name: 'QR', type: 'qr' }),
+];
+
+const ret = (saleLineIndex: number, qty = 1, restock = true) => ({ saleLineIndex, qty, restock });
+const refund = (methodId: number, amt: number, reference = ''): PaymentInput => ({
+  methodId,
+  amount: amt,
+  reference,
+  installmentMonths: null,
+});
+
+/** An earlier credit note of CN_SALE holding the given draft. */
+const earlierNote = (
+  cnNo: string,
+  date: string,
+  draft: CreditNoteDraft,
+  refunds: SalePayment[],
+): CreditNote => ({
+  id: 1,
+  cnNo,
+  saleId: CN_SALE.id,
+  orderNo: CN_SALE.orderNo,
+  taxInvoiceNo: null,
+  buyer: null,
+  saleDate: CN_SALE.date,
+  date,
+  cashier: 'admin',
+  reason: 'ชำรุด',
+  lines: draft.lines,
+  deductions: draft.deductions,
+  subtotal: draft.subtotal,
+  deduction: draft.deduction,
+  total: draft.total,
+  vat: draft.vat,
+  refunds,
+});
+
+const ONE_MOUSE = earlierNote(
+  'CN-HQ-20261002-0001',
+  '2026-10-02T03:00:00.000Z',
+  draftCreditNote(CN_SALE, [], [ret(1)], CN_PROMOTIONS),
+  [{ ...salePay(1, 'เงินสด', 'cash', 531) }],
+);
+const NOTEBOOK_BACK = earlierNote(
+  'CN-HQ-20261002-0002',
+  '2026-10-02T04:00:00.000Z',
+  draftCreditNote(CN_SALE, [], [ret(0)], CN_PROMOTIONS),
+  [
+    { ...salePay(2, 'บัตร', 'card', 5000), reference: 'R' },
+    { ...salePay(1, 'เงินสด', 'cash', 18510) },
+  ],
+);
+
+const NOT_VAT_SALE: Sale = {
+  ...CN_SALE,
+  vatRegistered: false,
+  vat: 0,
+  lines: CN_SALE.lines.map((l) => ({ ...l, vat: 0 })),
+};
+
+const SWAPPED: Exchange = {
+  id: 1,
+  exNo: 'EX-HQ-20261002-0001',
+  saleId: CN_SALE.id,
+  orderNo: CN_SALE.orderNo,
+  saleDate: CN_SALE.date,
+  date: '2026-10-02T03:00:00.000Z',
+  cashier: 'admin',
+  reason: 'เครื่องเสีย',
+  lines: [
+    {
+      saleLineIndex: 0,
+      productId: 1,
+      sku: 'NB',
+      name: 'สินค้า',
+      shortName: 'สินค้า',
+      unit: 'ชิ้น',
+      factor: 1,
+      qty: 1,
+      oldSerial: 'NB-1',
+      newSerial: 'NB-7',
+      restock: false,
+      costIn: 19900,
+      costOut: 19950,
+    },
+  ],
+};
+
+interface CreditNoteCase {
+  name: string;
+  sale?: Sale;
+  notes?: CreditNote[];
+  payload: Partial<CreditNotePayload>;
+  today?: string;
+  exchanges?: Exchange[];
+  here?: BranchHere;
+}
+
+const CN_CASES: CreditNoteCase[] = [
+  { name: 'one of three discounted mice back, cash refund', payload: {} },
+  {
+    name: 'card refund with its reference goes back to the card',
+    payload: { refunds: [refund(2, 531, 'R1')] },
+  },
+  { name: 'card refund without its reference', payload: { refunds: [refund(2, 531)] } },
+  {
+    name: 'last units take the exact remainder (amount / VAT / cost)',
+    notes: [ONE_MOUSE],
+    payload: { lines: [ret(1, 2)], refunds: [refund(1, 1062)], expectedTotal: 1062 },
+  },
+  {
+    name: 'more than what is left to return',
+    notes: [ONE_MOUSE],
+    payload: { lines: [ret(1, 3)], refunds: [refund(1, 1593)], expectedTotal: 1593 },
+  },
+  { name: 'nothing chosen', payload: { lines: [ret(1, 0)] } },
+  { name: 'same line twice', payload: { lines: [ret(1), ret(1)] } },
+  {
+    name: 'main item back: kept free goods deducted at list price, card capped at what it took',
+    payload: {
+      lines: [ret(0)],
+      refunds: [refund(2, 20000, 'R'), refund(1, 3510)],
+      expectedTotal: 23510,
+    },
+  },
+  {
+    name: 'main item back, all to the card: over its cap',
+    payload: { lines: [ret(0)], refunds: [refund(2, 23510, 'R')], expectedTotal: 23510 },
+  },
+  {
+    name: 'main item with its free goods back: no deduction, the service never restocks',
+    payload: {
+      lines: [ret(0), ret(2), ret(3)],
+      refunds: [refund(1, 24600)],
+      expectedTotal: 24600,
+    },
+  },
+  {
+    name: 'kept free goods already charged by an earlier note are not charged again',
+    notes: [NOTEBOOK_BACK],
+    payload: {},
+  },
+  {
+    name: 'card refund cap after earlier refunds',
+    notes: [NOTEBOOK_BACK],
+    payload: { refunds: [refund(2, 531, 'R2')] },
+  },
+  {
+    name: 'returns: partial then full (derived Sale fields)',
+    notes: [ONE_MOUSE, NOTEBOOK_BACK],
+    payload: {
+      lines: [ret(1, 2), ret(2), ret(3)],
+      refunds: [refund(1, 1062)],
+      expectedTotal: 1062,
+    },
+  },
+  {
+    name: 'free item worth more than the refund: return it too',
+    sale: CN_CHEAP_SALE,
+    payload: { lines: [ret(0)], refunds: [refund(1, 100)], expectedTotal: 100 },
+  },
+  {
+    name: 'bill sold while not VAT-registered: no VAT back, also on deductions',
+    sale: NOT_VAT_SALE,
+    payload: { lines: [ret(0)], refunds: [refund(1, 23510)], expectedTotal: 23510 },
+  },
+  {
+    name: 'serial line after an exchange returns the serial the customer holds now',
+    exchanges: [SWAPPED],
+    payload: { lines: [ret(0, 1, false)], refunds: [refund(1, 23510)], expectedTotal: 23510 },
+  },
+  { name: 'bill of today: void instead', today: '2026-10-01', payload: {} },
+  {
+    name: 'bill sold at another branch (D3)',
+    here: { branchId: 2, branches: [{ id: 1, code: 'HQ' }] },
+    payload: {},
+  },
+  { name: 'cancelled bill', sale: { ...CN_SALE, status: 'cancelled' }, payload: {} },
+  { name: 'pre-POS order without lines', sale: { ...CN_SALE, lines: [] }, payload: {} },
+  { name: 'missing reason', payload: { reason: '  ' } },
+  { name: 'total changed since the screen', payload: { expectedTotal: 590 } },
+  {
+    name: 'refund through a method the bill was not paid with',
+    payload: { refunds: [refund(3, 531)] },
+  },
+  { name: 'same refund method twice', payload: { refunds: [refund(1, 300), refund(1, 231)] } },
+  { name: 'refund amount with more than 2 decimals', payload: { refunds: [refund(1, 530.999)] } },
+  { name: 'refunds do not add up to the note', payload: { refunds: [refund(1, 500)] } },
+  {
+    name: 'full card number in a refund reference (PCI DSS)',
+    payload: { refunds: [refund(2, 531, '4111 1111 1111 1111')] },
+  },
+];
+
+const creditNoteFixture = (c: CreditNoteCase): CreditNoteFixture => {
+  const sale = c.sale ?? CN_SALE;
+  const notes = c.notes ?? [];
+  const exchanges = c.exchanges ?? [];
+  const payload: CreditNotePayload = {
+    lines: [ret(1)],
+    refunds: [refund(1, 531)],
+    reason: 'ชำรุด',
+    expectedTotal: 531,
+    ...c.payload,
+  };
+  const today = c.today ?? '2026-10-04';
+  return {
+    name: c.name,
+    input: {
+      sale,
+      notes,
+      payload,
+      promotions: CN_PROMOTIONS,
+      methods: CN_METHODS,
+      today,
+      exchanges,
+      here: c.here ?? null,
+    },
+    expected: {
+      draft: draftCreditNote(sale, notes, payload.lines, CN_PROMOTIONS, exchanges),
+      error: creditNoteError(sale, notes, payload, {
+        promotions: CN_PROMOTIONS,
+        methods: CN_METHODS,
+        today,
+        exchanges,
+        here: c.here,
+      }),
+      refundOptions: refundOptions(sale, notes, CN_METHODS).map((o) => ({
+        methodId: o.method.id,
+        max: o.max,
+      })),
+      refunds: toRefunds(payload.refunds, CN_METHODS),
+      returnSummary: returnSummary(sale, notes),
+    },
+  };
+};
+
 /** File name (without `.json`) → its cases, as written to `docs/backend/fixtures/`. */
 export const buildGoldenFixtures = (): Record<string, unknown[]> => ({
   'price-cart': CART_CASES.map(priceCartFixture),
   payment: PAYMENT_CASES.map(paymentFixture),
+  'credit-note': CN_CASES.map(creditNoteFixture),
 });

@@ -352,6 +352,15 @@ describe('credit note model', () => {
       expect(creditNoteError(sale, [], payload({ refunds: [refund(1, 500)] }), ctx)).toBe(
         'ยอดคืนเงิน 500 ไม่เท่ายอดลดหนี้ 531',
       );
+      // PCI DSS: never a full card number in a refund reference either
+      expect(
+        creditNoteError(
+          sale,
+          [],
+          payload({ refunds: [refund(2, 531, '4111 1111 1111 1111')] }),
+          ctx,
+        ),
+      ).toBe('บัตร: ห้ามกรอกเลขบัตรเต็ม — กรอกเฉพาะเลขอนุมัติหรือเลขบัตร 4 หลักท้าย');
     });
   });
 });
