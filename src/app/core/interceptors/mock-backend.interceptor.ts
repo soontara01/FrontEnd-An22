@@ -2194,9 +2194,11 @@ function handle(
       true,
     );
   }
-  if (path === 'tax-invoices/buyer' && req.method === 'GET') {
-    // Last buyer details used with this tax ID (+ branch), to fill the form.
-    const taxId = req.params.get('taxId') ?? '';
+  if (path === 'tax-invoices/buyer-lookup' && req.method === 'POST') {
+    // Last buyer details used with this tax ID (+ branch), to fill the form. POST so the tax ID
+    // stays out of URLs and proxy logs (E50).
+    const body = req.body as { taxId?: unknown } | null;
+    const taxId = typeof body?.taxId === 'string' ? body.taxId : '';
     const found = [...db.taxInvoices].reverse().find((t) => t.buyer.taxId === taxId);
     return ok(found?.buyer ?? null);
   }

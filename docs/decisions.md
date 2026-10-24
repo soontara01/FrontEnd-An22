@@ -105,6 +105,8 @@
   log ไม่มีค่าลับใน query, จำกัดจำนวนครั้งต่อ IP ของ login / ตรวจรหัส (`AUTH_RATE_LIMIT`), web ส่ง `X-Real-IP` ที่เชื่อถือได้ให้ api,
   คำตอบ `/api` ไม่ลง cache (`no-store` ถ้า api ไม่กำหนด), cookie `__Host-an22.sid` บน https; ข้อกำหนดของ api: เข้าถึงได้จาก web เท่านั้น,
   ลิงก์อีเมลสร้างจาก base URL ที่ตั้งค่า (ไม่ใช่ header `Host`), GET ห้ามแก้ข้อมูล — `api-contract.md` หัวข้อ "Session" / "ความปลอดภัยของ api"
+- **E50** (2026-10-24, E2E ของ an22-api B10) ข้อมูลส่วนบุคคลไม่ส่งใน URL: ค้นผู้ซื้อจากเลขผู้เสียภาษีเป็น `POST /tax-invoices/buyer-lookup { taxId }`
+  (เดิม `GET /tax-invoices/buyer?taxId=` — access log ของ an22-web / proxy เก็บ URL เต็ม); เป็น POST ที่ไม่แก้ข้อมูล — `api-contract.md`
 
 ## บั๊ก / ข้อสังเกตก่อน SaaS — [`test-before-saas.md`](test-before-saas.md) ตาราง B1–B24, แผนแก้ [`before-do-saas-plan.md`](before-do-saas-plan.md)
 
