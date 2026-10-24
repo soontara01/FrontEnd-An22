@@ -881,11 +881,11 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(await errorOf(post(`sales/${sale.id}/tax-invoice`, { buyer }))).toBe(
       'บิลนี้ออกใบกำกับภาษีเต็มรูปแล้ว (INV-HQ-20261004-0001)',
     );
-    expect(await get('tax-invoices/buyer?taxId=0105550123451')).toEqual({
+    expect(await post('tax-invoices/buyer-lookup', { taxId: '0105550123451' })).toEqual({
       ...buyer,
       idType: 'tax_id',
     });
-    expect(await get('tax-invoices/buyer?taxId=1111111111119')).toBeNull();
+    expect(await post('tax-invoices/buyer-lookup', { taxId: '1111111111119' })).toBeNull();
 
     await post(`sales/${sale.id}/void`, { reason: 'คีย์ผิด' });
     expect((await get<TaxInvoice>(`sales/${sale.id}/tax-invoice`)).cancelledAt).not.toBeNull();
@@ -1031,7 +1031,9 @@ describe('mockBackendInterceptor – POS sales', () => {
       taxId: 'AB1234567',
       branchType: 'none',
     });
-    expect(await get('tax-invoices/buyer?taxId=AB1234567')).toMatchObject({ name: 'John Smith' });
+    expect(await post('tax-invoices/buyer-lookup', { taxId: 'AB1234567' })).toMatchObject({
+      name: 'John Smith',
+    });
   });
 
   it('swaps a serial for another of the same SKU; a later credit note returns the new one', async () => {
@@ -1885,7 +1887,9 @@ describe('mockBackendInterceptor – permissions', () => {
   it('leaves day-to-day work open to users', async () => {
     expect(await statusOf(call('GET', 'categories', undefined, STAFF))).toBe(200);
     expect(await statusOf(call('GET', 'promotions', undefined, STAFF))).toBe(200);
-    expect(await statusOf(call('GET', 'tax-invoices/buyer?taxId=1', undefined, STAFF))).toBe(200);
+    expect(await statusOf(call('POST', 'tax-invoices/buyer-lookup', { taxId: '1' }, STAFF))).toBe(
+      200,
+    );
     // Receiving stock (P2 only blocks taking it out) and SKU edits (P1) stay open.
     const received = await call<Product>(
       'PUT',

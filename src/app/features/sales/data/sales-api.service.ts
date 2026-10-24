@@ -110,7 +110,7 @@ export class SalesApi {
 
   /** Buyer details last used with this tax ID (null = never). */
   buyerByTaxId(taxId: string): Observable<TaxInvoiceBuyer | null> {
-    return this.api.get<TaxInvoiceBuyer | null>('tax-invoices/buyer', { taxId });
+    return this.api.post<TaxInvoiceBuyer | null>('tax-invoices/buyer-lookup', { taxId });
   }
 
   exchangesOf(saleId: number): Observable<Exchange[]> {
