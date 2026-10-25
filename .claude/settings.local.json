@@ -1,0 +1,5 @@
+{
+  "permissions": {
+    "additionalDirectories": ["/home/noom/vscode/an22-api", "/home/noom/vscode/an22-web"]
+  }
+}
