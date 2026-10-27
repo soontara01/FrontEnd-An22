@@ -3565,7 +3565,7 @@ describe('mockBackendInterceptor – packages (E34)', () => {
       'แพ็กเกจ Starter ใช้เครื่อง POS ที่ใช้งานได้ 2 เครื่อง — เปลี่ยนแพ็กเกจได้ที่เมนูบัญชีบริษัท',
     );
     const events = await call<AuditEvent[]>('GET', 'audit-log?action=plan_change');
-    expect(events[0].detail).toBe('เปลี่ยนเป็นแพ็กเกจ Starter (฿590 / เดือน)');
+    expect(events[0].detail).toBe('เปลี่ยนเป็นแพ็กเกจ Starter (฿590 / เดือน)'); // ฿ via auditBaht() (C3-5)
   });
 
   it('counts only active users: an inactive one may be added, turning one on needs room', async () => {

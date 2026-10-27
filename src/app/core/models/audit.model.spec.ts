@@ -1,10 +1,14 @@
 import {
   AuditEvent,
   AuditQuery,
+  auditBaht,
+  auditBranchCodes,
   canSeeAuditEvent,
+  companySettingsChanges,
   filterAuditEvents,
   parseAuditQuery,
 } from './audit.model';
+import { COMPANY_INFO_DEFAULTS } from './company.model';
 
 describe('audit log (E40)', () => {
   const event = (
@@ -82,5 +86,43 @@ describe('audit log (E40)', () => {
       branchId: null,
     });
     expect(parseAuditQuery((n) => (n === 'action' ? 'drop_table' : null)).action).toBeNull();
+  });
+});
+
+describe('audit details (C3-5)', () => {
+  it('writes money with a thousands separator', () => {
+    expect(auditBaht(1490)).toBe('฿1,490');
+    expect(auditBaht(50)).toBe('฿50');
+  });
+
+  it('names branches by code', () => {
+    const branches = [
+      { id: 1, code: 'HQ' },
+      { id: 3, code: 'BN' },
+    ];
+    expect(auditBranchCodes([3, 1], branches)).toBe('BN, HQ');
+    expect(auditBranchCodes([9], branches)).toBe('#9');
+  });
+
+  it('lists only the company settings that changed', () => {
+    const before = { ...COMPANY_INFO_DEFAULTS, name: 'ร้าน', taxId: '0105550123451' };
+    expect(companySettingsChanges(before, { ...before, staffSeeCost: true })).toBe(
+      'ผู้ใช้ทั่วไปเห็นทุน / กำไร: ปิด → เปิด',
+    );
+    expect(
+      companySettingsChanges(before, {
+        ...before,
+        vatRegistered: false,
+        shiftVarianceLimit: 1500,
+        exchangeDays: 0,
+        taxInvoicePaper: '80mm',
+      }),
+    ).toBe(
+      'จด VAT: จด → ไม่จด · กระดาษใบกำกับภาษี: A4 → 80 มม. · เปลี่ยนสินค้าได้ภายใน: 7 วัน → ไม่จำกัด · ส่วนต่างที่ต้องให้ admin อนุมัติ: ฿100 → ฿1,500',
+    );
+    expect(companySettingsChanges(before, { ...before })).toBe('บันทึกโดยไม่มีการเปลี่ยนแปลง');
+    expect(companySettingsChanges(COMPANY_INFO_DEFAULTS, before)).toBe(
+      'ชื่อผู้ประกอบการ: - → ร้าน · เลขประจำตัวผู้เสียภาษี: - → 0105550123451',
+    );
   });
 });

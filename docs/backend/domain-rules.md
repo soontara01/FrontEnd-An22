@@ -127,4 +127,6 @@
 | `shift_approve`       | `POST /shifts/:id/approve`                                                            | `shift`       | สาขาของกะ      | `user`              |
 | `shift_adjust`        | `POST /shifts/:id/adjustments`                                                        | `shift`       | สาขาของกะ      | `user`              |
 
+**ข้อความ `detail`** (C3-5, `audit.model.ts`): เงินทุกจุด (แพ็กเกจ, `invoice_paid`, `manual_discount`, `sale_void`, `credit_note`, `price_change`, ค่าในตั้งค่าบริษัท) มีตัวคั่นหลักพัน `auditBaht()` ("฿1,490"); สาขาของผู้ใช้เป็นรหัส `auditBranchCodes()` ("สาขา HQ, BN" — ไม่ใช่ id); `company_settings` = เฉพาะค่าที่เปลี่ยน `companySettingsChanges(ก่อน, หลัง)` ("ผู้ใช้ทั่วไปเห็นทุน / กำไร: ปิด → เปิด", คั่นด้วย " · ", ไม่เปลี่ยนอะไร = "บันทึกโดยไม่มีการเปลี่ยนแปลง").
+
 `branchId` null = ระดับบริษัท (เห็นเฉพาะ owner / ผู้ดูแลระบบทุกสาขา — `canSeeAuditEvent()`); `actorKind: 'system'` สงวนไว้สำหรับ job ของ api (mock ยังไม่ใช้)
