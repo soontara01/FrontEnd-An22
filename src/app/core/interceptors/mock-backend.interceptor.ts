@@ -241,6 +241,9 @@ import {
   canSeeCost,
   hideCost,
   belowCostIssues,
+  auditBaht,
+  auditBranchCodes,
+  companySettingsChanges,
 } from '../models';
 import { MENU } from '../navigation/menu.config';
 import { StorageService } from '../services/storage.service';
@@ -1625,7 +1628,7 @@ function platformResponse(
         {
           action: 'invoice_paid',
           ref: { kind: 'company', id: company.id, label: invoice.invoiceNo },
-          detail: `฿${invoice.amount}`,
+          detail: auditBaht(invoice.amount),
         },
         by,
       ),
@@ -1791,11 +1794,13 @@ function tenantResponse(
   db.products = db.products.map((p) => atBranch(db, p));
   // A deleted record's label is read before the handler removes it.
   const deleted = req.method === 'DELETE' ? deletedLabel(path, db) : '';
+  // so the company-settings entry can name what changed (C3-5)
+  const companyBefore = { ...db.companyInfo };
   const response$ = handle(req, path, db);
   // Writes, plus the one read that is an event of its own: downloading all the data (E38).
   if ((req.method !== 'GET' || path === 'company/export') && actor) {
     const done = syncResult(response$);
-    if (done) recordAudit(req, path, db, done.body, deleted);
+    if (done) recordAudit(req, path, db, done.body, deleted, companyBefore);
   }
   if (changed || req.method !== 'GET' || path === 'company/export') {
     saveTenantDb(storage, company.id, db, stockBranch);
@@ -1845,7 +1850,9 @@ function deletedLabel(path: string, db: MockDb): string {
   const id = Number(raw);
   if (kind === 'prices') {
     const price = db.prices.find((p) => p.id === id);
-    return price ? `${skuOf(db, price.productId)} ฿${price.price} ตั้งแต่ ${price.startDate}` : '';
+    return price
+      ? `${skuOf(db, price.productId)} ${auditBaht(price.price)} ตั้งแต่ ${price.startDate}`
+      : '';
   }
   if (kind === 'promotions') {
     const promo = db.promotions.find((p) => p.id === id);
@@ -1869,6 +1876,7 @@ function recordAudit(
   db: MockDb,
   body: unknown,
   deleted: string,
+  companyBefore: CompanyInfo,
 ): void {
   const input = (req.body ?? {}) as Record<string, unknown>;
   const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
@@ -1884,7 +1892,7 @@ function recordAudit(
         action: 'manual_discount',
         branchId: sale.branchId ?? here,
         ref: { kind: 'sale', id: sale.id, label: sale.orderNo },
-        detail: `฿${sale.manualDiscount} — ${sale.manualDiscountReason}`,
+        detail: `${auditBaht(sale.manualDiscount)} — ${sale.manualDiscountReason}`,
       });
     }
   } else if ((m = /^sales\/(\d+)\/(void|credit-notes|tax-invoice\/reissue)$/.exec(path))) {
@@ -1897,7 +1905,7 @@ function recordAudit(
         action: 'sale_void',
         branchId,
         ref: { kind: 'sale', id: sale.id, label: sale.orderNo },
-        detail: `฿${sale.total} — ${sale.voidReason}${approved}`,
+        detail: `${auditBaht(sale.total)} — ${sale.voidReason}${approved}`,
       });
     } else if (m[2] === 'credit-notes') {
       const note = body as CreditNote;
@@ -1905,7 +1913,7 @@ function recordAudit(
         action: 'credit_note',
         branchId,
         ref: { kind: 'credit_note', id: note.id, label: note.cnNo },
-        detail: `บิล ${sale.orderNo} คืนเงิน ฿${note.total}`,
+        detail: `บิล ${sale.orderNo} คืนเงิน ${auditBaht(note.total)}`,
       });
     } else {
       const invoice = body as TaxInvoice;
@@ -1948,7 +1956,7 @@ function recordAudit(
     });
   } else if (path === 'prices' || path.startsWith('prices/')) {
     const price = body as SkuPrice | null;
-    const label = price ? `${skuOf(db, price.productId)} ฿${price.price}` : deleted;
+    const label = price ? `${skuOf(db, price.productId)} ${auditBaht(price.price)}` : deleted;
     const period = price ? ` ${price.startDate} – ${price.endDate ?? 'ไม่มีกำหนด'}` : '';
     add({
       action: 'price_change',
@@ -1976,7 +1984,7 @@ function recordAudit(
   } else if (path === 'users' || /^users\/\d+$/.test(path)) {
     const user = body as User | null;
     const rights = user
-      ? `${ROLE_LABEL[user.role]} · ${user.allBranches ? 'ทุกสาขา' : `สาขา ${user.branchIds.join(', ')}`}` +
+      ? `${ROLE_LABEL[user.role]} · ${user.allBranches ? 'ทุกสาขา' : `สาขา ${auditBranchCodes(user.branchIds, db.branches)}`}` +
         (user.active ? '' : ' · ปิดใช้งาน')
       : '';
     add({
@@ -1993,7 +2001,7 @@ function recordAudit(
     add({
       action: 'plan_change',
       ref: { kind: 'company', id: tenant.id, label: tenant.code },
-      detail: `เปลี่ยนเป็นแพ็กเกจ ${plan.name} (฿${plan.monthlyPrice} / เดือน)`,
+      detail: `เปลี่ยนเป็นแพ็กเกจ ${plan.name} (${auditBaht(plan.monthlyPrice)} / เดือน)`,
     });
   } else if (path === 'company/export') {
     add({
@@ -2029,11 +2037,10 @@ function recordAudit(
       detail: `ผู้ใช้ทั่วไปเห็น: ${menus.map(label).join(', ')}`,
     });
   } else if (path === 'settings/company' || path === 'settings/store') {
-    const info = body as CompanyInfo;
     add({
       action: 'company_settings',
       ref: { kind: 'company', id: tenant.id, label: tenant.code },
-      detail: `VAT ${info.vatRegistered ? 'จด' : 'ไม่จด'} · ระบบกะ ${info.requireShift ? 'เปิด' : 'ปิด'} · ส่วนลดพนักงานสูงสุด ${info.manualDiscountMaxPercent}%`,
+      detail: companySettingsChanges(companyBefore, db.companyInfo),
     });
   } else if (path === 'settings/branch') {
     const branch = requestBranch(db);

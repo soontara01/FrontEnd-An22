@@ -54,10 +54,11 @@ describe('errorInterceptor', () => {
 
   it('logs out on 401 from any endpoint but login', async () => {
     expect(await fail('GET', '/api/products', 401, 'เซสชันหมดอายุ')).toBe(401);
-    expect(notify.error).toHaveBeenCalledWith('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
-    // AuthService.logout(): the web server's session first (E48), then the login page
+    // AuthService.logout(): the web server's session first (E48), then the login page, which
+    // says why — a snackbar would not survive the reload (C3-6)
     backend.expectOne('/api/auth/logout').flush(null);
-    expect(assign).toHaveBeenCalledWith('/auth/login');
+    expect(assign).toHaveBeenCalledWith('/auth/login?expired=1');
+    expect(notify.error).not.toHaveBeenCalled();
   });
 
   it('stays quiet on a 401 marked silent (GET /me when a page opens, logout — E48)', async () => {
@@ -88,7 +89,7 @@ describe('errorInterceptor', () => {
 
   it('ends only the platform admin session on a 401 of the platform API (E36)', async () => {
     expect(await fail('GET', '/api/platform/companies', 401, 'หมดอายุ')).toBe(401);
-    expect(assign).toHaveBeenCalledWith('/platform/login');
+    expect(assign).toHaveBeenCalledWith('/platform/login?expired=1');
     // the shop session is not logged out (no POST /api/auth/logout — verify() checks)
   });
 });

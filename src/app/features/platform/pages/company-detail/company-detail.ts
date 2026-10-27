@@ -13,6 +13,7 @@ import {
   PlatformCompanyDetail,
   SUBSCRIPTION_STATUS_LABEL,
   SUSPEND_REASON_LABEL,
+  isInvoiced,
   passwordError,
   payInvoiceError,
   purgeError,
@@ -98,6 +99,10 @@ export default class CompanyDetail {
     if (c.deletedAt) return 'ลบข้อมูลแล้ว';
     if (!c.active && c.suspendedReason) return `ระงับ: ${SUSPEND_REASON_LABEL[c.suspendedReason]}`;
     return SUBSCRIPTION_STATUS_LABEL[c.status];
+  }
+
+  protected invoiced(c: PlatformCompanyDetail): boolean {
+    return isInvoiced(c.subscription);
   }
 
   protected planName(id: PlanId): string {

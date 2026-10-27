@@ -55,7 +55,13 @@
                   "maximumError": "10kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "fileReplacements": [
+                {
+                  "replace": "src/app/core/interceptors/lazy-mock-backend.interceptor.ts",
+                  "with": "src/app/core/interceptors/lazy-mock-backend.interceptor.prod.ts"
+                }
+              ]
             },
             "development": {
               "optimization": false,

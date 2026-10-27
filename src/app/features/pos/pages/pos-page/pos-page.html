@@ -426,14 +426,14 @@
             ล้างบิล
           </button>
         </div>
-        <mat-menu #holdMenu="matMenu">
+        <mat-menu #holdMenu="matMenu" class="hold-menu">
           @for (bill of store.holds(); track bill.id) {
             <div class="hold-row">
               <button mat-menu-item (click)="resume(bill.id)">
                 <mat-icon>restore</mat-icon>
                 <span>
                   {{ time(bill.heldAt) }} · {{ bill.customer || 'ลูกค้าทั่วไป' }} ·
-                  {{ bill.total | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+                  {{ bill.total | currency: 'THB' : 'symbol-narrow' : '1.2-2' }}
                 </span>
               </button>
               <button

@@ -1,3 +1,4 @@
+import type { CompanyInfo } from './company.model';
 import { toIsoDate } from './price.model';
 import { User, canWorkIn, isCompanyAdmin, hasAdminRights } from './user.model';
 
@@ -164,4 +165,44 @@ export function parseAuditQuery(get: (name: string) => string | null): AuditQuer
     userId: id(get('userId')),
     branchId: id(get('branchId')),
   };
+}
+
+/** "฿1,490" — money in an audit detail (C3-5). */
+export const auditBaht = (amount: number): string => `฿${amount.toLocaleString('en-US')}`;
+
+/** "HQ, BN" — a user's branches by code, never by id (C3-5); an unknown id stays as `#id`. */
+export const auditBranchCodes = (
+  ids: readonly number[],
+  branches: readonly { id: number; code: string }[],
+): string => ids.map((id) => branches.find((b) => b.id === id)?.code ?? `#${id}`).join(', ');
+
+const onOff = (v: boolean): string => (v ? 'เปิด' : 'ปิด');
+
+/** Settings-page labels of the company settings an audit entry names, with how each value reads. */
+const COMPANY_SETTING_TEXT: { [K in keyof CompanyInfo]: [string, (v: CompanyInfo[K]) => string] } =
+  {
+    name: ['ชื่อผู้ประกอบการ', (v) => v || '-'],
+    taxId: ['เลขประจำตัวผู้เสียภาษี', (v) => v || '-'],
+    vatRegistered: ['จด VAT', (v) => (v ? 'จด' : 'ไม่จด')],
+    taxInvoicePaper: ['กระดาษใบกำกับภาษี', (v) => (v === '80mm' ? '80 มม.' : v)],
+    exchangeDays: ['เปลี่ยนสินค้าได้ภายใน', (v) => (v === 0 ? 'ไม่จำกัด' : `${v} วัน`)],
+    manualDiscountMaxPercent: ['ส่วนลดพิเศษที่พนักงานให้ได้สูงสุด', (v) => `${v}%`],
+    requireShift: ['ใช้ระบบกะ', onOff],
+    shiftVarianceLimit: ['ส่วนต่างที่ต้องให้ admin อนุมัติ', auditBaht],
+    shiftMaxHours: ['เตือนเมื่อกะเปิดนานเกิน', (v) => `${v} ชม.`],
+    staffSeeCost: ['ผู้ใช้ทั่วไปเห็นทุน / กำไร', onOff],
+  };
+
+/**
+ * Detail of a `company_settings` entry: only what changed, "ป้าย: เดิม → ใหม่" joined by " · "
+ * (C3-5 — it used to list VAT / shifts / discount whatever changed).
+ */
+export function companySettingsChanges(before: CompanyInfo, after: CompanyInfo): string {
+  const changes = (Object.keys(COMPANY_SETTING_TEXT) as (keyof CompanyInfo)[])
+    .filter((key) => before[key] !== after[key])
+    .map((key) => {
+      const [label, text] = COMPANY_SETTING_TEXT[key] as [string, (v: unknown) => string];
+      return `${label}: ${text(before[key])} → ${text(after[key])}`;
+    });
+  return changes.length ? changes.join(' · ') : 'บันทึกโดยไม่มีการเปลี่ยนแปลง';
 }

@@ -173,6 +173,8 @@
 .hold-row {
   display: flex;
   align-items: center;
+  // room for the discard button's 48px touch target, else the menu scrolls sideways (C3-3)
+  padding-right: 4px;
 }
 
 .last {

@@ -44,6 +44,13 @@ export interface Subscription {
   nextInvoiceOn: string;
 }
 
+/** `nextInvoiceOn` of a company never invoiced (the seed DEMO, C3-4) — shown as "ไม่มีกำหนด". */
+export const NO_INVOICE_DATE = '9999-12-31';
+
+/** False for a company that is never invoiced (`NO_INVOICE_DATE`). */
+export const isInvoiced = (sub: Pick<Subscription, 'nextInvoiceOn'>): boolean =>
+  sub.nextInvoiceOn !== NO_INVOICE_DATE;
+
 export type BillingInvoiceStatus = 'open' | 'paid' | 'void';
 
 export const BILLING_INVOICE_STATUS_LABEL: Record<BillingInvoiceStatus, string> = {

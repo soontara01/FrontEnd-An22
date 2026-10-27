@@ -16,6 +16,7 @@ import {
   SUBSCRIPTION_STATUS_BADGE,
   SUBSCRIPTION_STATUS_LABEL,
   SubscriptionStatus,
+  isInvoiced,
   overLimits,
   planOf,
 } from '@core/models';
@@ -87,6 +88,12 @@ export default class Subscription {
   constructor() {
     this.subscription.load(true);
   }
+
+  /** The seed DEMO is never invoiced (C3-4): no "next invoice" line. */
+  protected readonly invoiced = computed(() => {
+    const info = this.info();
+    return !!info && isInvoiced(info.subscription);
+  });
 
   protected statusIs(status: SubscriptionStatus): boolean {
     return this.info()?.status === status;

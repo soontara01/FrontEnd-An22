@@ -24,6 +24,7 @@ import { salesTaxReportXlsx } from '../../data/sales-tax-excel';
 import { TaxReportRow, buildSalesTaxReport, nonVatNote } from '../../data/sales-tax-report';
 import { SalesStore } from '../../data/sales.store';
 import { BranchScopeSelect } from '../../components/branch-scope-select';
+import { MonthSelect } from '../../components/month-select';
 
 const KIND_LABEL: Record<TaxReportRow['kind'], string> = {
   abbreviated: 'อย่างย่อ',
@@ -41,6 +42,7 @@ const KIND_LABEL: Record<TaxReportRow['kind'], string> = {
   selector: 'app-sales-tax-report',
   imports: [
     BranchScopeSelect,
+    MonthSelect,
     DecimalPipe,
     RouterLink,
     PageHeader,

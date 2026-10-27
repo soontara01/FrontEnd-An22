@@ -165,11 +165,14 @@ export class AuthService {
 
   /**
    * Ends the session on the web server (`POST /auth/logout` drops its token and cookie), then a
-   * full page reload to the login page (SPA per menu) — also when that call fails.
+   * full page reload to the login page (SPA per menu) — also when that call fails. `expired` = the
+   * server ended the session (401): the login page says so, a snackbar would die with the reload
+   * (C3-6).
    */
-  logout(): void {
+  logout(reason?: 'expired'): void {
     this.clearSession();
-    const toLogin = () => this.document.location.assign('/auth/login');
+    const url = reason === 'expired' ? '/auth/login?expired=1' : '/auth/login';
+    const toLogin = () => this.document.location.assign(url);
     this.api
       .post('auth/logout', null, silentUnauthorized())
       .subscribe({ next: toLogin, error: toLogin });

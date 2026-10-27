@@ -51,6 +51,7 @@ import {
 import { httpErrorShown } from '@core/http/http-error-shown';
 import { MenuAccessService } from '@core/navigation/menu-access.service';
 import { saveBlob, timestampedName } from '@shared/utils/download';
+import { matchesSaleSearch } from '../../data/sale-search';
 import { summarizeSales } from '../../data/sale-summary';
 import { salesXlsx } from '../../data/sales-excel';
 import { SalesStore } from '../../data/sales.store';
@@ -170,6 +171,11 @@ export default class SaleList {
         : this.store.creditNotes(params.from, params.to, params.scope),
   });
   private readonly rows = computed(() => (this.sales.hasValue() ? this.sales.value() : []));
+  /** Serials handed out by exchanges of the listed bills — searchable too (C3-9). */
+  private readonly exchangedSerials = rxResource({
+    params: () => this.rows(),
+    stream: ({ params }) => this.store.exchangedSerials(params),
+  });
   protected readonly summary = computed(() =>
     summarizeSales(this.rows(), this.creditNotes.hasValue() ? this.creditNotes.value() : []),
   );
@@ -178,6 +184,9 @@ export default class SaleList {
     const text = this.filterText().trim().toLowerCase();
     const status = this.statusFilter();
     const terminal = this.terminalFilter();
+    const exchanged = this.exchangedSerials.hasValue()
+      ? this.exchangedSerials.value()
+      : new Map<number, string[]>();
     return this.rows()
       .filter((s) => terminal === null || s.terminalId === terminal)
       .filter(
@@ -185,13 +194,7 @@ export default class SaleList {
           status === 'all' ||
           (status === 'returned' ? s.returnStatus !== 'none' : s.status === status),
       )
-      .filter(
-        (s) =>
-          !text ||
-          [s.orderNo, s.customer, s.cashier, ...s.lines.map((l) => l.serial ?? '')].some((v) =>
-            v.toLowerCase().includes(text),
-          ),
-      );
+      .filter((s) => matchesSaleSearch(s, text, exchanged.get(s.id)));
   });
 
   protected readonly dataSource = new MatTableDataSource<Sale>([]);

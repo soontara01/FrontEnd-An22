@@ -20,9 +20,11 @@
             <span>ทดลองใช้ถึง {{ trialEnd | thaiDate }}</span>
           }
         }
-        <span class="text-muted"
-          >ใบแจ้งหนี้ถัดไปออกวันที่ {{ info()!.subscription.nextInvoiceOn | thaiDate }}</span
-        >
+        @if (invoiced()) {
+          <span class="text-muted"
+            >ใบแจ้งหนี้ถัดไปออกวันที่ {{ info()!.subscription.nextInvoiceOn | thaiDate }}</span
+          >
+        }
       </p>
       @for (kind of kinds; track kind) {
         <div class="usage-row">

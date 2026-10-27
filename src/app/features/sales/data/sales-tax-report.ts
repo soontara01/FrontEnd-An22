@@ -165,7 +165,7 @@ export function buildSalesTaxReport(
         inv.replacesInvoiceNo ? `ออกแทนใบกำกับภาษี ${inv.replacesInvoiceNo} ที่ยกเลิก` : '',
         inv.atSale
           ? ''
-          : `ออกแทนใบกำกับภาษีอย่างย่อ ${inv.orderNo} (ภาษีนับในใบอย่างย่อแล้ว · ออกใบเมื่อ ${toIsoDate(new Date(inv.issuedAt))})`,
+          : `ออกแทนใบกำกับภาษีอย่างย่อ ${inv.orderNo} (ภาษีนับในใบอย่างย่อแล้ว · ออกใบเมื่อ ${thaiShortDate(inv.issuedAt)})`,
       ]
         .filter(Boolean)
         .join(' · '),
@@ -279,3 +279,9 @@ export function buildTaxSummary(
     },
   };
 }
+
+/** "26 ต.ค. 2569" — the report is Thai throughout (C3-10). */
+const thaiShortDate = (at: string): string =>
+  new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }).format(
+    new Date(at),
+  );

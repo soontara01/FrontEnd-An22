@@ -2,7 +2,9 @@ import {
   BillingInvoice,
   addMonthsIso,
   billingNotice,
+  NO_INVOICE_DATE,
   daysBetween,
+  isInvoiced,
   periodsToInvoice,
   subscriptionStatus,
 } from './subscription.model';
@@ -64,5 +66,12 @@ describe('billing (E35)', () => {
       text: 'ค้างชำระ SUB-202610-0001 ฿590 (ครบกำหนด 22/10/2569) — จะระงับการใช้งานหลังวันที่ 29/10/2569 (อีก 4 วัน)',
     });
     expect(billingNotice(sub, [invoice('2026-10-22', 'paid')], '2026-10-25')).toBeNull();
+  });
+});
+
+describe('isInvoiced (C3-4)', () => {
+  it('is false only for the never-invoiced date', () => {
+    expect(isInvoiced({ nextInvoiceOn: NO_INVOICE_DATE })).toBe(false);
+    expect(isInvoiced({ nextInvoiceOn: '2026-11-01' })).toBe(true);
   });
 });

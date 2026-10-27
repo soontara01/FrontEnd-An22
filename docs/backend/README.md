@@ -13,10 +13,10 @@
 ลำดับทำ: **web → api** (E47)
 
 - **web ก่อน**: งานเล็กและไม่ขึ้นกับใคร — build ของ repo นี้ใช้ `useMock: true` (`src/environments/environment.ts`) mock รันในเบราว์เซอร์ทั้งหมด
-  จึงทดสอบ web กับแอปจริงได้ทันที; proxy `/api` ตั้งไว้ชี้ api ได้เลย แต่ยังไม่มีใครเรียกจนกว่าจะ build ด้วย `useMock: false`
+  จึงทดสอบ web กับแอปจริงได้ทันที; proxy `/api` ตั้งไว้ชี้ api ได้เลย แต่ยังไม่มีใครเรียกจนกว่าจะ build ด้วย `useMock: false` (ตอนนั้น — ตั้งแต่ C3 build production ใช้ `useMock: false` แล้ว)
 - **api** มี migration ของ PostgreSQL อยู่ในตัว (`src/main/resources/db/migration`, Flyway) — schema กับโค้ดที่ใช้มันเปลี่ยนใน commit เดียวกัน,
   test ด้วย Testcontainers ได้ตั้งแต่วันแรก; กติกาของ schema (tenant_id + RLS — D7, ตาราง platform ไม่อยู่ใต้ RLS, audit_log insert-only, seed) เหมือนเดิมทุกข้อ
-- สลับหน้าบ้านไปใช้ api จริง: `useMock: false` เมื่อ api ตอบครบตาม `api-contract.md` (ดู "Switching to a real backend" ใน `CLAUDE.md`)
+- สลับหน้าบ้านไปใช้ api จริง: ✅ ทำแล้วใน C3 (2026-10-27) — build production `useMock: false`, `npm start` ยังใช้ mock (ดู "Switching to a real backend" ใน `CLAUDE.md`, ผลทดสอบ `docs/test-c3.md`)
 
 ## ไฟล์ในโฟลเดอร์นี้
 
@@ -60,7 +60,7 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
 - proxy `/api` → api **โดยคง `/api` ไว้** (`/api/auth/login` → `http://<api>:8080/api/auth/login` — api ตั้ง context path `/api`;
   dev ของหน้าบ้านใช้ `proxy.conf.json` แบบเดียวกัน); ตัวอย่าง config ใน `deploy/nginx.conf`, `deploy/web.config`
 - ไฟล์อื่นที่ไม่มี hash (`favicon.ico`) → `no-cache` ด้วย; path ที่ดูเป็นไฟล์แต่ไม่มีจริง → 404 (ไม่ตอบ `index.html` แทน JS)
-- ทดสอบได้ก่อนมี api: build ของ repo นี้ใช้ mock ในเบราว์เซอร์ (`useMock: true`) — ตรวจ fallback / cache header / ไม่มี request `/api` ออกไป
+- ทดสอบได้ก่อนมี api (ก่อน C3): build ของ repo นี้เคยใช้ mock ในเบราว์เซอร์ (`useMock: true`) — ตรวจ fallback / cache header / ไม่มี request `/api` ออกไป; ตอนนี้ใช้ `npm start` (dev) ถ้าต้องการ mock
 - **session ของ login (E48, BFF)**: web ถือ token ที่ api ออกไว้ใน session (store `memory` / `mongodb` เลือกด้วย env), browser ได้แค่ cookie `an22.sid` (httpOnly, SameSite=Lax);
   web ใส่ `Authorization` ให้ทุก request `/api`, ตอบ `auth/logout` / `platform/auth/logout` เอง, กัน CSRF ด้วย `XSRF-TOKEN` / `X-XSRF-TOKEN`, ไม่ใช้งาน 12 ชม. / สูงสุด 7 วัน — รายละเอียด `api-contract.md` หัวข้อ "Session"
 - **ความปลอดภัย (E49)**: CSP + header ความปลอดภัยทุกคำตอบ, log ไม่มีค่าลับใน query, จำกัดจำนวนครั้งต่อ IP (`AUTH_RATE_LIMIT`), ส่ง `X-Real-IP` ให้ api,
