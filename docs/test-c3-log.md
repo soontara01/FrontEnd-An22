@@ -111,3 +111,25 @@ X.2 DEMO old SO- bills (sold_at Sep–Oct): list 1 ก.ย.–26 ต.ค. shows 
 2.10 timings (small data): page DCL < 100 ms, each /api call 40–95 ms ✅
 M8.4 ITMART owner: -> Starter dialog warns over limits; after: 3/1 7/5 3/2 red "ใช้เกินแพ็กเกจอยู่ … ของเดิมใช้ต่อได้ แต่เพิ่มใหม่ไม่ได้", add-user tooltip ✅; -> Standard: add branch disabled "แพ็กเกจ Standard ใช้สาขาได้ 3 สาขา" ✅
 NOTE: web IP limiter currently exhausted (~9 min) — wait before next logins
+
+## log วันที่ 2 (27 ต.ค. 2569)
+
+- S6.1 bill 0002 next day: void button gone, "ยกเลิกได้เฉพาะบิลของวันนี้ บิลข้ามวันต้องออกใบลดหนี้" + ออกใบลดหนี้ button ✅
+- S6.2 exchange (owner) A55 R5C00000001 → R5C00000002, old unit damaged, reason chip -> EX-HQ-20261027-0001, warranty to 26 ต.ค. 2570 (from sale day), bill line "SN R5C00000002 (เปลี่ยนจาก R5C00000001)" ✅; page auto-opened print dialog (?printEx=1, user cancelled); toggle wording: off = "ชำรุด ตัดออก", on = "สภาพดี กลับเข้าคลัง" (a little confusing)
+- S6.3 owner opened shift SH-HQ-20261027-01 (float default 2,000 = left in drawer) ✅
+- S6.4 credit note bill 0002: current serial R5C00000002 offered ✅; return phone only -> kept free goods deducted at list price −199 / −150 -> refund 13,606.50, VAT 890.15 ✅; default refund = bill's methods QR 5,000 + INST 8,606.50 (+ ref) -> CN-HQ-20261027-0001 quoting INV-HQ-20261026-0001 ✅ (window.print stubbed in page — no dialog)
+- S6.5 reissue INV for bill 0002 (wrong buyer name) -> INV-HQ-20261026-0003 (sale day) replaces 0001 "ยกเลิกเมื่อ 27 ต.ค. … ชื่อผู้ซื้อผิด · แทนด้วย 0003"; CN shows "INV-HQ-20261026-0001 ยกเลิกแล้ว แทนด้วย INV-HQ-20261026-0003" ✅
+- S6.6 credit note bill 0001 partial (CBL 1) cash 179.10 -> CN-HQ-20261027-0002 ✅; cash refund not rounded (F-B3 confirmed on real api)
+- S6.7 sales list 26–27 ต.ค.: 2 paid ฿16,120, GP ฿1,646, CN 2 ใบ ฿13,786, void ฿179, per method net of refunds (INST 349, cash 985.15), badges "คืนบางส่วน / เปลี่ยนสินค้า" ✅; search R5C00000001 finds bill, **R5C00000002 (serial after exchange) finds nothing** -> C3-9; Excel (intercepted) sales-HQ-20261027-1027.xlsx 13.7 KB ✅
+- S6.8 tax report ต.ค. HQ: abbreviated per day + POS ID (1 ใบ, ยกเลิก 1, ไม่รวมเต็มรูป 1), INV-0001 cancelled = 0, INV-0003 replacement 13,955.50, INV-0002 (issued later) reference "ไม่นับซ้ำ", CN-0001 −13,606.50 / CN-0002 −179.10 with buyers; total 2,334.10 ✅; note "ออกใบเมื่อ 2026-10-26" raw ISO date (C3-10 low); summary page label + HQ + total ✅
+- S6.9 shifts list: SH-HQ-20261027-01 open, SH-HQ-20261026-01 −4.25 "เดิม −64.25 · ปรับปรุงแล้ว", variance per cashier ✅
+- S6.10 close SH-HQ-20261027-01 (owner): QR −5,000 / INST −8,606.50 accepted (S9) ✅; cash expected 1,820.90 counted 1,820.75 (no 10-satang coin) −0.15 -> "อื่น ๆ" needs detail ✅; Z "คืนเงิน 2 ใบ −13,785.60" ✅ — F-B3 visible on screen
+- M7.1 owner @HQ POS: overnight shift banner "เปิดนานเกิน 12 ชม. — ลืมปิดกะหรือไม่?", owner can't sell "กะนี้เป็นของ แอน… ต้องปิดกะนั้นก่อนจึงจะขายได้" ✅
+- M7.2 /sales?branch=all: 2 bills, branch column HQ/BN ✅; Excel (intercepted, unzipped in page) sales-all-20261027-1030.xlsx sheets บิล/รายการสินค้า/การชำระเงิน/ใบลดหนี้ with "สาขา" column ✅
+- M7.3 BN bill opened at HQ: no void/CN/exchange buttons, "บิลนี้ขายที่สาขา BN — ยกเลิก / คืน / เปลี่ยนสินค้าได้ที่สาขานั้น", receipt copy prints BN address + POS ID ✅
+- M7.4 tax summary ต.ค.: HQ 23,785 / BN 23,341 / CM 0 / total 47,126 + label ✅; tax report branch=5 (BN) heading สาขา 00001 ✅; shifts ?branch=all with branch column + "เปิดค้าง" badge ✅
+- M7.5 owner "ปิดกะแทน" SH-HQ-20261026-01 from /sales/shifts/3 -> /pos/shift-close?shift=3 "ปิดกะแทนเจ้าของกะ" blind count 24,785 = 0 -> Z "ปิดแทนโดย วิชัย ไอที", opened 26 ต.ค. ✅
+- M7.6 audit ?branch=5: BN events (terminal, branch) ✅ — transfer receive/shortfall not audited (by design: only transfer_cancel)
+- M7.7 bnadmin: /sales?branch=all -> 403 "ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท", no branch picker ✅; /sales/tax-report/summary -> back to own BN report ✅; month field shows "October 2026" (English, ค.ศ.) -> C3-11 low
+- M7.8 dashboard: shows user counts only (no sales figures) — "แดชบอร์ดต่อสาขา" in the plan has nothing branch-specific to check ⏭️
+- routes: bnadmin users/14/edit saved name ✅; suppliers/new SUP-IT -> suppliers/6/edit opened ✅; /auth/reset-password?token=<fake> (logged out) -> "ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่" ✅ (logged in -> guestGuard to dashboard) — every path in features/_/_.routes.ts opened at least once
