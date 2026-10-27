@@ -133,3 +133,22 @@ NOTE: web IP limiter currently exhausted (~9 min) — wait before next logins
 - M7.7 bnadmin: /sales?branch=all -> 403 "ดูทุกสาขาได้เฉพาะผู้ดูแลระบบระดับบริษัท", no branch picker ✅; /sales/tax-report/summary -> back to own BN report ✅; month field shows "October 2026" (English, ค.ศ.) -> C3-11 low
 - M7.8 dashboard: shows user counts only (no sales figures) — "แดชบอร์ดต่อสาขา" in the plan has nothing branch-specific to check ⏭️
 - routes: bnadmin users/14/edit saved name ✅; suppliers/new SUP-IT -> suppliers/6/edit opened ✅; /auth/reset-password?token=<fake> (logged out) -> "ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่" ✅ (logged in -> guestGuard to dashboard) — every path in features/_/_.routes.ts opened at least once
+
+## C3.3 รอบ 1 (27 ต.ค.)
+
+stack: web `an22-web:58cbcbf-dirty` (dist ของรอบ 1, ยังไม่ commit), api เดิม, ไม่ reset
+
+- C3-2 login ร้าน / platform ไม่มีคำใบ้, ช่องชื่อผู้ใช้ว่าง ✅
+- C3-9 SOMJAI `/sales` 26–27 ต.ค. ค้น R5C00000002 → POS-HQ-1-20261026-0002 ✅
+- C3-3 พักบิลทดสอบ (เคส IP15 กล่อง ฿1,791.00) → เมนูเห็นยอดเต็ม; เจอ scrollbar 4px จาก touch target ปุ่ม ✕ → `padding-right: 4px` → ไม่มี scrollbar ✅; ทิ้งบิลทดสอบแล้ว
+- C3-6 รีสตาร์ต web (session หาย) → คลิกเรียกบิลที่พัก → `/auth/login?expired=1` "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่" ✅
+- C3-10 รายงานภาษี ต.ค. "ออกใบเมื่อ 26 ต.ค. 2569" ✅; C3-11 ช่องเดือน "ตุลาคม 2569", เลือก ก.ย. → `?month=2026-09`; หน้าสรุปก็ไทย ✅
+- C3-4 platform รายการ + รายละเอียด DEMO "ไม่มีกำหนด" ✅
+
+## C3.3 รอบ 2 (27 ต.ค.)
+
+stack: web `an22-web:58cbcbf-dirty` (มีโค้ด an22-web ที่แก้ C3-7, ยังไม่ commit), api `an22-api:local` build จาก working tree ของ an22-api (C3-5, ยังไม่ commit) — recreate api1 / api2 / web, ไม่ reset db
+
+- C3-5 SOMJAI somjai: เปิด → บันทึก → ปิด → บันทึก "ผู้ใช้ทั่วไปเห็นทุน / กำไร" → audit "ผู้ใช้ทั่วไปเห็นทุน / กำไร: ปิด → เปิด" / "เปิด → ปิด" ✅; แก้ผู้ใช้ nok (ไม่เปลี่ยนอะไร) → "แก้ผู้ใช้ — ผู้ใช้ทั่วไป · สาขา HQ" ✅; รายการเก่ายังเป็นข้อความเดิม (append-only)
+- C3-7 POST /api/auth/login (jum, ส่ง XSRF แบบเดียวกับหน้า login) 25 ครั้งติด → 200 ทั้งหมด; header RateLimit: สำเร็จไม่ลด remaining, ผิด 1 ครั้ง (ผู้ใช้ไม่มีจริง) ลด 19 → 18 ✅ — ไม่ได้ลองผิดจนครบ 20 บน stack (จะล็อก IP 15 นาที; มี test ใน an22-web)
+- เครื่องมือ: คลิก / พิมพ์ของ Claude in Chrome ใช้ไม่ได้ช่วงนี้ (ช่องไม่รับค่า) — ใช้ form_input + `element.click()` ในหน้าแทน

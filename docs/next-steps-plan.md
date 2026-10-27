@@ -111,6 +111,8 @@ platform: ตั้งรหัส owner, ระงับ / เปิดกล�
 - **C3** สลับหน้าบ้านไป api จริง (`useMock: false`) เมื่อ api ตอบครบ — ทดสอบตาม `docs/test-plan.md` / ผลทดสอบของแต่ละขั้นใน `saas-plan.md`
   — ทดลองก่อนสลับถาวร: `an22-api/scripts/multi-instance-check.sh` (KEEP=1 เก็บ stack) + build หน้าบ้าน `useMock: false` → image an22-web → `compose.multi.yaml --profile web`
   (http://localhost:14000)
+  — ✅ **เสร็จ 2026-10-27** (`docs/c3-plan.md`, ผล `docs/test-c3.md`): build production = `useMock: false` (dev คง mock); ทดสอบผ่านหน้าจอ 2 บริษัทข้าม 2 วัน
+  - ตรวจเฉพาะ web / api จริง — 0 ❌; ข้อสังเกต C3-1 – C3-11 แก้ครบ (หน้าบ้าน; C3-7 ที่ an22-web PR #5, C3-5 ที่ an22-api PR #6), ค้าง F-B3 (รอนักบัญชี)
 
 ## เลื่อนไว้ / รอคนอื่น (ไม่อยู่ในแผนนี้)
 
