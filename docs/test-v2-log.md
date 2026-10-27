@@ -26,7 +26,8 @@
 | D1 2026-10-27 | U10.1–U10.17 SOMJAI   | ✅ (ข้อสังเกต X/Z นับบิลยกเลิกใน "ขาย n บิล", นับใหม่ล้างทุกช่อง) |
 | D1 2026-10-27 | U10.18–U10.21         | ✅ (V2-U-13; U10.20 ใช้ 127.0.0.1 เป็นเครื่องที่ 2) |
 | D1 2026-10-27 | P5–P6 (DELME)         | ✅                                               |
-| D1 2026-10-27 | ถัดไป                 | U15 (ส่วนระบบ) → P1.10 · D2: U10.22–24, U11–U14, P7–P10, U16 |
+| D1 2026-10-27 | U15 (ส่วน D1)         | ✅ 15.1, 15.2, 15.4, 15.5, 15.7–15.13 · ⚠️ 15.6 (V2-U-14) · 15.3 header ✅ (console ไล่ทุกหน้า D2) |
+| D1 2026-10-27 | ถัดไป                 | P1.10 (ท้าย D1) · D2: U10.22–24, U11–U14, P7–P10, U15.3 / 15.10–11 ซ้ำ, U16 |
 
 ## สิ่งที่ค้าง / ต้องทำต่อ
 
@@ -254,4 +255,20 @@
 - **P5.5** ✅ "เปิดใช้งานอีกครั้ง" (ไม่มี dialog ยืนยัน) → "เปิดใช้งาน DELME แล้ว" สถานะ "ทดลองใช้"; dang login ได้; DB `t | t`; audit `company_reactivate | platform |` (detail ว่าง)
 - **P6.1** ✅ `123` → "รหัสผ่านต้องมีอย่างน้อย 4 ตัว" ไม่บันทึก
 - **P6.2** ✅ md5 hash เดิม `76459aba…` → `2519cac7…`; "ตั้งรหัสผ่านใหม่ให้เจ้าของบริษัทแล้ว — แจ้งรหัสนี้ให้เจ้าของ" ช่องว่างลง; login API รหัสเดิม 401 / `Delme#2570` 200; audit `user_password | platform | t | ผู้ดูแลแพลตฟอร์ม | dang | ผู้ให้บริการตั้งรหัสผ่านใหม่ให้เจ้าของบริษัท`
+
+### D1 2026-10-27 — U15 ส่วนระบบ
+
+- **U15.1** ✅ login ผ่าน web (curl + XSRF): `Set-Cookie: an22.sid=…; HttpOnly; SameSite=Lax` (ไม่มี Secure), body ไม่มี `token`; JS เห็นแค่ `XSRF-TOKEN`; localStorage = `an22.branch`, `an22.companyCode`, `an22.theme`, `an22.pos.terminal.<1|2|3>`; logout แล้ว `/api/me` 401
+- **U15.2** ✅ PUT `/api/settings/branch` ไม่มี / ปลอม `X-XSRF-TOKEN` → 403 "คำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่"; header จริง → ผ่าน XSRF ไปถึงกฎ admin ("แก้ข้อมูลร้านได้เฉพาะผู้ดูแลระบบ" — jum); `dt_branches.updated_at` ของ HQ เท่าเดิม
+- **U15.3** (บางส่วน) ✅ header `Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-…'; … connect-src 'self'; frame-ancestors 'none'` — ไล่ console ทุกหน้าทำใน U16.2 (D2)
+- **U15.4** ✅ Mongo `sessions` 3 → logout curl → 2; เอกสาร = `_id, expires, session` (session เข้ารหัสทั้งก้อน) ไม่มี `eyJ` / รหัสผ่าน; index `{expires:1}` expireAfterSeconds 0
+- **U15.5** ✅ nun (NOVAT) พักบิล ACC-001 + ล็อกหน้าจอ → `restart web` → reload ยัง login, "บิลที่พัก (1)", ยังล็อก
+- **U15.6** ⚠️ `stop mongo`: reload ขาวค้าง ~60 วิ แล้ว `/api/me` 500 (`MongoServerSelectionError … EAI_AGAIN mongo` ใน log web) แอปไปหน้า login ไม่มีข้อความ; login 60 วิ → 500 "เริ่ม session ไม่ได้ กรุณาลองใหม่"; `curl /api/me` ไม่มี cookie → 401 ทันที; web healthy ตลอด; `start mongo` → login 200 (2.2 วิ), session ของ nun ในเบราว์เซอร์ยังใช้ได้ ไม่ต้อง restart web (V2-U-14)
+- **U15.7** ✅ `stop api1`: ปลดล็อกหน้าจอ (`POST /shifts/5/unlock`) ใช้ 14.4 วิ แต่สำเร็จ; เปิด dashboard / sales / settings / sales/shifts / pos ได้ 200 ทั้งหมด; เรียกบิลพักแล้วขาย → `POS-HQ-1-20261027-0002` (NOVAT ฿199); `start api1` (ไม่มี healthcheck — ตรวจด้วย `:18081/api/me` 401) แล้ว `restart api2` ระหว่างขาย SV-FIX → `-0003` ฿150; เลขบิล NOVAT 0001–0003 ต่อเนื่อง; log lb ไม่มี 502/503/504 มีแค่ `connect() failed (113: Host is unreachable)` ตอน retry
+- **U15.8** ✅ login jum ถูก 25 ครั้งผ่าน web: 200 ทุกครั้ง `RateLimit … remaining=18` คงที่; ผิด 1 ครั้ง → 401 (header ของคำขอนั้นยังแสดง 18) แล้วคำขอถัดไป remaining=17 (ลด 1) — ก่อนหน้านี้ IP นี้ผิดไปแล้ว 2 ครั้งในหน้าต่าง
+- **U15.9** ✅ token somsak (ITMART): `/sales/1` "ไม่พบบิลขาย" / `/products/1` "ไม่พบ SKU" / `/shifts/1` "ไม่พบกะ" / `PUT /prices/5` "ไม่พบช่วงราคา" → 404; `X-Branch-Id: 1` → 403 "ไม่มีสิทธิ์ทำงานในสาขานี้"; ราคา SOMJAI id 5 ยัง 199.00
+- **U15.10** ✅ (D1) `dt_tax_invoices.buyer_enc` ไม่มีเลขภาษี / ชื่อผู้ซื้อ; `dt_held_bills` ว่าง (ตรวจตอนพักใน U10.4 แล้ว); `dt_login_throttle.key_hash` bytea 32 ไบต์ ไม่มี username / IP; `dt_password_reset_tokens.token_hash` 32 ไบต์ — credit notes ตรวจ D2
+- **U15.11** ✅ (D1) `logs` 6,806 บรรทัด: ไม่พบรหัสผ่านทั้งหมดในตาราง 0.2 + `Platform#2569`, `eyJ`, `Bearer `, `XSRF`, `0105550777885`, `AB1234567`, `John Tester`, `0812345678`; ไม่มี Exception / ERROR — ทำซ้ำ D2
+- **U15.12** ✅ `PUT /products/1/stock` delta `"abc"` → 400 "ข้อมูลที่ส่งมาไม่ถูกต้อง"; JSON เสีย → 400 ข้อความเดียวกัน; `POST /sales` qty 1.5 (nun, เครื่อง 1) → 400 "ACC-001 จำนวนต้องเป็นจำนวนเต็ม ≥ 1"; log api ไม่มี ERROR
+- **U15.13** ✅ `an22_app` ผ่าน pgbouncer: UPDATE / DELETE `dt_audit_log … WHERE false` → `permission denied for table dt_audit_log` ทั้งคู่
 
