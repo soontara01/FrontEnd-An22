@@ -17,13 +17,13 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         if (err.status === 401 && req.context.get(SILENT_UNAUTHORIZED)) {
           // "Not logged in" — the caller decides (the page opens logged out, logout goes on)
         } else if (err.status === 401 && !req.url.endsWith('/auth/login')) {
-          notify.error('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+          // The login page tells why (`?expired=1`): a snackbar would die with the reload (C3-6).
           if (isPlatformRequest(req.url)) {
             // The platform admin's session (E36) has ended (the web server dropped its token);
             // the shop session on this device stays.
-            document.location.assign('/platform/login');
+            document.location.assign('/platform/login?expired=1');
           } else {
-            auth.logout();
+            auth.logout('expired');
           }
         } else {
           notify.error(err.error?.message ?? err.message ?? 'เกิดข้อผิดพลาด');

@@ -32,7 +32,9 @@
               <dd>{{ c.subscription.trialEndsOn | thaiDate }}</dd>
             }
             <dt>ใบแจ้งหนี้ถัดไป</dt>
-            <dd>{{ c.subscription.nextInvoiceOn | thaiDate }}</dd>
+            <dd>
+              {{ invoiced(c) ? (c.subscription.nextInvoiceOn | thaiDate) : 'ไม่มีกำหนด' }}
+            </dd>
           }
           @if (c.suspendNote) {
             <dt>เหตุผลที่ระงับ</dt>

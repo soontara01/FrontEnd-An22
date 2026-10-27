@@ -19,6 +19,7 @@ import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { saveBlob } from '@shared/utils/download';
 import { printElement } from '@shared/utils/print-element';
+import { MonthSelect } from '../../components/month-select';
 import { taxSummaryXlsx } from '../../data/sales-tax-excel';
 import { TAX_SUMMARY_LABEL, buildTaxSummary } from '../../data/sales-tax-report';
 import { SalesStore } from '../../data/sales.store';
@@ -30,7 +31,15 @@ import { SalesStore } from '../../data/sales.store';
  */
 @Component({
   selector: 'app-tax-report-summary',
-  imports: [DecimalPipe, RouterLink, PageHeader, LoadingSpinner, ThaiDatePipe, MATERIAL],
+  imports: [
+    DecimalPipe,
+    RouterLink,
+    PageHeader,
+    LoadingSpinner,
+    MonthSelect,
+    ThaiDatePipe,
+    MATERIAL,
+  ],
   templateUrl: './tax-report-summary.html',
   styleUrl: './tax-report-summary.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

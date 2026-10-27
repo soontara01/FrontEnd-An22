@@ -13,6 +13,7 @@ describe('SalesStore', () => {
     promotions: vi.fn(() => of([])),
     paymentMethods: vi.fn(() => of([])),
     posTerminals: vi.fn(() => of([])),
+    exchangesOf: vi.fn(),
   };
 
   beforeEach(() => {
@@ -53,5 +54,21 @@ describe('SalesStore', () => {
     expect(api.storeInfo).toHaveBeenLastCalledWith(2);
     expect(api.storeInfo).toHaveBeenCalledTimes(2);
     expect(store.storeInfoFor(2)).toEqual({ name: 'BN' });
+  });
+  it('collects the serials handed out by exchanges of the listed bills (C3-9)', () => {
+    const store = TestBed.inject(SalesStore);
+    const bill = (id: number, exchangeNos: string[]) => ({ id, exchangeNos }) as never;
+    api.exchangesOf.mockImplementation((id: number) =>
+      id === 2 ? of([{ lines: [{ newSerial: 'SN-NEW' }, { newSerial: null }] }]) : refused(),
+    );
+    let result = new Map<number, string[]>();
+    store
+      .exchangedSerials([bill(1, []), bill(2, ['EX-1']), bill(3, ['EX-2'])])
+      .subscribe((m) => (result = m));
+    // Only bills with exchanges are asked; a failed one keeps the others searchable.
+    expect(api.exchangesOf).toHaveBeenCalledTimes(2);
+    expect(result.get(2)).toEqual(['SN-NEW']);
+    expect(result.get(3)).toEqual([]);
+    expect(result.has(1)).toBe(false);
   });
 });

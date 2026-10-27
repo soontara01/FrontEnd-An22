@@ -32,15 +32,7 @@
     [allowAll]="false"
     (changed)="selectBranch($event)"
   />
-  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="month">
-    <mat-label>เดือนภาษี</mat-label>
-    <input
-      matInput
-      type="month"
-      [value]="currentMonth()"
-      (change)="setMonth($any($event.target).value)"
-    />
-  </mat-form-field>
+  <app-month-select [value]="currentMonth()" (changed)="setMonth($event)" />
 </div>
 
 @if (report(); as r) {

@@ -35,3 +35,8 @@ mat-card-actions {
     flex: 1;
   }
 }
+
+.expired {
+  margin: 0 0 16px;
+  color: var(--mat-sys-error);
+}

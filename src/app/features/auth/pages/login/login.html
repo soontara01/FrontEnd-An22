@@ -1,13 +1,18 @@
 <mat-card class="card" appearance="outlined">
   <mat-card-header>
     <mat-card-title>เข้าสู่ระบบ</mat-card-title>
-    <mat-card-subtitle>
-      ทดลองใช้: บริษัท DEMO · admin / admin · พนักงาน: somchai / 1234
-    </mat-card-subtitle>
+    @if (demo) {
+      <mat-card-subtitle>
+        ทดลองใช้: บริษัท DEMO · admin / admin · พนักงาน: somchai / 1234
+      </mat-card-subtitle>
+    }
   </mat-card-header>
 
   <form [formGroup]="form" (ngSubmit)="submit()">
     <mat-card-content>
+      @if (expired()) {
+        <p class="expired" role="alert">เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่</p>
+      }
       @if (editCompany()) {
         <mat-form-field appearance="outline">
           <mat-label>รหัสบริษัท</mat-label>

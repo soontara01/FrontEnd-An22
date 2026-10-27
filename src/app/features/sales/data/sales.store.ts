@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, forkJoin, map, of } from 'rxjs';
+import { Observable, catchError, forkJoin, map, of } from 'rxjs';
 import {
   Branch,
   BranchScope,
@@ -102,6 +102,25 @@ export class SalesStore {
 
   exchangesOf(saleId: number): Observable<Exchange[]> {
     return this.api.exchangesOf(saleId);
+  }
+
+  /**
+   * Serials handed out by exchanges of the listed bills (bill id → serials), so the bill list
+   * finds a bill by the unit the customer now holds (C3-9). Only bills with `exchangeNos` are
+   * asked; one that fails just leaves its old serials searchable.
+   */
+  exchangedSerials(sales: readonly Sale[]): Observable<Map<number, string[]>> {
+    const withExchanges = sales.filter((s) => s.exchangeNos.length > 0);
+    if (!withExchanges.length) return of(new Map());
+    return forkJoin(
+      withExchanges.map((s) =>
+        this.api.exchangesOf(s.id).pipe(
+          map((exchanges) => exchanges.flatMap((e) => e.lines.map((l) => l.newSerial ?? ''))),
+          catchError(() => of<string[]>([])),
+          map((serials) => [s.id, serials.filter(Boolean)] as const),
+        ),
+      ),
+    ).pipe(map((pairs) => new Map(pairs.map(([id, serials]) => [id, [...serials]]))));
   }
 
   createExchange(saleId: number, payload: ExchangePayload): Observable<Exchange> {

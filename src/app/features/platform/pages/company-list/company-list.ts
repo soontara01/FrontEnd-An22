@@ -8,6 +8,7 @@ import {
   SUBSCRIPTION_STATUS_BADGE,
   SUBSCRIPTION_STATUS_LABEL,
   SUSPEND_REASON_LABEL,
+  isInvoiced,
   planOf,
 } from '@core/models';
 import { EmptyState } from '@shared/components/empty-state/empty-state';
@@ -89,7 +90,13 @@ import { PlatformApi } from '../../data/platform-api.service';
             <ng-container matColumnDef="next">
               <th mat-header-cell *matHeaderCellDef>ใบถัดไป</th>
               <td mat-cell *matCellDef="let c">
-                {{ c.deletedAt ? '-' : (c.subscription.nextInvoiceOn | thaiDate) }}
+                @if (c.deletedAt) {
+                  -
+                } @else if (invoiced(c)) {
+                  {{ c.subscription.nextInvoiceOn | thaiDate }}
+                } @else {
+                  ไม่มีกำหนด
+                }
               </td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="columns"></tr>
@@ -122,6 +129,10 @@ export default class CompanyList {
     const all = this.data.hasValue() ? this.data.value() : [];
     return all.filter((c) => !text || `${c.code} ${c.name}`.toLowerCase().includes(text));
   });
+
+  protected invoiced(c: PlatformCompanyRow): boolean {
+    return isInvoiced(c.subscription);
+  }
 
   protected planName(c: PlatformCompanyRow): string {
     return planOf(c.planId).name;

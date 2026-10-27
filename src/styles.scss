@@ -183,3 +183,8 @@ body {
   top: 0;
   left: -10000px;
 }
+
+/* POS held bills: time · customer · total on one line — wider than the 280px menu default (C3-3) */
+.mat-mdc-menu-panel.hold-menu {
+  max-width: min(480px, calc(100vw - 32px));
+}
