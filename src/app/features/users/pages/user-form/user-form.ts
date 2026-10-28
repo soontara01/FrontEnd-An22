@@ -90,7 +90,9 @@ export default class UserForm implements OnInit {
 
   /** Branch rights + password (new users only), same rules as the server (E6 / E10). */
   protected readonly accessProblem = computed(() => {
-    const { allBranches = false, branchIds = [], password = '' } = this.value();
+    this.value();
+    // raw: the owner's `allBranches` is disabled (always on) and missing from `value` (V2-U-09)
+    const { allBranches, branchIds, password } = this.form.getRawValue();
     const actor = this.auth.user();
     // Scope first: a branch admin opening another branch's user is told why, not that the
     // branch "does not exist" (it is only missing from their own branch list).

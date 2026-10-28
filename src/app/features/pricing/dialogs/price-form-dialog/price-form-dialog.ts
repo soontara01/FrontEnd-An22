@@ -87,15 +87,18 @@ export class PriceFormDialog {
 
   /** Actual cost (avg / serial) while in stock, else the standard cost. */
   protected readonly cost = effectiveCost(this.data.product);
-  protected readonly isVat = this.data.product.vatType === 'vat7';
+  /** VAT the sale carries: none while the company is not VAT-registered (V2-U-13). */
+  private readonly vatType = this.store.vatTypeOf(this.data.product);
+  protected readonly isVat = this.vatType === 'vat7';
+  protected readonly vatRegistered = this.store.vatRegistered;
 
   /** Net-of-VAT split of the VAT-inclusive price being typed. */
   protected readonly breakdown = computed(() =>
-    vatBreakdown(this.value().price ?? 0, this.data.product.vatType),
+    vatBreakdown(this.value().price ?? 0, this.vatType),
   );
 
   protected readonly margin = computed(() =>
-    marginPercent(this.value().price, this.cost, this.data.product.vatType),
+    marginPercent(this.value().price, this.cost, this.vatType),
   );
 
   /** Live check against this SKU's other periods (the server checks again). */

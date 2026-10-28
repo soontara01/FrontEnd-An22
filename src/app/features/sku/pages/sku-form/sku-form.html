@@ -122,7 +122,11 @@
               <mat-option [value]="v">{{ vatLabel[v] }}</mat-option>
             }
           </mat-select>
-          <mat-hint>ราคาขายในเมนูจัดการราคาเป็นราคารวม VAT</mat-hint>
+          @if (store.vatRegistered()) {
+            <mat-hint>ราคาขายในเมนูจัดการราคาเป็นราคารวม VAT</mat-hint>
+          } @else {
+            <mat-hint>ร้านยังไม่ได้จด VAT — ขายโดยไม่คิด VAT ใช้ค่านี้เมื่อจด VAT</mat-hint>
+          }
         </mat-form-field>
 
         @if (canSeeCost()) {

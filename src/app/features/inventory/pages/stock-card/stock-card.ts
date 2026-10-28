@@ -7,6 +7,7 @@ import {
   inject,
   input,
 } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
@@ -33,6 +34,7 @@ import {
   presetRange,
 } from '@shared/utils/date-range';
 import { AuthService } from '@core/auth/auth.service';
+import { NotificationService } from '@core/services/notification.service';
 import { InventoryStore } from '../../data/inventory.store';
 
 const TYPE_BADGE: Record<MovementType, string> = {
@@ -69,6 +71,7 @@ export default class StockCard {
   protected readonly store = inject(InventoryStore);
   private readonly router = inject(Router);
   private readonly document = inject(DOCUMENT);
+  private readonly notify = inject(NotificationService);
 
   /** Route param + query params (withComponentInputBinding). */
   readonly productId = input.required<string>();
@@ -135,8 +138,13 @@ export default class StockCard {
         { emitEvent: false },
       );
     });
+    // A SKU / branch that cannot be opened → back to the list; a refused range (400, the snackbar
+    // says why) stays here to be fixed (V2-U-11).
     effect(() => {
-      if (this.card.error()) void this.router.navigate(['/inventory']);
+      const error = this.card.error();
+      if (error && !(error instanceof HttpErrorResponse && error.status === 400)) {
+        void this.router.navigate(['/inventory']);
+      }
     });
   }
 
@@ -147,6 +155,10 @@ export default class StockCard {
 
   protected search(): void {
     const { start, end } = this.rangeForm.getRawValue();
+    if (start && end && start > end) {
+      this.notify.error('วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด');
+      return;
+    }
     this.navigate({
       from: start ? toIsoDate(start) : null,
       to: end ? toIsoDate(end) : null,

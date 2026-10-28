@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { Category, Product, ProductPayload, Supplier } from '@core/models';
+import { Category, Product, ProductPayload, StoreInfo, Supplier } from '@core/models';
 
 /** HTTP calls for the SKU master (provided in sku.routes.ts). Same `products` resource as Inventory. */
 @Injectable()
@@ -20,6 +20,11 @@ export class SkuApi {
   /** Supplier master (for SKU ↔ supplier links). */
   suppliers(): Observable<Supplier[]> {
     return this.api.get<Supplier[]>('suppliers');
+  }
+
+  /** Store settings of the working branch — only `vatRegistered` is used here. */
+  storeInfo(): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>('settings/store');
   }
 
   get(id: number): Observable<Product> {

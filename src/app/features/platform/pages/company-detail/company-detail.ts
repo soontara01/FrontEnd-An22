@@ -1,9 +1,17 @@
 import { CurrencyPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTableModule } from '@angular/material/table';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { Observable, filter, switchMap } from 'rxjs';
 import {
   BILLING_INVOICE_STATUS_LABEL,
@@ -53,6 +61,7 @@ export default class CompanyDetail {
   private readonly api = inject(PlatformApi);
   private readonly dialog = inject(MatDialog);
   private readonly notify = inject(NotificationService);
+  private readonly router = inject(Router);
 
   /** Route param (withComponentInputBinding) */
   readonly id = input.required<string>();
@@ -80,6 +89,13 @@ export default class CompanyDetail {
   protected readonly company = computed(
     () => this.overridden() ?? (this.data.hasValue() ? this.data.value() : null),
   );
+  constructor() {
+    // Unknown company (the snackbar says so): back to the list, not a spinner forever (V2-P-08).
+    effect(() => {
+      if (this.data.error()) void this.router.navigate(['/platform/companies']);
+    });
+  }
+
   protected readonly selectedPlan = computed(() => this.planId() ?? this.company()?.planId ?? null);
   protected readonly suspendProblem = computed(() => {
     const c = this.company();

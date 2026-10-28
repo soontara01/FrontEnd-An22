@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { DOCUMENT, Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, catchError, map, of, tap } from 'rxjs';
 import { ApiService } from '../http/api.service';
@@ -52,6 +53,10 @@ export class AuthService {
   /** Billing banner of this page load (from login / `GET /me`, not stored). */
   private readonly _billing = signal<BillingNotice | null>(null);
   private readonly _seeCost = signal(false);
+  /** `GET /me` failed for another reason than 401 (server down …) — said on the login page. */
+  private readonly _unavailable = signal(false);
+  /** `logout()` is on its way to the login page: later 401s must not redirect again (V2-U-04). */
+  private leaving = false;
 
   readonly user = this._user.asReadonly();
   readonly company = this._company.asReadonly();
@@ -59,6 +64,8 @@ export class AuthService {
   /** Company code remembered on this device ('' = none). */
   readonly companyCode = this._companyCode.asReadonly();
   readonly billing = this._billing.asReadonly();
+  /** The last `restore()` could not tell who is logged in (5xx / network, V2-U-14). */
+  readonly unavailable = this._unavailable.asReadonly();
   readonly isLoggedIn = computed(() => !!this._user() && !!this._company());
   /**
    * Admin-only screens and buttons (the server checks the same rules → 403): an admin or the owner.
@@ -94,13 +101,15 @@ export class AuthService {
   /**
    * Who is logged in, once when a page opens (`provideAppInitializer` in app.config.ts) — also
    * picks up role / branch rights an admin changed. 401 = logged out (no snackbar); any other
-   * error is shown and the page opens logged out.
+   * error opens the page logged out with `unavailable` set — the login page says the system is
+   * not answering (a snackbar of the app initializer may never show, V2-U-14).
    */
   restore(): Observable<void> {
     return this.api.get<MeResponse>('me', undefined, silentUnauthorized()).pipe(
       tap((session) => this.setSession(session)),
       map(() => undefined),
-      catchError(() => {
+      catchError((err: unknown) => {
+        this._unavailable.set(!(err instanceof HttpErrorResponse && err.status === 401));
         this.clearSession();
         return of(undefined);
       }),
@@ -121,6 +130,8 @@ export class AuthService {
   }
 
   private startSession(session: LoginResponse): void {
+    this.leaving = false;
+    this._unavailable.set(false);
     this.setSession(session);
     this.setCompanyCode(session.company.code);
   }
@@ -167,12 +178,18 @@ export class AuthService {
    * Ends the session on the web server (`POST /auth/logout` drops its token and cookie), then a
    * full page reload to the login page (SPA per menu) — also when that call fails. `expired` = the
    * server ended the session (401): the login page says so, a snackbar would die with the reload
-   * (C3-6).
+   * (C3-6). The session in memory stays until that call answers: clearing it first made open pages
+   * reload their lists without a branch, and their 401 sent a plain logout to `?expired=1`
+   * (V2-U-04); a second call while leaving does nothing.
    */
   logout(reason?: 'expired'): void {
-    this.clearSession();
+    if (this.leaving) return;
+    this.leaving = true;
     const url = reason === 'expired' ? '/auth/login?expired=1' : '/auth/login';
-    const toLogin = () => this.document.location.assign(url);
+    const toLogin = () => {
+      this.clearSession();
+      this.document.location.assign(url);
+    };
     this.api
       .post('auth/logout', null, silentUnauthorized())
       .subscribe({ next: toLogin, error: toLogin });

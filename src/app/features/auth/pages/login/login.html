@@ -10,7 +10,9 @@
 
   <form [formGroup]="form" (ngSubmit)="submit()">
     <mat-card-content>
-      @if (expired()) {
+      @if (auth.unavailable()) {
+        <p class="expired" role="alert">ระบบไม่ตอบสนองชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่</p>
+      } @else if (expired()) {
         <p class="expired" role="alert">เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่</p>
       }
       @if (editCompany()) {

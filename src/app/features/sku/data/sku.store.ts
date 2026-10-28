@@ -33,12 +33,15 @@ export class SkuStore {
   private readonly _categories = signal<Category[]>([]);
   private readonly _suppliers = signal<Supplier[]>([]);
   private readonly _loading = signal(false);
+  /** The company charges VAT (B20); false → prices carry none (V2-U-13). */
+  private readonly _vatRegistered = signal(true);
   private loaded = false;
 
   readonly skus = this._skus.asReadonly();
   readonly categories = this._categories.asReadonly();
   readonly suppliers = this._suppliers.asReadonly();
   readonly loading = this._loading.asReadonly();
+  readonly vatRegistered = this._vatRegistered.asReadonly();
 
   readonly count = computed(() => this._skus().length);
   readonly serialCount = computed(() => this._skus().filter((s) => s.serialControl).length);
@@ -88,10 +91,12 @@ export class SkuStore {
       skus: this.api.list(),
       categories: this.api.categories(),
       suppliers: this.api.suppliers(),
+      store: this.api.storeInfo(),
     })
       .pipe(finalize(() => this._loading.set(false)))
       .subscribe({
-        next: ({ skus, categories, suppliers }) => {
+        next: ({ skus, categories, suppliers, store }) => {
+          this._vatRegistered.set(store.vatRegistered);
           this._skus.set(skus);
           this._categories.set(categories);
           this._suppliers.set(suppliers);

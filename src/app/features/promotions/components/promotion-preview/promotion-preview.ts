@@ -25,10 +25,20 @@ export class PromotionPreview {
   readonly promotion = input.required<PromotionPayload>();
 
   protected readonly discountRows = computed(() =>
-    discountPreview(this.promotion(), this.store.products(), this.store.categories()),
+    discountPreview(
+      this.promotion(),
+      this.store.products(),
+      this.store.categories(),
+      this.store.vatRegistered(),
+    ),
   );
   protected readonly freeGoods = computed(() =>
-    freeGoodsPreview(this.promotion(), this.store.products(), this.store.categories()),
+    freeGoodsPreview(
+      this.promotion(),
+      this.store.products(),
+      this.store.categories(),
+      this.store.vatRegistered(),
+    ),
   );
   protected readonly bill = computed(() => billDiscountPreview(this.promotion()));
 

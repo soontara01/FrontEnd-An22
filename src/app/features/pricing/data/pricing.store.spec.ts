@@ -20,6 +20,7 @@ describe('PricingStore', () => {
   const api = {
     products: vi.fn(),
     prices: vi.fn(),
+    storeInfo: vi.fn(() => of({ vatRegistered: true })),
     create: vi.fn((p: SkuPricePayload) => of({ ...p, id: 99 })),
     update: vi.fn((id: number, p: SkuPricePayload) => of({ ...p, id })),
     remove: vi.fn(() => of(undefined)),
@@ -75,6 +76,14 @@ describe('PricingStore', () => {
     expect(store.noPriceCount()).toBe(1);
     expect(store.scheduledCount()).toBe(1);
     expect(store.expiringCount()).toBe(1);
+  });
+
+  it('a company not VAT-registered takes the margin on the whole price (V2-U-13)', () => {
+    api.storeInfo.mockReturnValueOnce(of({ vatRegistered: false }));
+    store.load(true);
+    // 100 carries no VAT: (100 − 80) / 100
+    expect(store.rows()[0].margin).toBeCloseTo(20, 1);
+    expect(store.vatTypeOf(product(1))).toBe('exempt');
   });
 
   it('create / update / remove keep periods and derived rows in sync', () => {

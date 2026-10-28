@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { Product, SkuPrice, SkuPricePayload } from '@core/models';
+import { Product, SkuPrice, SkuPricePayload, StoreInfo } from '@core/models';
 
 /** HTTP calls for the pricing feature (provided in pricing.routes.ts). */
 @Injectable()
@@ -10,6 +10,11 @@ export class PricingApi {
 
   products(): Observable<Product[]> {
     return this.api.get<Product[]>('products');
+  }
+
+  /** Store settings of the working branch — only `vatRegistered` is used here. */
+  storeInfo(): Observable<StoreInfo> {
+    return this.api.get<StoreInfo>('settings/store');
   }
 
   prices(productId?: number): Observable<SkuPrice[]> {
