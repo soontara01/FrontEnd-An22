@@ -94,6 +94,20 @@ describe('AuthService', () => {
       .flush({ message: 'x' }, { status: 401, statusText: 'Unauthorized' });
     expect(done).toHaveBeenCalled();
     expect(service.isLoggedIn()).toBe(false);
+    expect(service.unavailable()).toBe(false);
+  });
+
+  it('restore() failing with a server error opens logged out and says so (V2-U-14)', () => {
+    const service = create();
+    service.restore().subscribe({ error: () => expect.unreachable() });
+    http
+      .expectOne({ method: 'GET', url: '/api/me' })
+      .flush({ message: 'x' }, { status: 500, statusText: 'Server Error' });
+    expect(service.isLoggedIn()).toBe(false);
+    expect(service.unavailable()).toBe(true);
+
+    login(service);
+    expect(service.unavailable()).toBe(false);
   });
 
   it('keeps a remembered branch that is still allowed, else none of several', () => {
@@ -113,12 +127,14 @@ describe('AuthService', () => {
 
     service.logout();
 
+    // the web server ends its session first (E48) — also when that fails; until then the session
+    // stays, so open pages do not reload without a branch (V2-U-04)
+    expect(service.isLoggedIn()).toBe(true);
+    expect(assign).not.toHaveBeenCalled();
+    http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
     expect(service.isLoggedIn()).toBe(false);
     expect(service.company()).toBeNull();
     expect(localStorage.getItem('an22.companyCode')).toBe('"DEMO"');
-    // the web server ends its session first (E48) — also when that fails
-    expect(assign).not.toHaveBeenCalled();
-    http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
     expect(assign).toHaveBeenCalledWith('/auth/login');
 
     assign.mockClear();
@@ -148,8 +164,19 @@ describe('AuthService', () => {
     login(service, { ...response(), canSeeCost: false }); // an admin always sees it
     expect(service.canSeeCost()).toBe(true);
     service.logout();
-    expect(service.canSeeCost()).toBe(false);
     http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
+    expect(service.canSeeCost()).toBe(false);
+  });
+
+  it('a 401 while logging out does not turn it into an expired session (V2-U-04)', () => {
+    const service = create();
+    login(service);
+
+    service.logout();
+    service.logout('expired'); // errorInterceptor on a list's 401 meanwhile
+    http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('/auth/login');
   });
 
   it('removes the session it once kept in localStorage and does not use it (E48)', () => {

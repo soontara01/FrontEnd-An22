@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { DecimalPipe } from '@angular/common';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -8,6 +8,7 @@ import {
   CLOSE_CHECK_LABEL,
   CashRounding,
   CloseCheck,
+  DEFAULT_CLOSE_CHECK,
   PAYMENT_FEE_MAX,
   PAYMENT_METHOD_DEFAULTS,
   PAYMENT_NAME_MAX,
@@ -107,6 +108,15 @@ export class PaymentMethodFormDialog {
   });
 
   private readonly value = toSignal(this.form.valueChanges, { initialValue: this.form.value });
+
+  constructor() {
+    // A new method takes its type's close check until the user picks one (V2-U-08).
+    if (this.data.method) return;
+    this.form.controls.type.valueChanges.pipe(takeUntilDestroyed()).subscribe((type) => {
+      const closeCheck = this.form.controls.closeCheck;
+      if (!closeCheck.dirty) closeCheck.setValue(DEFAULT_CLOSE_CHECK[type]);
+    });
+  }
 
   /** What would be saved right now (type-specific fields already cleared). */
   protected readonly payload = computed(() => {

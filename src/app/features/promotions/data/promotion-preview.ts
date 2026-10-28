@@ -2,6 +2,7 @@ import {
   Category,
   Product,
   PromotionPayload,
+  chargedVatType,
   discountAmount,
   discountedPrice,
   effectiveCost,
@@ -13,7 +14,8 @@ import {
 
 /**
  * Read-only "what will this promotion do" figures for the form and detail pages.
- * Uses today's sale prices and the margin rules of the SKU master (net of VAT vs cost).
+ * Uses today's sale prices and the margin rules of the SKU master (net of VAT vs cost); a company
+ * not VAT-registered (`vatRegistered: false`, B20) charges no VAT, so margins use the whole price.
  */
 
 /** Qualifying SKUs (not discontinued), by SKU code. Empty for bill discounts. */
@@ -43,6 +45,7 @@ export function discountPreview(
   promo: PromotionPayload,
   products: readonly Product[],
   categories: readonly Category[],
+  vatRegistered = true,
 ): DiscountPreviewRow[] {
   const discount = promo.discount;
   if (promo.type !== 'item_discount' || !discount) return [];
@@ -53,13 +56,14 @@ export function discountPreview(
     }
     const discounted = discountedPrice(price, discount);
     const cost = effectiveCost(product);
+    const vatType = chargedVatType(product.vatType, vatRegistered);
     return {
       product,
       price,
       discounted,
       discount: discountAmount(price, discount),
-      margin: marginPercent(discounted, cost, product.vatType),
-      belowCost: vatBreakdown(discounted, product.vatType).net < cost,
+      margin: marginPercent(discounted, cost, vatType),
+      belowCost: vatBreakdown(discounted, vatType).net < cost,
     };
   });
 }
@@ -93,6 +97,7 @@ export function freeGoodsPreview(
   promo: PromotionPayload,
   products: readonly Product[],
   categories: readonly Category[],
+  vatRegistered = true,
 ): FreeGoodsPreview | null {
   if (promo.type !== 'free_goods' || !promo.freeGoods) return null;
   const items = promo.freeGoods.items.map((item) => {
@@ -105,7 +110,7 @@ export function freeGoodsPreview(
     const buyQty =
       promo.minQty > 0 ? promo.minQty : price ? Math.ceil(promo.minAmount / price) || 1 : 1;
     if (!price) return { product, price, buyQty, margin: null };
-    const net = vatBreakdown(price * buyQty, product.vatType).net;
+    const net = vatBreakdown(price * buyQty, chargedVatType(product.vatType, vatRegistered)).net;
     const cost = effectiveCost(product) * buyQty + setCost;
     return { product, price, buyQty, margin: net > 0 ? ((net - cost) / net) * 100 : null };
   });

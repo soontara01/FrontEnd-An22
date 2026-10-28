@@ -44,6 +44,9 @@ export class PromotionsStore {
   private readonly _branches = signal<Branch[]>([]);
   readonly branches = this._branches.asReadonly();
   private readonly _loading = signal(false);
+  /** The company charges VAT (B20); false → previews take margins on the whole price (V2-U-13). */
+  private readonly _vatRegistered = signal(true);
+  readonly vatRegistered = this._vatRegistered.asReadonly();
   private loaded = false;
 
   readonly promotions = this._promotions.asReadonly();
@@ -98,10 +101,12 @@ export class PromotionsStore {
       products: this.api.products(),
       categories: this.api.categories(),
       branches: this.api.branches(),
+      store: this.api.storeInfo(),
     })
       .pipe(finalize(() => this._loading.set(false)))
       .subscribe({
-        next: ({ promotions, products, categories, branches }) => {
+        next: ({ promotions, products, categories, branches, store }) => {
+          this._vatRegistered.set(store.vatRegistered);
           this._promotions.set(promotions);
           this._products.set(products);
           this._categories.set(categories);

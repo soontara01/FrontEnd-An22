@@ -19,6 +19,7 @@ import {
   VAT_TYPE_LABEL,
   effectiveCost,
   isService,
+  chargedVatType,
   marginPercent,
   creditLabel,
   stockInPacks,
@@ -75,15 +76,23 @@ export default class SkuDetail implements OnInit {
     return sku ? LEVEL[stockLevel(sku)] : null;
   });
 
+  /** VAT of the SKU's sales: none while the company is not VAT-registered (V2-U-13). */
+  private readonly vatType = computed(() => {
+    const sku = this.sku();
+    return sku ? chargedVatType(sku.vatType, this.store.vatRegistered()) : null;
+  });
+
   protected readonly margin = computed(() => {
     const sku = this.sku();
-    return sku ? marginPercent(sku.currentPrice, effectiveCost(sku), sku.vatType) : null;
+    const vatType = this.vatType();
+    return sku && vatType ? marginPercent(sku.currentPrice, effectiveCost(sku), vatType) : null;
   });
 
   /** Today's VAT-inclusive price split into net + VAT. */
   protected readonly priceBreakdown = computed(() => {
     const sku = this.sku();
-    return sku?.currentPrice != null ? vatBreakdown(sku.currentPrice, sku.vatType) : null;
+    const vatType = this.vatType();
+    return sku?.currentPrice != null && vatType ? vatBreakdown(sku.currentPrice, vatType) : null;
   });
 
   /** Quantity the reorder rule would suggest right now (0 = no need). */

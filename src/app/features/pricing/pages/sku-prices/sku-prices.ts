@@ -115,7 +115,9 @@ export default class SkuPrices {
 
   protected margin(p: SkuPrice): number | null {
     const product = this.row()?.product;
-    return product ? marginPercent(p.price, effectiveCost(product), product.vatType) : null;
+    return product
+      ? marginPercent(p.price, effectiveCost(product), this.store.vatTypeOf(product))
+      : null;
   }
 
   protected openForm(price?: SkuPrice): void {

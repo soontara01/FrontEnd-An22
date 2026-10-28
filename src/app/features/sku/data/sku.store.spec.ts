@@ -53,6 +53,7 @@ describe('SkuStore', () => {
       ]),
     ),
     categories: vi.fn(() => of(categories)),
+    storeInfo: vi.fn(() => of({ vatRegistered: true })),
     suppliers: vi.fn(() =>
       of([{ ...SUPPLIER_DEFAULTS, id: 1, code: 'S1', name: 'ผู้จำหน่าย 1', productCount: 0 }]),
     ),

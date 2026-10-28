@@ -29,6 +29,7 @@ describe('PromotionList', () => {
             list: () =>
               of([promo(1, 'P-ALL', []), promo(2, 'P-HQ', [1]), promo(3, 'P-HQBN', [1, 2])]),
             products: () => of([]),
+            storeInfo: () => of({ vatRegistered: true }),
             categories: () => of([]),
             branches: () =>
               of([

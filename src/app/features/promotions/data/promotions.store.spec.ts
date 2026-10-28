@@ -43,6 +43,7 @@ describe('PromotionsStore', () => {
     list: vi.fn(() => of(promotions)),
     products: vi.fn(() => of([product(1, 'NB-1'), product(2, 'MS-1')])),
     branches: vi.fn(() => of([])),
+    storeInfo: vi.fn(() => of({ vatRegistered: true })),
     categories: vi.fn(() =>
       of([
         {

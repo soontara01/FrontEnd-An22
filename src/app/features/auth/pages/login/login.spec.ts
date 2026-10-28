@@ -9,12 +9,19 @@ describe('Login', () => {
   const useMock = environment.useMock;
   afterEach(() => (environment.useMock = useMock));
 
-  function render(mock: boolean, expired?: string): { text: string; username: string } {
+  function render(
+    mock: boolean,
+    expired?: string,
+    unavailable = false,
+  ): { text: string; username: string } {
     environment.useMock = mock;
     TestBed.configureTestingModule({
       imports: [Login],
       providers: [
-        { provide: AuthService, useValue: { companyCode: signal('DEMO') } },
+        {
+          provide: AuthService,
+          useValue: { companyCode: signal('DEMO'), unavailable: signal(unavailable) },
+        },
         provideRouter([]),
       ],
     });
@@ -43,5 +50,11 @@ describe('Login', () => {
     expect(render(false).text).not.toContain('เซสชันหมดอายุ');
     TestBed.resetTestingModule();
     expect(render(false, '1').text).toContain('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+  });
+
+  it('says the system is not answering when /me failed with a server error (V2-U-14)', () => {
+    const { text } = render(false, undefined, true);
+    expect(text).toContain('ระบบไม่ตอบสนองชั่วคราว');
+    expect(text).not.toContain('เซสชันหมดอายุ');
   });
 });

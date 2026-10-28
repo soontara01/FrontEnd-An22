@@ -224,6 +224,14 @@ export function vatBreakdown(priceInclVat: number, vatType: VatType): { net: num
   return { net, vat: round2(priceInclVat - net) };
 }
 
+/**
+ * The VAT a sale of this SKU really carries: none while the company is not VAT-registered (B20) —
+ * the same as `priceCart()` with `ctx.vatRegistered: false`. Pass it to `vatBreakdown()` /
+ * `marginPercent()` on screens that preview a price (V2-U-13).
+ */
+export const chargedVatType = (vatType: VatType, vatRegistered: boolean): VatType =>
+  vatRegistered ? vatType : 'exempt';
+
 /** Gross margin % of a VAT-inclusive price over cost (cost excludes VAT). */
 export function marginPercent(
   priceInclVat: number | null | undefined,

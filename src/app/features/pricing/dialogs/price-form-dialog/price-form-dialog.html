@@ -19,8 +19,10 @@
         @if (isVat) {
           ก่อน VAT {{ breakdown().net | number: '1.2-2' }} + VAT
           {{ breakdown().vat | number: '1.2-2' }}
-        } @else {
+        } @else if (vatRegistered()) {
           ยกเว้น VAT
+        } @else {
+          ร้านไม่ได้จด VAT
         }
         @if (margin(); as m) {
           · <span [class.negative]="m < 0">กำไร {{ m | number: '1.1-1' }}%</span>

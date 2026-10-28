@@ -58,6 +58,17 @@ describe('promotion preview', () => {
     expect(rows[2]).toMatchObject({ price: null, discounted: null });
   });
 
+  it('takes margins on the whole price when the company is not VAT-registered (V2-U-13)', () => {
+    const [row] = discountPreview(
+      promo({ discount: { kind: 'percent', value: 10, maxDiscount: null } }),
+      products,
+      categories,
+      false,
+    );
+    // 96.30 carries no VAT: (96.30 − 80) / 96.30
+    expect(row.margin).toBeCloseTo(16.9, 1);
+  });
+
   it('costs one free set and the margin of the minimum purchase', () => {
     const preview = freeGoodsPreview(
       promo({

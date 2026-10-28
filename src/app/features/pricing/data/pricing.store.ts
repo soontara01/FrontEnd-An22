@@ -4,7 +4,9 @@ import {
   Product,
   SkuPrice,
   SkuPricePayload,
+  VatType,
   addDaysIso,
+  chargedVatType,
   effectivePrice,
   isDiscontinued,
   effectiveCost,
@@ -42,11 +44,19 @@ export class PricingStore {
   private readonly _products = signal<Product[]>([]);
   private readonly _prices = signal<SkuPrice[]>([]);
   private readonly _loading = signal(false);
+  /** The company charges VAT (B20); false → prices carry none, margins on the whole price. */
+  private readonly _vatRegistered = signal(true);
   private loaded = false;
 
   readonly products = this._products.asReadonly();
   readonly prices = this._prices.asReadonly();
   readonly loading = this._loading.asReadonly();
+  readonly vatRegistered = this._vatRegistered.asReadonly();
+
+  /** VAT of the SKU's sales here: none while the company is not VAT-registered (V2-U-13). */
+  vatTypeOf(product: Product): VatType {
+    return chargedVatType(product.vatType, this._vatRegistered());
+  }
 
   /** Active SKUs with their price summary (derived locally from `prices`). */
   readonly rows = computed<PriceRow[]>(() => {
@@ -68,7 +78,7 @@ export class PricingStore {
           current,
           next,
           periodCount: own.length,
-          margin: marginPercent(current?.price, effectiveCost(product), product.vatType),
+          margin: marginPercent(current?.price, effectiveCost(product), this.vatTypeOf(product)),
           expiringSoon: !!current?.endDate && current.endDate <= expiryLimit,
         };
       });
@@ -83,10 +93,15 @@ export class PricingStore {
   load(force = false): void {
     if (this.loaded && !force) return;
     this._loading.set(true);
-    forkJoin({ products: this.api.products(), prices: this.api.prices() })
+    forkJoin({
+      products: this.api.products(),
+      prices: this.api.prices(),
+      store: this.api.storeInfo(),
+    })
       .pipe(finalize(() => this._loading.set(false)))
       .subscribe({
-        next: ({ products, prices }) => {
+        next: ({ products, prices, store }) => {
+          this._vatRegistered.set(store.vatRegistered);
           this._products.set(products);
           this._prices.set(prices);
           this.loaded = true;
