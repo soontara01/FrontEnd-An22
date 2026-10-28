@@ -1,0 +1,22 @@
+# ทดสอบรุ่น 2.0: image 2.0.0, DB ไม่มี seed, web เก็บ session ใน MongoDB
+# ใช้คู่กับ an22-api/compose.multi.yaml (docs/test-v2-platform.md หัวข้อ 1.4)
+services:
+  api1:
+    image: an22-api:2.0.0
+    environment:
+      AN22_DB_LOCATIONS: filesystem:db/migration # ไม่มี db/seed เหมือน production
+  api2:
+    image: an22-api:2.0.0
+    environment:
+      AN22_DB_LOCATIONS: filesystem:db/migration
+  mongo:
+    image: mongo:8.0 # รุ่นเดียวกับ an22-web/compose.yaml, ไม่เปิด port ออกนอก network
+    volumes: [mongo-data:/data/db]
+  web:
+    image: an22-web:2.0.0
+    environment:
+      SESSION_STORE: mongodb
+      MONGODB_URI: mongodb://mongo:27017/an22
+    depends_on: [lb, mongo]
+volumes:
+  mongo-data:
