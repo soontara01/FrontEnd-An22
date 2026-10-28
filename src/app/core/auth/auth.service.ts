@@ -178,18 +178,15 @@ export class AuthService {
    * Ends the session on the web server (`POST /auth/logout` drops its token and cookie), then a
    * full page reload to the login page (SPA per menu) — also when that call fails. `expired` = the
    * server ended the session (401): the login page says so, a snackbar would die with the reload
-   * (C3-6). The session in memory stays until that call answers: clearing it first made open pages
-   * reload their lists without a branch, and their 401 sent a plain logout to `?expired=1`
-   * (V2-U-04); a second call while leaving does nothing.
+   * (C3-6). The session in memory is never cleared here: the reload drops it, and clearing it
+   * first made open pages reload their lists without a branch (`branchId=0` → 401, which sent a
+   * plain logout to `?expired=1` — V2-U-04); a second call while leaving does nothing.
    */
   logout(reason?: 'expired'): void {
     if (this.leaving) return;
     this.leaving = true;
     const url = reason === 'expired' ? '/auth/login?expired=1' : '/auth/login';
-    const toLogin = () => {
-      this.clearSession();
-      this.document.location.assign(url);
-    };
+    const toLogin = () => this.document.location.assign(url);
     this.api
       .post('auth/logout', null, silentUnauthorized())
       .subscribe({ next: toLogin, error: toLogin });
