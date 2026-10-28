@@ -347,3 +347,17 @@
 - **U16.2** ✅ ทุก path ในตารางถูกเปิดอย่างน้อย 1 ครั้งระหว่างรอบ (หน้า auth ทั้ง 5, /pos + shift-close(?shift=), sales ทุกหน้า, inventory 6 หน้า, transfers 3, sku 6, pricing 2, promotions 4, master-data 7, users 4, account 3, settings, platform, 404) — ไม่มี error
 - **U16.3** ✅ SOMJAI 6 / 3 / 2 / 1 / 0 / 2 / 24 / 5 / 120 · ITMART 3 / 0 / 0 / 0 / 2 / 3 / 15 / 6 / 65 · NOVAT 3 / 0 / 0 / 0 / 0 / 1 / 3 / 0 / 21 · DELME 0 (บิล / ใบกำกับ / ลดหนี้ / เปลี่ยน / โอน / กะ / movement / serial / audit)
 - สถานะ stack ตอนจบ: ทุก container ขึ้นอยู่; NOVAT ถูกระงับ (overdue) จาก P7.7; กะเปิดค้าง: NOVAT `SH-HQ-20261027-01` (nun); DELME purge แล้ว
+
+### 2026-10-28 บ่าย — ทดสอบซ้ำหลังแก้ (`fix/v2-findings`, PR #21 + an22-web #6)
+
+- stack เดิม (ข้อมูล D1–D2) เปลี่ยนเฉพาะ web เป็น `an22-web:2.0.0-fix` (หน้าบ้าน `b555313` + an22-web `fa1c24d`; override `services.web.image` ใน scratchpad — `2.0.0` ยังอยู่) · healthy · ไม่มีโค้ด mock ใน `public/`
+- **การเปลี่ยนข้อมูล:** เพื่อ login NOVAT (ระงับ overdue จาก P7.7) platform รับชำระ `SUB-202608-0001` + `SUB-202609-0001` ผ่านจอ → NOVAT "ใช้งานปกติ" เอง (ไม่ต้องกดเปิดใช้งาน); nid บันทึกผู้ใช้ตัวเองโดยไม่เปลี่ยนค่า (V2-U-09) — นอกนั้นไม่ได้บันทึกอะไร (dialog / ฟอร์มกดยกเลิก)
+- **V2-P-08** ✅ `/platform/companies/99999` → snackbar "ไม่พบบริษัท" แล้วกลับ `/platform/companies` ไม่มี spinner ค้าง
+- **V2-U-13** ✅ NOVAT: `/pricing` ACC-001 กำไร 79.9% (เดิม 78.5%); `/pricing/12` dialog แก้ราคา "ร้านไม่ได้จด VAT · กำไร 79.9%" ไม่มี "ก่อน VAT / + VAT"; `/sku/12` กำไร 79.9% ไม่มี "(ก่อน VAT …)"; `/sku/new` ช่อง VAT ยังเป็น VAT 7% + ข้อความ "ร้านยังไม่ได้จด VAT — ขายโดยไม่คิด VAT ใช้ค่านี้เมื่อจด VAT"; `/promotions/new` ลด 10% ทุกสินค้า (ไม่บันทึก) → ACC-001 ฿179.1 กำไร 77.7% (= (179.1−40)/179.1; แบบหัก VAT จะได้ 76.1%)
+- **V2-U-09** ✅ nid (owner) `/users/3/edit`: ไม่มี "กรุณาเลือกสาขา…", ปุ่มบันทึกกดได้ → "บันทึกการแก้ไขเรียบร้อย"
+- **V2-U-08** ✅ dialog เพิ่มช่องทางชำระ: ค่าเริ่ม บัตร / "กรอกยอดตรวจ" → เลือก "โอนเงิน" → "ติ๊กตรวจแล้ว" (ยกเลิก ไม่บันทึก)
+- **V2-U-11** ✅ `/inventory/stock-card/12` เลือก 28/10/2569 – 1/10/2569 กดค้นหา → snackbar "วันที่เริ่มต้องไม่เกินวันที่สิ้นสุด" อยู่หน้าเดิม (ไม่ยิง API); ใส่ช่วงกลับด้านใน URL → 400 ข้อความเดียวกัน อยู่หน้าเดิม; `/inventory/stock-card/99999` ยังกลับ `/inventory` "ไม่พบ SKU"
+- **V2-U-04** ⚠️→✅ รอบแรก (`8ef8556`) 4 รอบ login → `/sales` → ออก ไปหน้า login ธรรมดาทุกรอบ แต่ log ยังมี `GET /api/sales` + `/credit-notes` `branchId=0` 401 รอบละ 2 (ล้าง session ก่อน `location.assign` — flag กันไม่ให้ไป `?expired=1` แล้ว) → แก้เพิ่ม `b555313` ไม่ล้าง session ตอนออก → ทดสอบอีก 3 รอบ: ไม่มี `?expired`, log ไม่มี `branchId=0` / 401 ของรายการ (401 เหลือแค่ `GET /api/me` ของหน้า login = ปกติ)
+- **V2-U-14** ✅ (ดีขึ้น ไม่ถึง 5 วิ) login nid → `docker stop` mongo → reload `/dashboard`: `GET /api/me` 500 ใน **10.0 วิ** (เดิม ~60 — driver เลือก server 2 ครั้ง ครั้งละ 5 วิ, `getaddrinfo EAI_AGAIN mongo`) แล้วหน้า login ขึ้น "ระบบไม่ตอบสนองชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่"; start mongo → reload `/dashboard` เข้าได้เลยด้วย session เดิม ไม่ต้อง restart web; login ขณะ mongo ล่มครอบโดย test ของ an22-web (500 ใน ~5 วิ)
+- **V2-P-07** ✅ `nvm use` ใน an22-web → Node v24.22.0
+- สถานะ stack ตอนจบ: ทุก container ขึ้นอยู่ (web = `2.0.0-fix`); NOVAT ใช้งานปกติ (ชำระครบ 3 ใบ); กะเปิดค้าง NOVAT `SH-HQ-20261027-01` (nun) เหมือนเดิม; DELME purge แล้ว

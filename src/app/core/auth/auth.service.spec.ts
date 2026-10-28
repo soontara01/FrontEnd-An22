@@ -121,19 +121,17 @@ describe('AuthService', () => {
     expect(service.currentBranch()).toBeNull();
   });
 
-  it('logout clears the session but keeps the company code, then reloads to login', () => {
+  it('logout ends the server session, keeps the company code, then reloads to login', () => {
     const service = create();
     login(service);
 
     service.logout();
 
-    // the web server ends its session first (E48) — also when that fails; until then the session
-    // stays, so open pages do not reload without a branch (V2-U-04)
-    expect(service.isLoggedIn()).toBe(true);
+    // the web server ends its session first (E48) — also when that fails; the session in memory
+    // stays until the reload, so open pages do not reload without a branch (V2-U-04)
     expect(assign).not.toHaveBeenCalled();
     http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
-    expect(service.isLoggedIn()).toBe(false);
-    expect(service.company()).toBeNull();
+    expect(service.currentBranch()?.id).toBe(1);
     expect(localStorage.getItem('an22.companyCode')).toBe('"DEMO"');
     expect(assign).toHaveBeenCalledWith('/auth/login');
 
@@ -163,9 +161,6 @@ describe('AuthService', () => {
 
     login(service, { ...response(), canSeeCost: false }); // an admin always sees it
     expect(service.canSeeCost()).toBe(true);
-    service.logout();
-    http.expectOne({ method: 'POST', url: '/api/auth/logout' }).flush(null);
-    expect(service.canSeeCost()).toBe(false);
   });
 
   it('a 401 while logging out does not turn it into an expired session (V2-U-04)', () => {
