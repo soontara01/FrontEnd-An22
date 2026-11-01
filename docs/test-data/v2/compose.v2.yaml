@@ -10,7 +10,7 @@ services:
     environment:
       AN22_DB_LOCATIONS: filesystem:db/migration
   mongo:
-    image: mongo:8.0 # รุ่นเดียวกับ an22-web/compose.yaml, ไม่เปิด port ออกนอก network
+    image: mongo:8.2 # รุ่นเดียวกับ an22-web/compose.yaml (8.0 เปิดไม่ได้บน kernel ≥ 6.19), ไม่เปิด port ออกนอก network
     volumes: [mongo-data:/data/db]
   web:
     image: an22-web:2.0.0
