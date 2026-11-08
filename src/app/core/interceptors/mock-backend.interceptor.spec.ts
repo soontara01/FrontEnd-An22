@@ -682,6 +682,31 @@ describe('mockBackendInterceptor – POS sales', () => {
     expect(await get<Sale>(`sales/${next.id}`)).toEqual(next);
   });
 
+  it('sells with the promotion the cashier chose, re-priced by the server', async () => {
+    const promotions = await get<Promotion[]>('promotions');
+    const created = await post<Promotion>('promotions', {
+      ...promotions.find((p) => p.id === 1),
+      code: 'PICK',
+      name: 'ลด 20%',
+      startDate: '2026-10-04',
+      priority: 1,
+      discount: { kind: 'percent', value: 20, maxDiscount: null },
+    });
+    const body = {
+      items: [item(MOUSE)],
+      freeSerials: [],
+      payments: [pay(CASH, 472)],
+      customer: '',
+      expectedTotal: 472,
+    };
+    expect(await errorOf(post<Sale>('sales', body))).toBe(
+      'ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง กรุณาตรวจสอบบิลอีกครั้ง',
+    );
+    const sale = await post<Sale>('sales', { ...body, promotionChoices: [created.id] });
+    expect(sale.total).toBe(472);
+    expect(sale.lines[0].promotionIds).toEqual([created.id]);
+  });
+
   it('rejects the sale without changing anything when a check fails', async () => {
     expect(await errorOf(sell([item(MOUSE)], 590, [pay(CASH, 590)]))).toBe(
       'ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง กรุณาตรวจสอบบิลอีกครั้ง',
@@ -1617,6 +1642,7 @@ describe('mockBackendInterceptor – shifts', () => {
       },
       billManual: null,
       manualReason: '',
+      promotionChoices: [3],
       total: 531,
     };
     expect(await call<HeldBill[]>('GET', 'pos/held-bills')).toEqual([]);

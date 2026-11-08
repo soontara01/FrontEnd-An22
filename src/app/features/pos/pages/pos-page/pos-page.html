@@ -212,6 +212,17 @@
               @for (name of promotionNames(line); track name) {
                 <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
               }
+              @if (lineConflict(line); as conflict) {
+                <button
+                  mat-button
+                  type="button"
+                  class="serial-btn"
+                  (click)="choosePromotion(conflict)"
+                >
+                  <mat-icon>swap_horiz</mat-icon>
+                  เปลี่ยนโปร
+                </button>
+              }
               @if (isFreeLine(line) && needsSerial(line)) {
                 <button mat-button type="button" class="serial-btn" (click)="pickFreeSerials(line)">
                   <mat-icon>qr_code_scanner</mat-icon>
@@ -355,6 +366,17 @@
             </div>
             @for (name of billPromotionNames(); track name) {
               <div class="promo small"><mat-icon inline>sell</mat-icon> {{ name }}</div>
+            }
+            @if (billConflict(); as conflict) {
+              <button
+                mat-button
+                type="button"
+                class="serial-btn"
+                (click)="choosePromotion(conflict)"
+              >
+                <mat-icon>swap_horiz</mat-icon>
+                เปลี่ยนโปรท้ายบิล
+              </button>
             }
           }
           @if (cart().manualDiscount) {

@@ -18,6 +18,8 @@ export interface HeldBill {
   /** Manual discount on the whole bill + its reason (missing in bills parked before it existed) */
   billManual?: ManualDiscount | null;
   manualReason?: string;
+  /** Promotions chosen at the POS, newest first (missing in bills parked before it existed) */
+  promotionChoices?: number[];
   /** Total when parked (display only; re-priced on resume) */
   total: number;
 }

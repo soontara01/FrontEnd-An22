@@ -1,0 +1,29 @@
+<h2 mat-dialog-title>เปลี่ยนโปร · {{ data.title }}</h2>
+<mat-dialog-content>
+  <p class="text-muted small">เลือกได้ 1 ตัวเลือก ตามที่ลูกค้าต้องการ</p>
+  @for (option of data.options; track $index; let i = $index) {
+    <button
+      type="button"
+      class="option"
+      [class.selected]="option.selected"
+      [attr.aria-pressed]="option.selected"
+      [mat-dialog-close]="i"
+    >
+      <span>
+        @for (name of option.names; track name) {
+          <div>{{ name }}</div>
+        }
+        @for (free of option.free; track free) {
+          <div class="text-muted small"><mat-icon inline>redeem</mat-icon> แถม {{ free }}</div>
+        }
+      </span>
+      <span class="total">
+        <div class="text-muted small">ยอดบิล</div>
+        <strong>{{ option.total | number: '1.2-2' }}</strong>
+      </span>
+    </button>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" mat-dialog-close>ปิด</button>
+</mat-dialog-actions>

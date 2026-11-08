@@ -25,6 +25,7 @@ import {
   ManualDiscount,
   PricedLine,
   Product,
+  PromotionConflict,
   Shift,
   ShiftOpenPayload,
   TaxInvoiceBuyer,
@@ -57,6 +58,10 @@ import {
   OpenShiftDialog,
   OpenShiftDialogData,
 } from '../../dialogs/open-shift-dialog/open-shift-dialog';
+import {
+  PromotionChoiceDialog,
+  PromotionChoiceDialogData,
+} from '../../dialogs/promotion-choice-dialog/promotion-choice-dialog';
 import { ShiftReportDialog } from '../../dialogs/shift-report-dialog/shift-report-dialog';
 import {
   DiscountDialog,
@@ -350,6 +355,41 @@ export default class PosPage {
   protected removeLine(line: PricedLine): void {
     if (line.cartIndex !== null) this.store.remove(line.cartIndex);
     this.focusScan();
+  }
+
+  protected lineConflict(line: PricedLine): PromotionConflict | undefined {
+    const index = line.cartIndex;
+    return index === null
+      ? undefined
+      : this.store.conflicts().find((c) => c.cartIndexes.includes(index));
+  }
+
+  protected billConflict(): PromotionConflict | undefined {
+    return this.store.conflicts().find((c) => c.level === 'bill');
+  }
+
+  /** The cashier picks which of the promotions excluding each other this sale gets. */
+  protected choosePromotion(conflict: PromotionConflict): void {
+    const names = this.cart()
+      .lines.filter((l) => l.cartIndex !== null && conflict.cartIndexes.includes(l.cartIndex))
+      .map((l) => l.shortName);
+    const title = !names.length
+      ? 'ท้ายบิล'
+      : names.length === 1
+        ? names[0]
+        : `${names[0]} และอีก ${names.length - 1} รายการ`;
+    this.dialog
+      .open<PromotionChoiceDialog, PromotionChoiceDialogData, number>(PromotionChoiceDialog, {
+        data: { title, options: this.store.conflictOptions(conflict) },
+        injector: this.injector,
+        width: '480px',
+        maxWidth: '95vw',
+      })
+      .afterClosed()
+      .subscribe((picked) => {
+        if (picked !== undefined) this.store.choosePromotion(conflict.options[picked]);
+        this.focusScan();
+      });
   }
 
   /** Picks the serials of every free unit of this SKU given by the line's promotion. */

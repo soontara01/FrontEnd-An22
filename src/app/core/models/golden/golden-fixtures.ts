@@ -47,6 +47,8 @@ export interface PriceCartFixture {
     context: PricingContext;
     freeSerials: FreeSerial[];
     billManualDiscount: ManualDiscount | null;
+    /** Promotions the cashier chose, newest first */
+    promotionChoices: number[];
     /** Checkout's manual-discount rule (`manualDiscountError()`) */
     manualDiscountRule: { reason: string; isAdmin: boolean; maxPercent: number };
   };
@@ -169,6 +171,7 @@ interface CartCase {
   branchId?: number | null;
   freeSerials?: FreeSerial[];
   billManualDiscount?: ManualDiscount | null;
+  promotionChoices?: number[];
   manualDiscountRule?: PriceCartFixture['input']['manualDiscountRule'];
 }
 
@@ -247,6 +250,77 @@ const CART_CASES: CartCase[] = [
       promo(1, { priority: 9, stackable: true, discount: percent(10) }),
       promo(3, { priority: 1, stackable: true, discount: percent(10) }),
     ],
+  },
+  {
+    name: 'cashier choice: a lower-priority non-stackable replaces the default, alone',
+    items: [item(1)],
+    products: [product(1, { currentPrice: 1000 })],
+    promotions: [
+      promo(1, { priority: 9, discount: percent(50) }),
+      promo(2, { priority: 5, discount: percent(10) }),
+      promo(3, { priority: 1, stackable: true, discount: percent(5) }),
+    ],
+    promotionChoices: [2],
+  },
+  {
+    name: 'cashier choice: free goods instead of a higher-priority discount',
+    items: [item(1, 2)],
+    products: [product(1, { currentPrice: 1000 }), product(9, { stock: 10 })],
+    promotions: [promo(1, { priority: 9, discount: percent(10) }), freePromo(2, { priority: 1 })],
+    promotionChoices: [2],
+  },
+  {
+    name: 'cashier choice: a stackable one keeps the stackable group, drops non-stackable',
+    items: [item(1)],
+    products: [product(1, { currentPrice: 1000 })],
+    promotions: [
+      promo(1, { priority: 9, discount: percent(50) }),
+      promo(2, { priority: 5, stackable: true, discount: percent(10) }),
+      promo(3, { priority: 1, stackable: true, discount: percent(10) }),
+    ],
+    promotionChoices: [3],
+  },
+  {
+    name: 'cashier choice that no longer fits falls back to priority; unknown id ignored',
+    items: [item(1)],
+    products: [product(1, { currentPrice: 1000 })],
+    promotions: [
+      promo(1, { priority: 9, discount: percent(10) }),
+      promo(2, { priority: 5, minQty: 2, discount: percent(50) }),
+    ],
+    promotionChoices: [99, 2],
+  },
+  {
+    name: 'cashier choices: the newest one that fits wins',
+    items: [item(1)],
+    products: [product(1, { currentPrice: 1000 })],
+    promotions: [
+      promo(1, { priority: 9, discount: percent(50) }),
+      promo(2, { priority: 5, discount: percent(10) }),
+      promo(3, { priority: 1, discount: percent(20) }),
+    ],
+    promotionChoices: [3, 2],
+  },
+  {
+    name: 'cashier choice with large promotion ids (compared by value)',
+    items: [item(1)],
+    products: [product(1, { currentPrice: 1000 })],
+    promotions: [
+      promo(100001, { priority: 9, discount: percent(10) }),
+      promo(100002, { priority: 1, discount: percent(30) }),
+    ],
+    promotionChoices: [100002],
+  },
+  {
+    name: 'cashier choice on the bill level leaves item promotions alone',
+    items: [item(1)],
+    products: [product(1, { currentPrice: 2000 })],
+    promotions: [
+      promo(1, { priority: 9, discount: percent(10) }),
+      billPromo(2, { priority: 9, discount: percent(50) }),
+      billPromo(3, { priority: 1 }),
+    ],
+    promotionChoices: [3],
   },
   {
     name: 'disabled / expired / not started / out of scope ignored; category scope covers children',
@@ -492,10 +566,18 @@ function priceCartFixture(c: CartCase): PriceCartFixture {
   const freeSerials = c.freeSerials ?? [];
   const billManualDiscount = c.billManualDiscount ?? null;
   const manualDiscountRule = c.manualDiscountRule ?? STAFF;
-  const cart = priceCart(c.items, context, freeSerials, billManualDiscount);
+  const promotionChoices = c.promotionChoices ?? [];
+  const cart = priceCart(c.items, context, freeSerials, billManualDiscount, promotionChoices);
   return {
     name: c.name,
-    input: { items: c.items, context, freeSerials, billManualDiscount, manualDiscountRule },
+    input: {
+      items: c.items,
+      context,
+      freeSerials,
+      billManualDiscount,
+      promotionChoices,
+      manualDiscountRule,
+    },
     expected: {
       cart,
       cartError: cartError(cart),

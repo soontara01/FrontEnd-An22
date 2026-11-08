@@ -172,4 +172,7 @@ export class PosApi {
 }
 
 /** `POST /sales/cost-check`: the cart part of a `SalePayload` (E45). */
-export type CostCheckPayload = Pick<SalePayload, 'items' | 'freeSerials' | 'billManualDiscount'>;
+export type CostCheckPayload = Pick<
+  SalePayload,
+  'items' | 'freeSerials' | 'billManualDiscount' | 'promotionChoices'
+>;

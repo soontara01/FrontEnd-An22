@@ -29,8 +29,10 @@ import {
   PaymentMethod,
   PosTerminal,
   PricedCart,
+  PricingContext,
   Product,
   Promotion,
+  PromotionConflict,
   Sale,
   SerialNumber,
   Shift,
@@ -42,8 +44,10 @@ import {
   TaxInvoice,
   TaxInvoiceBuyer,
   cartError,
+  isFreeLine,
   manualDiscountError,
   priceCart,
+  promotionConflicts,
   shiftBlocker,
   shiftOpenTooLong,
   terminalError,
@@ -57,6 +61,16 @@ import { httpErrorShown } from '@core/http/http-error-shown';
 import { CostCheckPayload, PosApi } from './pos-api.service';
 
 export type { HeldBill } from '@core/models';
+
+/** One option of the "เปลี่ยนโปร" dialog. */
+export interface PromotionChoiceOption {
+  names: string[];
+  /** 'เมาส์ × 1' — free goods this option gives */
+  free: string[];
+  /** The bill's total if this option is picked */
+  total: number;
+  selected: boolean;
+}
 
 /**
  * Where this device once parked bills (before E48 they lived in localStorage): `pos.holds`
@@ -91,6 +105,8 @@ export class PosStore {
   private readonly _buyer = signal<TaxInvoiceBuyer | null>(null);
   private readonly _billManual = signal<ManualDiscount | null>(null);
   private readonly _manualReason = signal('');
+  /** Promotions the cashier chose over the priority default, newest first */
+  private readonly _promotionChoices = signal<number[]>([]);
   /** Bills this device parked before E48, per company + branch (moved to the server on load). */
   private readonly oldHoldsKey = `pos.held.${this.auth.company()?.id ?? 0}.${this.auth.currentBranch()?.id ?? 0}`;
   /** Parked bills of this branch + terminal, from the server (E48). */
@@ -131,23 +147,33 @@ export class PosStore {
       .sort((a, b) => a.sortOrder - b.sortOrder),
   );
 
-  readonly cart = computed<PricedCart>(() =>
-    priceCart(
+  private readonly pricingContext = computed<PricingContext>(() => ({
+    products: this._products(),
+    promotions: this._promotions(),
+    categories: this._categories(),
+    date: todayIso(),
+    // The server re-prices with the store's real status; until it loads assume registered.
+    vatRegistered: this.storeInfo()?.vatRegistered ?? true,
+    // Same branch the server prices with (`X-Branch-Id`, D2).
+    branchId: this.auth.currentBranch()?.id ?? null,
+  }));
+
+  readonly cart = computed<PricedCart>(() => this.priceWith(this._promotionChoices()));
+
+  /** Promotions that exclude each other in this cart: the cashier may pick another option. */
+  readonly conflicts = computed(() =>
+    promotionConflicts(this._items(), this.pricingContext(), this._promotionChoices()),
+  );
+
+  private priceWith(choices: readonly number[]): PricedCart {
+    return priceCart(
       this._items(),
-      {
-        products: this._products(),
-        promotions: this._promotions(),
-        categories: this._categories(),
-        date: todayIso(),
-        // The server re-prices with the store's real status; until it loads assume registered.
-        vatRegistered: this.storeInfo()?.vatRegistered ?? true,
-        // Same branch the server prices with (`X-Branch-Id`, D2).
-        branchId: this.auth.currentBranch()?.id ?? null,
-      },
+      this.pricingContext(),
       this._freeSerials(),
       this._billManual(),
-    ),
-  );
+      choices,
+    );
+  }
 
   /**
    * Cart sent to `POST /sales/cost-check` (E45): only for who cannot see cost — their products
@@ -159,7 +185,12 @@ export class PosStore {
     const items = this._items();
     const billManualDiscount = this._billManual();
     if (!billManualDiscount && !items.some((i) => i.manualDiscount)) return null;
-    return { items, freeSerials: this._freeSerials(), billManualDiscount };
+    return {
+      items,
+      freeSerials: this._freeSerials(),
+      billManualDiscount,
+      promotionChoices: this._promotionChoices(),
+    };
   });
   /** The server's answer and the request it answers (an older answer is never shown). */
   private readonly costCheck = toSignal(
@@ -444,6 +475,31 @@ export class PosStore {
     this._manualReason.set(reason);
   }
 
+  /** Picks one option of a conflict (it becomes the newest choice; older ones stay for other lines). */
+  choosePromotion(option: readonly number[]): void {
+    this._promotionChoices.update((ids) => [option[0], ...ids.filter((id) => id !== option[0])]);
+  }
+
+  /** What the cashier sees for each option of a conflict: the bill as if that option were picked. */
+  conflictOptions(conflict: PromotionConflict): PromotionChoiceOption[] {
+    const names = this.promotionName();
+    return conflict.options.map((option, index) => {
+      const cart = this.priceWith([option[0], ...this._promotionChoices()]);
+      const free = new Map<string, number>();
+      for (const l of cart.lines) {
+        if (isFreeLine(l) && option.includes(l.freeOfPromotionId!)) {
+          free.set(l.shortName, (free.get(l.shortName) ?? 0) + l.qty);
+        }
+      }
+      return {
+        names: option.map((id) => names.get(id) ?? `#${id}`),
+        free: [...free].map(([name, qty]) => `${name} × ${qty}`),
+        total: cart.total,
+        selected: index === conflict.selected,
+      };
+    });
+  }
+
   remove(index: number): void {
     this._items.update((items) => items.filter((_, n) => n !== index));
   }
@@ -476,6 +532,7 @@ export class PosStore {
     this._buyer.set(null);
     this._billManual.set(null);
     this._manualReason.set('');
+    this._promotionChoices.set([]);
   }
 
   /** Parks the current bill on the server and starts an empty one. */
@@ -511,6 +568,7 @@ export class PosStore {
           this._buyer.set(bill.buyer ?? null);
           this._billManual.set(bill.billManual ?? null);
           this._manualReason.set(bill.manualReason ?? '');
+          this._promotionChoices.set(bill.promotionChoices ?? []);
         },
         error: httpErrorShown,
       });
@@ -534,6 +592,7 @@ export class PosStore {
       buyer: this._buyer(),
       billManual: this._billManual(),
       manualReason: this._manualReason(),
+      promotionChoices: this._promotionChoices(),
       total: this.cart().total,
     };
   }
@@ -550,6 +609,7 @@ export class PosStore {
         buyer: this._buyer(),
         billManualDiscount: this._billManual(),
         manualDiscountReason: this._manualReason().trim(),
+        promotionChoices: this._promotionChoices(),
       })
       .pipe(
         tap({
