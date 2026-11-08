@@ -5,8 +5,10 @@ import { of, throwError } from 'rxjs';
 import {
   PAYMENT_METHOD_DEFAULTS,
   PRODUCT_DEFAULTS,
+  PROMOTION_DEFAULTS,
   PaymentMethod,
   Product,
+  Promotion,
   SALE_DEFAULTS,
   STORE_INFO_DEFAULTS,
   Sale,
@@ -190,6 +192,56 @@ describe('PosStore', () => {
     expect(held).toEqual([]);
   });
 
+  describe('promotion chosen by the cashier', () => {
+    const promo = (id: number, priority: number, value: number): Promotion => ({
+      ...PROMOTION_DEFAULTS,
+      id,
+      code: `P${id}`,
+      name: `โปร ${id}`,
+      startDate: '2026-01-01',
+      priority,
+      scope: { all: true, productIds: [], categoryIds: [] },
+      discount: { kind: 'percent', value, maxDiscount: null },
+    });
+
+    beforeEach(() => {
+      api['promotions'].mockReturnValue(of([promo(1, 9, 10), promo(2, 1, 30)]));
+      store.load();
+      store.add(1);
+    });
+
+    it('starts on the priority default, previews each option and applies the pick', () => {
+      const [conflict] = store.conflicts();
+      expect(store.cart().total).toBe(90);
+      expect(store.conflictOptions(conflict)).toEqual([
+        { names: ['P1 โปร 1'], free: [], total: 90, selected: true },
+        { names: ['P2 โปร 2'], free: [], total: 70, selected: false },
+      ]);
+
+      store.choosePromotion(conflict.options[1]);
+      expect(store.cart().total).toBe(70);
+      expect(store.conflicts()[0].selected).toBe(1);
+    });
+
+    it('sends the pick with the sale and forgets it with the bill', () => {
+      store.choosePromotion([2]);
+      store.checkout([]).subscribe();
+      expect(api['checkout']).toHaveBeenCalledWith(
+        expect.objectContaining({ promotionChoices: [2], expectedTotal: 70 }),
+      );
+      store.add(1);
+      expect(store.cart().total).toBe(90);
+    });
+
+    it('keeps the pick on a parked bill', () => {
+      store.choosePromotion([2]);
+      store.hold();
+      expect(store.cart().total).toBe(0);
+      store.resume(store.holds()[0].id);
+      expect(store.cart().total).toBe(70);
+    });
+  });
+
   it('moves bills parked in localStorage before E48 up to the server once', () => {
     const old = {
       id: 'H1-old',
@@ -238,6 +290,7 @@ describe('PosStore', () => {
       buyer: null,
       billManualDiscount: null,
       manualDiscountReason: '',
+      promotionChoices: [],
     });
     expect(result).toBe(sale);
     expect(store.lastSale()).toBe(sale);
@@ -277,6 +330,7 @@ describe('PosStore', () => {
         ],
         freeSerials: [],
         billManualDiscount: null,
+        promotionChoices: [],
       });
       expect(store.warnings()).toEqual([below]);
 

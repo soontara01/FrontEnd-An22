@@ -289,7 +289,7 @@ token แยก (mock `mock-platform-token.p<id>`; อยู่ใน session �
 
 1. `terminalError(X-Terminal-Id, terminals, X-Branch-Id)` — ต้องเป็นเครื่องที่ลงทะเบียน ใช้งานอยู่ และอยู่ในสาขาของ `X-Branch-Id` (E8)
 2. `shiftBlocker('sell')` — ต้องมีกะเปิดของเครื่องนี้และผู้ขายเป็นเจ้าของกะ (เมื่อ `requireShift`)
-3. `priceCart(items, { products, promotions, categories, date: วันนี้, vatRegistered, branchId: X-Branch-Id }, freeSerials, billManualDiscount)` แล้ว `cartError()` — โปรที่จำกัดสาขาอื่นไม่คิด (`inBranch()`, D2)
+3. `priceCart(items, { products, promotions, categories, date: วันนี้, vatRegistered, branchId: X-Branch-Id }, freeSerials, billManualDiscount, promotionChoices)` แล้ว `cartError()` — โปรที่จำกัดสาขาอื่นไม่คิด (`inBranch()`, D2); `promotionChoices` (`number[]`, ไม่ส่ง = `[]`, ใหม่สุดก่อน) = โปรที่แคชเชียร์เลือก (E51) ตัวที่ไม่เข้าเงื่อนไขหรือไม่รู้จักไม่สนใจ ไม่ใช่ error
 4. `manualDiscountError()` (เหตุผล, เพดาน % ของ staff)
 5. serial ทุกบรรทัดต้อง `in_stock` และเป็นของ SKU นั้น
 6. `expectedTotal` ≠ `cart.total` → 400 "ราคาหรือโปรโมชั่นมีการเปลี่ยนแปลง…"
@@ -326,7 +326,7 @@ token แยก (mock `mock-platform-token.p<id>`; อยู่ใน session �
 
 ### บิลที่พักไว้ (E48 — เดิมอยู่ใน localStorage ของเครื่อง)
 
-ต่อสาขา (`X-Branch-Id`) + เครื่อง (`X-Terminal-Id`, ไม่มี = เครื่องที่ไม่ใช่ POS → 400); body = `HeldBill` (`pos.store.ts`) — มีข้อมูลผู้ซื้อ (เลขผู้เสียภาษี / บัตร / ที่อยู่) จึงเก็บที่ server เท่านั้น
+ต่อสาขา (`X-Branch-Id`) + เครื่อง (`X-Terminal-Id`, ไม่มี = เครื่องที่ไม่ใช่ POS → 400); body = `HeldBill` (`pos.store.ts`, รวม `promotionChoices` ของบิล — E51) — มีข้อมูลผู้ซื้อ (เลขผู้เสียภาษี / บัตร / ที่อยู่) จึงเก็บที่ server เท่านั้น
 
 | method + path                | body → response                    | หมายเหตุ                                                          |
 | ---------------------------- | ---------------------------------- | ----------------------------------------------------------------- |

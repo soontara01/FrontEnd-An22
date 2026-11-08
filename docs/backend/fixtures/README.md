@@ -14,6 +14,7 @@ spec `golden-fixtures.spec.ts` แดงทันทีถ้า JSON ไม่�
 [{ name,
    input: { items: CartItem[], context: PricingContext, freeSerials: FreeSerial[],
             billManualDiscount: ManualDiscount | null,
+            promotionChoices: number[],              // โปรที่แคชเชียร์เลือก ใหม่สุดก่อน (E51)
             manualDiscountRule: { reason, isAdmin, maxPercent } },
    expected: { cart: PricedCart,
                cartError: string | null,                 // = 400 ตอน POST /sales

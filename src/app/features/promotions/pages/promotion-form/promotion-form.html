@@ -61,7 +61,7 @@
         <mat-form-field appearance="outline">
           <mat-label>ลำดับความสำคัญ</mat-label>
           <input matInput type="number" min="0" max="999" formControlName="priority" />
-          <mat-hint>เลขมากใช้ก่อนเมื่อหลายโปรชนกัน</mat-hint>
+          <mat-hint>เลขมากเป็นค่าเริ่มต้น หน้าร้านเปลี่ยนได้เมื่อหลายโปรชนกัน</mat-hint>
           @if (form.controls.priority.invalid) {
             <mat-error>0 - 999</mat-error>
           }

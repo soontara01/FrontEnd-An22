@@ -1,5 +1,11 @@
 import { Category } from './category.model';
-import { PricingContext, cartError, manualDiscountError, priceCart } from './pos-pricing.model';
+import {
+  PricingContext,
+  cartError,
+  manualDiscountError,
+  priceCart,
+  promotionConflicts,
+} from './pos-pricing.model';
 import { PRODUCT_DEFAULTS, Product, vatBreakdown } from './product.model';
 import { PROMOTION_DEFAULTS, Promotion } from './promotion.model';
 import { CartItem } from './sale.model';
@@ -303,6 +309,96 @@ describe('priceCart', () => {
 
   it('rejects an empty cart', () => {
     expect(cartError(priceCart([], ctx([])))).toBe('ยังไม่มีสินค้าในบิล');
+  });
+});
+
+describe('priceCart – promotions chosen at the POS', () => {
+  const pct = (value: number) => ({ kind: 'percent' as const, value, maxDiscount: null });
+  const five = [1, 2, 3, 4, 5].map((id) =>
+    promo(id, { priority: 10 - id, discount: pct(id * 10) }),
+  );
+  const products = [product(1, { currentPrice: 1000 }), product(9)];
+
+  it('uses the priority default without a choice', () => {
+    const cart = priceCart([item(1)], ctx(products, five));
+    expect(cart.lines[0].promotionIds).toEqual([1]);
+    expect(cart.total).toBe(900);
+  });
+
+  it('applies any one of five non-stackable promotions', () => {
+    const cart = priceCart([item(1)], ctx(products, five), [], null, [4]);
+    expect(cart.lines[0].promotionIds).toEqual([4]);
+    expect(cart.total).toBe(600);
+  });
+
+  it('falls back to the default when the chosen one stops fitting', () => {
+    const promos = [promo(1, { priority: 9, discount: pct(10) }), promo(2, { minQty: 2 })];
+    const cart = priceCart([item(1)], ctx(products, promos), [], null, [2]);
+    expect(cart.lines[0].promotionIds).toEqual([1]);
+  });
+
+  it('lists five options and marks the applied one', () => {
+    expect(promotionConflicts([item(1)], ctx(products, five), [3])).toEqual([
+      { level: 'item', cartIndexes: [0], options: [[1], [2], [3], [4], [5]], selected: 2 },
+    ]);
+  });
+
+  it('shares one choice between lines with the same options (serial lines)', () => {
+    const conflicts = promotionConflicts([item(1), item(1)], ctx(products, five));
+    expect(conflicts.length).toBe(1);
+    expect(conflicts[0].cartIndexes).toEqual([0, 1]);
+  });
+
+  it('offers all the stackable ones as one option', () => {
+    const promos = [
+      promo(1, { priority: 9, stackable: true, discount: pct(10) }),
+      promo(2, { priority: 5, discount: pct(30) }),
+      promo(3, { priority: 1, stackable: true, discount: pct(10) }),
+    ];
+    expect(promotionConflicts([item(1)], ctx(products, promos))[0].options).toEqual([[1, 3], [2]]);
+    expect(
+      priceCart([item(1)], ctx(products, promos), [], null, [3]).lines[0].promotionIds,
+    ).toEqual([1, 3]);
+  });
+
+  it('has no conflict when only the stackable group fits', () => {
+    const promos = [
+      promo(1, { stackable: true, discount: pct(10) }),
+      promo(2, { stackable: true, discount: pct(10) }),
+    ];
+    expect(promotionConflicts([item(1)], ctx(products, promos))).toEqual([]);
+  });
+
+  it('counts only promotions that are eligible for the line', () => {
+    const promos = [promo(1, { discount: pct(10) }), promo(2, { minQty: 2, discount: pct(20) })];
+    expect(promotionConflicts([item(1)], ctx(products, promos))).toEqual([]);
+    expect(promotionConflicts([item(1, 2)], ctx(products, promos)).length).toBe(1);
+  });
+
+  it('keeps item and bill conflicts apart', () => {
+    const promos = [
+      ...five.slice(0, 2),
+      billPromo(6, { priority: 9, minAmount: 100 }),
+      billPromo(7, { priority: 1, minAmount: 100 }),
+    ];
+    const conflicts = promotionConflicts([item(1)], ctx(products, promos), [7]);
+    expect(conflicts.map((c) => c.level)).toEqual(['item', 'bill']);
+    expect(conflicts[1]).toEqual({
+      level: 'bill',
+      cartIndexes: [],
+      options: [[6], [7]],
+      selected: 1,
+    });
+    expect(priceCart([item(1)], ctx(products, promos), [], null, [7]).billPromotionIds).toEqual([
+      7,
+    ]);
+  });
+
+  it('counts free goods only for lines that chose them', () => {
+    const promos = [promo(1, { priority: 9, discount: pct(10) }), freePromo(2, { priority: 1 })];
+    const cart = priceCart([item(1, 2)], ctx(products, promos), [], null, [2]);
+    expect(cart.total).toBe(2000);
+    expect(cart.lines.map((l) => l.freeOfPromotionId)).toEqual([null, 2]);
   });
 });
 

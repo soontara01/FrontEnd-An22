@@ -3837,6 +3837,7 @@ function serverPricedCart(body: SalePayload, db: MockDb): PricedCart {
     },
     body.freeSerials ?? [],
     body.billManualDiscount ?? null,
+    body.promotionChoices ?? [],
   );
 }
 
@@ -5284,6 +5285,7 @@ function handleHeldBills(
       buyer: body.buyer ?? null,
       billManual: body.billManual ?? null,
       manualReason: body.manualReason ?? '',
+      promotionChoices: body.promotionChoices ?? [],
       total: Number(body.total) || 0,
       branchId,
       terminalId: terminalId!,

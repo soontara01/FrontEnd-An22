@@ -13,6 +13,7 @@ import type { CartItem, FreeSerial, ManualDiscount, SaleLine } from './sale.mode
  *    while everything applied so far and the candidate are stackable (a non-stackable one stops
  *    the rest). item_discount is eligible when the line has ≥ minQty base units; free_goods
  *    when its in-scope lines (at list price) reach one set. Discounts compound per base unit.
+ *    The cashier may replace that walk's outcome (`promotionChoices`, see `selectPromotions()`).
  * 3. free goods per promotion over the lines that chose it: sets by pieces (minQty) or by the
  *    amount after item discounts (minAmount); `repeat` / `maxSets` limit them. Free lines are
  *    capped at the stock left (warning, not blocking).
@@ -54,6 +55,17 @@ export const BELOW_COST_WARNING = 'ขายต่ำกว่าทุนหล
 export const belowCostIssues = (issues: readonly CartIssue[]): CartIssue[] =>
   issues.filter((i) => !i.blocking && i.message.endsWith(BELOW_COST_WARNING));
 
+/** Promotions that exclude each other on some lines or on the bill: the cashier picks one option. */
+export interface PromotionConflict {
+  level: 'item' | 'bill';
+  /** The lines this choice covers ([] for the bill) */
+  cartIndexes: number[];
+  /** Promotion ids of each option; `options[n][0]` is what goes into `promotionChoices` */
+  options: number[][];
+  /** Index of the option applied now */
+  selected: number;
+}
+
 export interface CartIssue {
   cartIndex: number | null;
   productId: number;
@@ -85,13 +97,26 @@ const sum = (values: number[]): number => round2(values.reduce((a, b) => a + b, 
 /** Deterministic order: priority (high first), then id. */
 const byPriority = (a: Promotion, b: Promotion): number => b.priority - a.priority || a.id - b.id;
 
-/** The priority/stackable walk shared by item and bill promotions. */
+/**
+ * The priority/stackable walk shared by item and bill promotions. The latest cashier's choice
+ * (`choices`, newest first) that is a candidate and eligible replaces the priority default: a
+ * non-stackable one applies alone, a stackable one keeps every stackable candidate and drops the
+ * non-stackable ones. A choice that doesn't fit (or is unknown) is ignored.
+ */
 function selectPromotions(
   candidates: readonly Promotion[],
   eligible: (p: Promotion) => boolean,
+  choices: readonly number[],
 ): Promotion[] {
+  const fits = (id: number) => candidates.find((p) => p.id === id && eligible(p));
+  const picked = choices.map(fits).find((p) => !!p);
+  const walk = !picked
+    ? candidates
+    : picked.stackable
+      ? candidates.filter((p) => p.stackable)
+      : [picked];
   const applied: Promotion[] = [];
-  for (const p of candidates) {
+  for (const p of walk) {
     if (!eligible(p)) continue;
     if (!applied.length) {
       applied.push(p);
@@ -101,6 +126,22 @@ function selectPromotions(
     }
   }
   return applied;
+}
+
+/**
+ * What the cashier can choose between: every eligible non-stackable promotion is one option, all
+ * the eligible stackable ones together are one more. Priority order; ids in priority order.
+ */
+function promotionOptions(
+  candidates: readonly Promotion[],
+  eligible: (p: Promotion) => boolean,
+): number[][] {
+  const fitting = candidates.filter(eligible);
+  const together = fitting.filter((p) => p.stackable).map((p) => p.id);
+  return fitting.flatMap((p) => {
+    if (!p.stackable) return [[p.id]];
+    return p.id === together[0] ? [together] : [];
+  });
 }
 
 /** Free sets earned by `qty` base units / `amount` baht of qualifying items. */
@@ -151,7 +192,28 @@ export function priceCart(
   freeSerials: readonly FreeSerial[] = [],
   /** Manual discount on the whole bill (after promotions and line manual discounts) */
   billManual: ManualDiscount | null = null,
+  /** Promotions the cashier chose, newest first ([] = priority decides) */
+  promotionChoices: readonly number[] = [],
 ): PricedCart {
+  return evaluate(items, ctx, freeSerials, billManual, promotionChoices).cart;
+}
+
+/** The choices the POS offers for this cart; lines with the same options share one choice. */
+export function promotionConflicts(
+  items: readonly CartItem[],
+  ctx: PricingContext,
+  promotionChoices: readonly number[] = [],
+): PromotionConflict[] {
+  return evaluate(items, ctx, [], null, promotionChoices).conflicts;
+}
+
+function evaluate(
+  items: readonly CartItem[],
+  ctx: PricingContext,
+  freeSerials: readonly FreeSerial[],
+  billManual: ManualDiscount | null,
+  promotionChoices: readonly number[],
+): { cart: PricedCart; conflicts: PromotionConflict[] } {
   const issues: CartIssue[] = [];
   const products = new Map(ctx.products.map((p) => [p.id, p]));
   const active = ctx.promotions
@@ -208,11 +270,34 @@ export function priceCart(
         return [p.id, freeSets(p, qty, amount) > 0] as const;
       }),
   );
+  const conflicts: PromotionConflict[] = [];
+  const addConflict = (
+    level: PromotionConflict['level'],
+    options: number[][],
+    applied: readonly Promotion[],
+    cartIndex: number | null,
+  ): void => {
+    if (options.length < 2) return;
+    const same = conflicts.find(
+      (c) => c.level === level && JSON.stringify(c.options) === JSON.stringify(options),
+    );
+    if (same && cartIndex !== null) {
+      same.cartIndexes.push(cartIndex);
+      return;
+    }
+    conflicts.push({
+      level,
+      cartIndexes: cartIndex === null ? [] : [cartIndex],
+      options,
+      selected: options.findIndex((o) => o[0] === applied[0]?.id),
+    });
+  };
   for (const line of lines) {
     const candidates = itemPromos.filter((p) => inScope(p, line.product, ctx.categories));
-    line.promos = selectPromotions(candidates, (p) =>
-      p.type === 'item_discount' ? line.baseQty >= p.minQty : !!reachable.get(p.id),
-    );
+    const eligible = (p: Promotion): boolean =>
+      p.type === 'item_discount' ? line.baseQty >= p.minQty : !!reachable.get(p.id);
+    line.promos = selectPromotions(candidates, eligible, promotionChoices);
+    addConflict('item', promotionOptions(candidates, eligible), line.promos, line.index);
     let unitPrice = line.product.currentPrice ?? 0;
     for (const p of line.promos) {
       if (p.type === 'item_discount' && p.discount) {
@@ -298,10 +383,10 @@ export function priceCart(
 
   // 4. Bill discounts on the total after item discounts.
   const afterItems = sum(lines.map((l) => l.gross - l.itemDiscount));
-  const billPromos = selectPromotions(
-    active.filter((p) => p.type === 'bill_discount'),
-    (p) => afterItems > 0 && afterItems >= p.minAmount,
-  );
+  const billCandidates = active.filter((p) => p.type === 'bill_discount');
+  const billEligible = (p: Promotion): boolean => afterItems > 0 && afterItems >= p.minAmount;
+  const billPromos = selectPromotions(billCandidates, billEligible, promotionChoices);
+  addConflict('bill', promotionOptions(billCandidates, billEligible), billPromos, null);
   let running = afterItems;
   for (const p of billPromos) {
     if (p.discount) running = round2(running - discountAmount(running, p.discount));
@@ -360,7 +445,7 @@ export function priceCart(
     };
   });
   const all = [...paid, ...freeLines];
-  return {
+  const cart: PricedCart = {
     lines: all,
     subtotal: sum(lines.map((l) => l.gross)),
     itemDiscount: sum(lines.map((l) => l.itemDiscount)),
@@ -373,6 +458,7 @@ export function priceCart(
     itemCount: all.reduce((n, l) => n + l.qty * l.factor, 0),
     issues,
   };
+  return { cart, conflicts };
 }
 
 /** Splits `total` over `weights` pro rata (satang), the remainder going to the largest weight. */

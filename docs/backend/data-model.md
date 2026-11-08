@@ -78,7 +78,7 @@ collection ของ mock (`MockDb` ใน `mock-backend.interceptor.ts`) ≈ �
 | `cash_movements` (`CashMovement`)       | สาขา                                 | `id`                                                                          | เงินเข้า / ออกลิ้นชัก                                                                                                            |
 | `drawer_opens` (`DrawerOpen`)           | สาขา                                 | `id`                                                                          | ไม่มีเงิน (S7)                                                                                                                   |
 | `shift_adjustments` (`ShiftAdjustment`) | สาขา                                 | `id`                                                                          | append-only (S8)                                                                                                                 |
-| `held_bills` (`HeldBill`, E48)          | สาขา + เครื่อง (`terminal_id`)       | `id`                                                                          | บิลที่พักไว้ของ POS: `payload jsonb` (รายการ, ผู้ซื้อ, ส่วนลด), `held_at`, `created_by`; ลบเมื่อเรียกคืน                         |
+| `held_bills` (`HeldBill`, E48)          | สาขา + เครื่อง (`terminal_id`)       | `id`                                                                          | บิลที่พักไว้ของ POS: `payload jsonb` (รายการ, ผู้ซื้อ, ส่วนลด, โปรที่เลือก), `held_at`, `created_by`; ลบเมื่อเรียกคืน                         |
 
 ## เลขรันเอกสาร
 

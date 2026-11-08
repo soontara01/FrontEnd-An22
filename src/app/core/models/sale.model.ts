@@ -343,6 +343,8 @@ export interface SalePayload {
   billManualDiscount?: ManualDiscount | null;
   /** Required whenever any manual discount is given */
   manualDiscountReason?: string;
+  /** Promotions the cashier chose over the priority default, newest first (missing = none) */
+  promotionChoices?: number[];
 }
 
 /** Sold while the store was VAT-registered (snapshot on the bill / its credit notes; missing = yes). */
