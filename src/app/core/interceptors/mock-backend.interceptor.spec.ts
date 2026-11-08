@@ -1915,6 +1915,13 @@ describe('mockBackendInterceptor – permissions', () => {
   });
 
   describe('void (P3)', () => {
+    // Seed promo 1 (mouse −10% → 531) runs through October 2026.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
+    });
+    afterEach(() => vi.useRealTimers());
+
     const sellMouse = async () => {
       // Without the shift rule, so the bill and the void need no open shift.
       const info = await call<StoreInfo>('GET', 'settings/store');
@@ -4105,12 +4112,16 @@ describe('mockBackendInterceptor – cost visibility (P5, E43–E45)', () => {
   };
 
   beforeEach(() => {
+    // Seed promo 1 (mouse −10% → 531) runs through October 2026.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 4, 10, 0));
     localStorage.clear();
     TestBed.configureTestingModule({
       providers: [provideHttpClient(withInterceptors([asAdminByDefault, mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
   });
+  afterEach(() => vi.useRealTimers());
 
   it('answers staff null for every cost while the company keeps it off (default)', async () => {
     const info = await get<CompanyInfo>('settings/company');
