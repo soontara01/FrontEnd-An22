@@ -10,6 +10,8 @@ POS terminal registry (many terminals per store, Revenue Dept POS ID per termina
 
 SaaS direction (multi-company, many branches per company) plan + decisions: `docs/saas-plan.md` (decisions D1–D7 confirmed 2026-10-10; steps 1–2 done in the front end + mock 2026-10-16 / 2026-10-17 with E1–E11, step 3 (stock per branch) done 2026-10-17 with E12–E19, step 4 (documents per branch) done 2026-10-17 with E20–E25 — tax topics still await the accountant; step 5 (transfers) done 2026-10-17 with E26–E32; step 6 (owner, packages, billing mock, platform admin, signup, export / deletion, audit log) done 2026-10-18 with E33–E41 — deferred: subdomain, payment gateway; hiding cost from `user` (P5) done 2026-10-18 with E43–E46 — `docs/next-steps-plan.md` section B) — tenant comes only from the token, the working branch from the `X-Branch-Id` header (server-checked).
 
+User manual (Thai PDF with screenshots, for store users): `docs/user-manual/` — `manual.html` + `img/`, built with `build-pdf.sh`; a UI change that alters a pictured screen → retake that screenshot and rebuild.
+
 Domain: front end of a **retail system for an IT / electrical-appliance store** (serial numbers, warranty, VAT-inclusive prices). SKU-master roadmap: round 1 done (VAT, categories, packs/barcodes, short name + image, sale status); round 2 done (suppliers + reorder); round 3 done (Excel import/export, label printing).
 
 ## Commands
