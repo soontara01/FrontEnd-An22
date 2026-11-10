@@ -108,6 +108,7 @@
 - **E50** (2026-10-24, E2E ของ an22-api B10) ข้อมูลส่วนบุคคลไม่ส่งใน URL: ค้นผู้ซื้อจากเลขผู้เสียภาษีเป็น `POST /tax-invoices/buyer-lookup { taxId }`
   (เดิม `GET /tax-invoices/buyer?taxId=` — access log ของ an22-web / proxy เก็บ URL เต็ม); เป็น POST ที่ไม่แก้ข้อมูล — `api-contract.md`
 - **E51** (2026-11-08) แคชเชียร์เลือกโปรที่ชนกันได้เอง: `priority` เป็นแค่ค่าเริ่มต้น, เลือกครั้งเดียวมีผลทุกบรรทัดที่ตัวเลือกเหมือนกัน, ไม่ต้องขออนุมัติ — `SalePayload.promotionChoices` (ใหม่สุดก่อน), server คิดใหม่ด้วย `priceCart()` ตัวที่ไม่เข้าเงื่อนไขไม่สนใจ ([`promotion-choice-plan.md`](promotion-choice-plan.md))
+- **E52** (2026-11-10) นำเข้าหมวดหมู่จาก Excel (`/master-data/categories/import`, แอดมิน): ครบ 3 ระดับในไฟล์เดียว อ้างแม่ด้วยรหัส, รหัสมีแล้ว = แก้ไข (ช่องว่างคงค่าเดิม), ไม่ลบ / ไม่ย้ายแม่, ทำฝั่งหน้าเว็บล้วนด้วย `POST` / `PUT /categories` เดิม บันทึกแม่ก่อนลูก — ไม่เพิ่ม endpoint
 
 ## บั๊ก / ข้อสังเกตก่อน SaaS — [`test-before-saas.md`](test-before-saas.md) ตาราง B1–B24, แผนแก้ [`before-do-saas-plan.md`](before-do-saas-plan.md)
 

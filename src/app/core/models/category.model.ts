@@ -27,6 +27,20 @@ export interface CategoryNode extends Category {
   children: CategoryNode[];
 }
 
+export const CATEGORY_CODE_MAX = 20;
+export const CATEGORY_NAME_MAX = 60;
+
+/** The format rule of a category's code and name (Excel import + mock); null = fine. */
+export function categoryFieldError(code: string, name: string): string | null {
+  if (!/^[A-Z0-9-]+$/.test(code)) return 'รหัสใช้ได้เฉพาะ A-Z, 0-9 และ -';
+  if (code.length > CATEGORY_CODE_MAX) return `รหัสยาวได้ไม่เกิน ${CATEGORY_CODE_MAX} ตัวอักษร`;
+  if (!name.trim()) return 'กรุณากรอกชื่อหมวดหมู่';
+  if (name.trim().length > CATEGORY_NAME_MAX) {
+    return `ชื่อหมวดหมู่ยาวได้ไม่เกิน ${CATEGORY_NAME_MAX} ตัวอักษร`;
+  }
+  return null;
+}
+
 /** 'ไอที > คอมพิวเตอร์ > โน้ตบุ๊ก' for a category id ('' when unknown). */
 export function categoryPath(list: readonly Category[], id: number | null): string {
   const byId = new Map(list.map((c) => [c.id, c]));
