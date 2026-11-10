@@ -7,6 +7,7 @@ import {
   signal,
 } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { RouterLink } from '@angular/router';
 import { filter, switchMap } from 'rxjs';
 import {
   CATEGORY_LEVEL_LABEL,
@@ -39,7 +40,7 @@ interface TreeRow {
 /** 3-level category tree (แผนก > หมวด > หมวดย่อย) with add / edit / delete. */
 @Component({
   selector: 'app-category-tree',
-  imports: [StatCard, EmptyState, LoadingSpinner, AdminOnlyNote, MATERIAL],
+  imports: [RouterLink, StatCard, EmptyState, LoadingSpinner, AdminOnlyNote, MATERIAL],
   templateUrl: './category-tree.html',
   styleUrl: './category-tree.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

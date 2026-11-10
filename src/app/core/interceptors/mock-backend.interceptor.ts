@@ -11,6 +11,7 @@ import { Observable, delay, dematerialize, map, materialize, of, tap, throwError
 import { environment } from '@env/environment';
 import {
   CATEGORY_MAX_LEVEL,
+  categoryFieldError,
   Category,
   CategoryLevel,
   CategoryPayload,
@@ -3367,8 +3368,8 @@ function handleCategories(
   const { categories } = db;
 
   const validate = (payload: CategoryPayload, exceptId?: number): string | null => {
-    if (!/^[A-Z0-9-]+$/.test(payload.code ?? '')) return 'รหัสใช้ได้เฉพาะ A-Z, 0-9 และ -';
-    if (!payload.name?.trim()) return 'กรุณากรอกชื่อหมวดหมู่';
+    const invalid = categoryFieldError(payload.code ?? '', payload.name ?? '');
+    if (invalid) return invalid;
     if (categories.some((c) => c.id !== exceptId && c.code === payload.code)) {
       return `รหัส ${payload.code} ซ้ำ`;
     }

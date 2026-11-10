@@ -23,6 +23,10 @@
     <mat-icon>refresh</mat-icon>
   </button>
   @if (isAdmin()) {
+    <a mat-stroked-button routerLink="/master-data/categories/import">
+      <mat-icon>upload_file</mat-icon>
+      นำเข้า Excel
+    </a>
     <button mat-flat-button (click)="openForm({})">
       <mat-icon>add</mat-icon>
       เพิ่มแผนก
