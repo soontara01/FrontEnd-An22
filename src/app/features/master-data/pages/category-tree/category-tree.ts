@@ -24,7 +24,9 @@ import { EmptyState } from '@shared/components/empty-state/empty-state';
 import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinner';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { saveBlob, timestampedName } from '@shared/utils/download';
 import { httpErrorShown } from '@core/http/http-error-shown';
+import { exportCategoriesToExcel } from '../../data/category-excel';
 import { CategoryStore } from '../../data/category.store';
 import {
   CategoryFormData,
@@ -55,6 +57,7 @@ export default class CategoryTree {
 
   protected readonly levelLabel = CATEGORY_LEVEL_LABEL;
   protected readonly search = signal('');
+  protected readonly exporting = signal(false);
   /** Collapsed node ids (everything starts expanded). */
   private readonly collapsed = signal<ReadonlySet<number>>(new Set());
 
@@ -81,6 +84,17 @@ export default class CategoryTree {
 
   constructor() {
     this.store.load();
+  }
+
+  /** The whole tree in the import format, whatever the search box shows. */
+  protected async exportExcel(): Promise<void> {
+    this.exporting.set(true);
+    try {
+      const blob = await exportCategoriesToExcel(this.store.categories());
+      saveBlob(blob, `${timestampedName('categories')}.xlsx`);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   protected toggle(node: CategoryNode): void {

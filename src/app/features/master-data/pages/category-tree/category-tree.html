@@ -22,6 +22,14 @@
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
     <mat-icon>refresh</mat-icon>
   </button>
+  <button
+    mat-stroked-button
+    [disabled]="exporting() || store.loading() || !store.categories().length"
+    (click)="exportExcel()"
+  >
+    <mat-icon>download</mat-icon>
+    ส่งออก Excel
+  </button>
   @if (isAdmin()) {
     <a mat-stroked-button routerLink="/master-data/categories/import">
       <mat-icon>upload_file</mat-icon>

@@ -49,6 +49,9 @@ export default class CategoryImport {
   protected readonly updateCount = computed(
     () => this.rows().filter((r) => r.action === 'update').length,
   );
+  protected readonly unchangedCount = computed(
+    () => this.rows().filter((r) => r.action === 'unchanged').length,
+  );
   protected readonly errorCount = computed(
     () => this.rows().filter((r) => r.action === 'error').length,
   );
