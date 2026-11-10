@@ -2,6 +2,7 @@ import { Category } from '@core/models';
 import {
   CategoryRawRow,
   buildCategoryTemplate,
+  exportCategoriesToExcel,
   importPayload,
   readCategoryRows,
   saveOrder,
@@ -69,7 +70,7 @@ describe('Category Excel import', () => {
       row(3, { code: 'IT-PC', name: 'คอมตั้งโต๊ะ', parentCode: 'IT', active: 'N' }),
     );
     expect(same).toMatchObject({
-      action: 'update',
+      action: 'unchanged',
       existingId: 4,
       name: 'ออลอินวัน',
       parentCode: 'IT-PC',
@@ -196,6 +197,45 @@ describe('Category Excel import', () => {
     await expect(readCategoryRows(new File(['not a zip'], 'x.xlsx'))).rejects.toThrow(
       'อ่านไฟล์ไม่สำเร็จ',
     );
+  });
+
+  describe('export', () => {
+    const exported = async (list: Category[]) => {
+      const blob = await exportCategoriesToExcel(list);
+      return readCategoryRows(new File([blob], 'categories.xlsx'));
+    };
+
+    it('writes the tree in import format, parents before children', async () => {
+      const rows = await exported([...categories].reverse());
+      expect(rows.map((r) => r.code)).toEqual(['IT', 'IT-NB', 'IT-PC', 'IT-PC-A']);
+      expect(rows[0]).toEqual({ rowNo: 2, code: 'IT', name: 'ไอที', active: 'Y' });
+      expect(rows[3]).toMatchObject({ parentCode: 'IT-PC', active: 'N' });
+    });
+
+    it('imports back as unchanged, with nothing to save', async () => {
+      const rows = validateCategoryRows(await exported(categories), categories);
+      expect(rows.map((r) => r.action)).toEqual(Array(4).fill('unchanged'));
+      expect(saveOrder(rows)).toEqual([]);
+    });
+
+    it('saves only the rows edited in the file', async () => {
+      const raw = await exported(categories);
+      raw[1].name = 'โน้ตบุ๊กใหม่';
+      raw.push({ rowNo: 6, code: 'IT-TB', name: 'แท็บเล็ต', parentCode: 'IT' });
+      const rows = validateCategoryRows(raw, categories);
+      expect(saveOrder(rows).map((r) => [r.code, r.action])).toEqual([
+        ['IT-NB', 'update'],
+        ['IT-TB', 'create'],
+      ]);
+    });
+
+    it('treats a department the API answers with parentId 0 as a department', async () => {
+      const zero = categories.map((c) => (c.parentId === null ? { ...c, parentId: 0 } : c));
+      const raw = await exported(zero);
+      expect(raw[0].parentCode).toBeUndefined();
+      const rows = validateCategoryRows(raw, zero);
+      expect(rows.map((r) => r.action)).toEqual(Array(4).fill('unchanged'));
+    });
   });
 
   it('reads back its own template', async () => {

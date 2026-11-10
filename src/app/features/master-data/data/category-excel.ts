@@ -1,4 +1,4 @@
-import type { Workbook } from 'exceljs';
+import type { Workbook, Worksheet } from 'exceljs';
 import { loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
 import {
   CATEGORY_CODE_MAX,
@@ -6,14 +6,17 @@ import {
   CATEGORY_MAX_LEVEL,
   CATEGORY_NAME_MAX,
   Category,
+  CategoryNode,
   CategoryPayload,
+  buildTree,
   categoryFieldError,
   categoryPath,
 } from '@core/models';
 
 /**
- * Excel (.xlsx) import of the category tree: all 3 levels in one sheet, parents named by code.
- * ExcelJS is loaded lazily (only when the user imports), so it stays out of the menu chunk.
+ * Excel (.xlsx) import/export of the category tree: all 3 levels in one sheet, parents named by
+ * code. ExcelJS is loaded lazily (only when the user exports/imports), so it stays out of the
+ * menu chunk.
  */
 
 type ColumnKey = 'code' | 'name' | 'parentCode' | 'active';
@@ -71,11 +74,7 @@ function referenceSheet(workbook: Workbook, categories: Category[]): void {
   }
 }
 
-/** Import template with example rows, column help and the categories that already exist. */
-export async function buildCategoryTemplate(categories: Category[]): Promise<Blob> {
-  const ExcelJS = await loadExcel();
-  const workbook = new ExcelJS.Workbook();
-
+function importSheet(workbook: Workbook): Worksheet {
   const sheet = workbook.addWorksheet(IMPORT_SHEET);
   sheet.columns = CATEGORY_COLUMNS.map((c) => ({
     header: c.header,
@@ -85,13 +84,10 @@ export async function buildCategoryTemplate(categories: Category[]): Promise<Blo
     style: c.key === 'code' || c.key === 'parentCode' ? { numFmt: '@' } : {},
   }));
   styleHeaderRow(sheet);
-  sheet.addRow({ code: 'EX', name: 'ตัวอย่าง: แผนก', parentCode: '', active: 'Y' });
-  sheet.addRow({ code: 'EX-A', name: 'ตัวอย่าง: หมวด', parentCode: 'EX', active: 'Y' });
-  sheet.addRow({ code: 'EX-A-1', name: 'ตัวอย่าง: หมวดย่อย', parentCode: 'EX-A', active: 'Y' });
-  for (const rowNo of [2, 3, 4]) {
-    sheet.getRow(rowNo).font = { italic: true, color: { argb: 'FF757575' } };
-  }
+  return sheet;
+}
 
+function helpSheet(workbook: Workbook, extraNote = ''): void {
   const help = workbook.addWorksheet('คำอธิบาย');
   help.columns = [
     { header: 'คอลัมน์', key: 'header', width: 26 },
@@ -102,9 +98,48 @@ export async function buildCategoryTemplate(categories: Category[]): Promise<Blo
   help.addRow({});
   help.addRow({
     header: 'หมายเหตุ',
-    help: '* = จำเป็นเมื่อเพิ่มใหม่ · แก้ไขหมวดเดิม: ช่องที่เว้นว่างจะคงค่าเดิม · ย้ายหมวดไปใต้แม่อื่นไม่ได้ · ลบแถวตัวอย่างก่อนนำเข้า',
+    help: `* = จำเป็นเมื่อเพิ่มใหม่ · แก้ไขหมวดเดิม: ช่องที่เว้นว่างจะคงค่าเดิม · ย้ายหมวดไปใต้แม่อื่นไม่ได้${extraNote}`,
   });
+}
 
+/** The whole tree in the import format, parents before children: edit it and upload it back. */
+export async function exportCategoriesToExcel(categories: Category[]): Promise<Blob> {
+  const ExcelJS = await loadExcel();
+  const workbook = new ExcelJS.Workbook();
+  const sheet = importSheet(workbook);
+
+  const codeOf = new Map(categories.map((c) => [c.id, c.code]));
+  const addRows = (nodes: CategoryNode[]) => {
+    for (const node of nodes) {
+      sheet.addRow({
+        code: node.code,
+        name: node.name,
+        parentCode: node.parentId === null ? '' : (codeOf.get(node.parentId) ?? ''),
+        active: node.active ? 'Y' : 'N',
+      });
+      addRows(node.children);
+    }
+  };
+  addRows(buildTree(categories));
+
+  helpSheet(workbook);
+  return xlsxBlob(await workbook.xlsx.writeBuffer());
+}
+
+/** Import template with example rows, column help and the categories that already exist. */
+export async function buildCategoryTemplate(categories: Category[]): Promise<Blob> {
+  const ExcelJS = await loadExcel();
+  const workbook = new ExcelJS.Workbook();
+
+  const sheet = importSheet(workbook);
+  sheet.addRow({ code: 'EX', name: 'ตัวอย่าง: แผนก', parentCode: '', active: 'Y' });
+  sheet.addRow({ code: 'EX-A', name: 'ตัวอย่าง: หมวด', parentCode: 'EX', active: 'Y' });
+  sheet.addRow({ code: 'EX-A-1', name: 'ตัวอย่าง: หมวดย่อย', parentCode: 'EX-A', active: 'Y' });
+  for (const rowNo of [2, 3, 4]) {
+    sheet.getRow(rowNo).font = { italic: true, color: { argb: 'FF757575' } };
+  }
+
+  helpSheet(workbook, ' · ลบแถวตัวอย่างก่อนนำเข้า');
   referenceSheet(workbook, categories);
   return xlsxBlob(await workbook.xlsx.writeBuffer());
 }
@@ -147,7 +182,8 @@ export async function readCategoryRows(file: File): Promise<CategoryRawRow[]> {
   return rows;
 }
 
-export type CategoryImportAction = 'create' | 'update' | 'error';
+/** `unchanged`: the code exists and the row says what is already saved — nothing to send. */
+export type CategoryImportAction = 'create' | 'update' | 'unchanged' | 'error';
 
 export interface CategoryImportRow {
   rowNo: number;
@@ -204,14 +240,17 @@ export function validateCategoryRows(
       errors.push(`ย้ายหมวดแม่ไม่ได้ (หมวดนี้อยู่ใต้ ${ownParent || 'ระดับแผนก'})`);
     }
 
+    const active = activeText ? activeText === 'Y' : (existing?.active ?? true);
+    const changed = name !== existing?.name || active !== existing?.active;
+
     return {
       rowNo: raw.rowNo,
       code,
       name,
       parentCode: existing ? (ownParent ?? '') : parentCode,
-      active: activeText ? activeText === 'Y' : (existing?.active ?? true),
+      active,
       level: existing?.level ?? 0,
-      action: existing ? 'update' : 'create',
+      action: !existing ? 'create' : changed ? 'update' : 'unchanged',
       errors,
       existingId: existing?.id,
     };
@@ -278,7 +317,9 @@ export function validateCategoryRows(
 
 /** The rows to save, parents before children whatever the order in the file. */
 export const saveOrder = (rows: readonly CategoryImportRow[]): CategoryImportRow[] =>
-  rows.filter((r) => r.action !== 'error').sort((a, b) => a.level - b.level);
+  rows
+    .filter((r) => r.action === 'create' || r.action === 'update')
+    .sort((a, b) => a.level - b.level);
 
 /**
  * The row's payload, with the parent looked up in the current list (it may have been created

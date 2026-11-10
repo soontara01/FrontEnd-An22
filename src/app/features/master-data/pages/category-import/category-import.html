@@ -10,7 +10,10 @@
   <mat-card appearance="outlined">
     <mat-card-content class="pick">
       <ol class="steps">
-        <li>ดาวน์โหลดแม่แบบ แล้วลบแถวตัวอย่างออก</li>
+        <li>
+          ดาวน์โหลดแม่แบบ แล้วลบแถวตัวอย่างออก หรือใช้ไฟล์จากปุ่ม
+          <strong>ส่งออก Excel</strong> ในหน้าหมวดหมู่ (แก้ไขแล้วนำกลับเข้ามาได้)
+        </li>
         <li>
           กรอกหนึ่งแถวต่อหนึ่งหมวด ในชีต <strong>นำเข้าหมวดหมู่</strong> — เว้น
           <strong>รหัสหมวดแม่</strong> ไว้ถ้าเป็นแผนก รหัสที่มีอยู่แล้วจะเป็นการแก้ไข
@@ -52,6 +55,7 @@
   <section class="stat-grid">
     <app-stat-card label="เพิ่มใหม่" [value]="createCount()" icon="add_circle" />
     <app-stat-card label="แก้ไข" [value]="updateCount()" icon="edit" />
+    <app-stat-card label="ไม่เปลี่ยนแปลง" [value]="unchangedCount()" icon="check" />
     <app-stat-card label="ผิดพลาด (จะข้าม)" [value]="errorCount()" icon="error" tone="error" />
   </section>
 
@@ -107,6 +111,9 @@
                     @case ('update') {
                       <span class="badge">แก้ไข</span>
                     }
+                    @case ('unchanged') {
+                      <span class="text-muted">ไม่เปลี่ยนแปลง</span>
+                    }
                     @default {
                       <span class="badge badge-error">ผิดพลาด</span>
                     }
@@ -128,6 +135,8 @@
                     } @else {
                       <span class="fail"><mat-icon inline>error</mat-icon> {{ r.message }}</span>
                     }
+                  } @else if (row.action === 'unchanged') {
+                    <span class="text-muted">ไม่ต้องบันทึก</span>
                   } @else {
                     <span class="text-muted">พร้อมนำเข้า</span>
                   }
