@@ -27,6 +27,8 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
+import { saveBlob, timestampedName } from '@shared/utils/download';
+import { exportPromotionsToExcel } from '../../data/promotion-excel';
 import { PromotionRow, PromotionsStore } from '../../data/promotions.store';
 
 /** Promotion master list (`/promotions`). */
@@ -70,6 +72,7 @@ export default class PromotionList {
   protected readonly statusLabel = PROMOTION_STATUS_LABEL;
   protected readonly dataSource = new MatTableDataSource<PromotionRow>([]);
 
+  protected readonly exporting = signal(false);
   protected readonly filterText = signal('');
   /** 'current' = active + scheduled (default) */
   protected readonly statusFilter = signal<PromotionStatus | 'all' | 'current'>('current');
@@ -122,6 +125,21 @@ export default class PromotionList {
       this.dataSource.paginator = this.paginator() ?? null;
       this.dataSource.sort = this.sort() ?? null;
     });
+  }
+
+  /** Every promotion in the import format, whatever the filters show. */
+  protected async exportExcel(): Promise<void> {
+    this.exporting.set(true);
+    try {
+      const blob = await exportPromotionsToExcel(this.store.promotions(), {
+        products: this.store.products(),
+        categories: this.store.categories(),
+        branches: this.store.branches(),
+      });
+      saveBlob(blob, `${timestampedName('promotions')}.xlsx`);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   protected typeText(row: PromotionRow): string {

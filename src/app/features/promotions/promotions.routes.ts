@@ -5,6 +5,7 @@ import { PromotionsApi } from './data/promotions-api.service';
 import { PromotionsStore } from './data/promotions.store';
 import PromotionDetail from './pages/promotion-detail/promotion-detail';
 import PromotionForm from './pages/promotion-form/promotion-form';
+import PromotionImport from './pages/promotion-import/promotion-import';
 import PromotionList from './pages/promotion-list/promotion-list';
 
 export default [
@@ -20,6 +21,12 @@ export default [
         path: 'new',
         title: 'เพิ่มโปรโมชั่น',
         component: PromotionForm,
+        canMatch: [adminGuardTo('/promotions')],
+      },
+      {
+        path: 'import',
+        title: 'นำเข้าโปรโมชั่น',
+        component: PromotionImport,
         canMatch: [adminGuardTo('/promotions')],
       },
       { path: ':id', title: 'โปรโมชั่น', component: PromotionDetail },

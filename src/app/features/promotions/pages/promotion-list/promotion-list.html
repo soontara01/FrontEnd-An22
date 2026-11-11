@@ -2,7 +2,19 @@
   <button mat-icon-button matTooltip="โหลดใหม่" (click)="store.load(true)">
     <mat-icon>refresh</mat-icon>
   </button>
+  <button
+    mat-stroked-button
+    [disabled]="exporting() || store.loading() || !store.promotions().length"
+    (click)="exportExcel()"
+  >
+    <mat-icon>download</mat-icon>
+    ส่งออก Excel
+  </button>
   @if (isAdmin()) {
+    <a mat-stroked-button routerLink="import">
+      <mat-icon>upload_file</mat-icon>
+      นำเข้า Excel
+    </a>
     <a mat-flat-button routerLink="new">
       <mat-icon>add</mat-icon>
       เพิ่มโปรโมชั่น
