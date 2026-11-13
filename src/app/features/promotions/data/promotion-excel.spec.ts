@@ -11,7 +11,6 @@ import {
   PromotionValidationContext,
   buildPromotionTemplate,
   exportPromotionsToExcel,
-  parseExcelDate,
   readPromotionRows,
   validatePromotionRows,
 } from './promotion-excel';
@@ -313,14 +312,5 @@ describe('Promotion Excel import', () => {
     await expect(readPromotionRows(new File(['not a zip'], 'x.xlsx'))).rejects.toThrow(
       'อ่านไฟล์ไม่สำเร็จ',
     );
-  });
-
-  it('parses Thai and Christian years and Excel date cells', () => {
-    expect(parseExcelDate('1/12/2569')).toBe('2026-12-01');
-    expect(parseExcelDate('01-12-2026')).toBe('2026-12-01');
-    expect(parseExcelDate(new Date(Date.UTC(2026, 11, 1)))).toBe('2026-12-01');
-    expect(parseExcelDate('')).toBeUndefined();
-    expect(parseExcelDate('2026-12-01')).toBeNull();
-    expect(parseExcelDate('29/2/2569')).toBeNull();
   });
 });

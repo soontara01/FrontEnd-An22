@@ -1,5 +1,11 @@
-import type { CellValue, Workbook, Worksheet } from 'exceljs';
-import { loadExcel, styleHeaderRow, xlsxBlob } from '@shared/utils/excel';
+import type { Workbook, Worksheet } from 'exceljs';
+import {
+  loadExcel,
+  parseExcelDate,
+  styleHeaderRow,
+  thaiDateText,
+  xlsxBlob,
+} from '@shared/utils/excel';
 import {
   Branch,
   Category,
@@ -55,7 +61,6 @@ interface Column {
 }
 
 const IMPORT_SHEET = 'นำเข้าโปรโมชั่น';
-const BE_OFFSET = 543;
 const DISCOUNT_KIND_TEXT: Record<DiscountKind, string> = { percent: '%', amount: 'บาท' };
 
 export const PROMOTION_COLUMNS: Column[] = [
@@ -183,35 +188,6 @@ export interface PromotionExcelContext {
   products: readonly Product[];
   categories: readonly Category[];
   branches: readonly Branch[];
-}
-
-/** 'YYYY-MM-DD' → '1/12/2569' (what a Thai user types). */
-function thaiDateText(iso: string | null): string {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-').map(Number);
-  return `${d}/${m}/${y + BE_OFFSET}`;
-}
-
-const pad = (n: number) => String(n).padStart(2, '0');
-
-/**
- * A typed `d/m/yyyy` (year ≥ 2400 = พ.ศ., same rule as `ThaiDateAdapter`) or an Excel date cell
- * → 'YYYY-MM-DD'. undefined = blank, null = not a date.
- */
-export function parseExcelDate(value: CellValue | undefined): string | null | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
-  if (value instanceof Date) {
-    // ExcelJS gives a date cell as midnight UTC of that day.
-    if (Number.isNaN(value.getTime())) return null;
-    return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())}`;
-  }
-  const parts = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(String(value).trim());
-  if (!parts) return null;
-  const [day, month, typedYear] = parts.slice(1).map(Number);
-  const year = typedYear >= 2400 ? typedYear - BE_OFFSET : typedYear;
-  const date = new Date(year, month - 1, day);
-  if (year < 1000 || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-  return `${year}-${pad(month)}-${pad(day)}`;
 }
 
 function importSheet(workbook: Workbook): Worksheet {

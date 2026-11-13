@@ -1,0 +1,177 @@
+<div class="heading">
+  <a mat-button routerLink="/pricing">
+    <mat-icon>arrow_back</mat-icon>
+    กลับ
+  </a>
+  <h2>นำเข้าราคาขายจาก Excel</h2>
+</div>
+
+@if (step() === 'pick') {
+  <mat-card appearance="outlined">
+    <mat-card-content class="pick">
+      <ol class="steps">
+        <li>
+          ดาวน์โหลดแม่แบบ แล้วลบแถวตัวอย่างออก หรือใช้ไฟล์จากปุ่ม
+          <strong>ส่งออก Excel</strong> ในหน้าจัดการราคา (ราคาที่ใช้อยู่ + รอเริ่ม แก้แล้วนำกลับได้)
+        </li>
+        <li>
+          กรอกหนึ่งแถวต่อหนึ่งช่วงราคา ในชีต <strong>นำเข้าราคา</strong> — SKU +
+          วันเริ่มที่ตรงกับช่วงเดิม จะเป็นการแก้ไข (ใช้ค่าตามไฟล์ทุกช่อง วันสิ้นสุดว่าง = ไม่กำหนด)
+          ไม่ตรงจะเป็นช่วงใหม่
+        </li>
+        <li>
+          ราคาใหม่ที่เริ่มระหว่างช่วงเดิม ระบบจะปิดช่วงเดิมให้ถึงวันก่อนวันเริ่ม
+          เมื่อราคาใหม่ครอบคลุมส่วนที่เหลือของช่วงเดิม ทับแบบอื่นจะขึ้นผิด · ไม่ลบช่วงราคา
+        </li>
+        <li>อัปโหลด ระบบจะตรวจทุกแถวให้ดูก่อน แล้วค่อยกดยืนยันนำเข้า</li>
+      </ol>
+
+      <div class="actions">
+        <button
+          mat-stroked-button
+          [disabled]="busy() || store.loading()"
+          (click)="downloadTemplate()"
+        >
+          <mat-icon>download</mat-icon>
+          ดาวน์โหลดแม่แบบ
+        </button>
+        <input
+          #fileInput
+          type="file"
+          hidden
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          (change)="onFileSelected($event)"
+        />
+        <button mat-flat-button [disabled]="busy() || store.loading()" (click)="fileInput.click()">
+          <mat-icon>upload_file</mat-icon>
+          เลือกไฟล์ .xlsx
+        </button>
+      </div>
+      @if (busy()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+      @if (fileError()) {
+        <p class="problem">{{ fileError() }}</p>
+      }
+    </mat-card-content>
+  </mat-card>
+} @else {
+  <section class="stat-grid">
+    <app-stat-card label="เพิ่มใหม่" [value]="createCount()" icon="add_circle" />
+    <app-stat-card label="แก้ไข" [value]="updateCount()" icon="edit" />
+    <app-stat-card label="ไม่เปลี่ยนแปลง" [value]="unchangedCount()" icon="check" />
+    <app-stat-card label="ผิดพลาด (จะข้าม)" [value]="errorCount()" icon="error" tone="error" />
+  </section>
+
+  <mat-card appearance="outlined">
+    <mat-card-content>
+      <div class="toolbar">
+        <span class="file"><mat-icon inline>description</mat-icon> {{ fileName() }}</span>
+        <mat-slide-toggle [checked]="onlyErrors()" (change)="onlyErrors.set($event.checked)">
+          แสดงเฉพาะแถวที่ผิด
+        </mat-slide-toggle>
+        <span class="spacer"></span>
+        @if (step() === 'preview') {
+          <button mat-button (click)="reset()">เลือกไฟล์ใหม่</button>
+          <button mat-flat-button [disabled]="!validRows().length" (click)="import()">
+            <mat-icon>publish</mat-icon>
+            นำเข้า {{ validRows().length }} รายการ
+          </button>
+        } @else if (step() === 'done') {
+          <span class="badge badge-success">สำเร็จ {{ savedCount() }}</span>
+          @if (failedCount()) {
+            <span class="badge badge-error">ไม่สำเร็จ {{ failedCount() }}</span>
+          }
+          <button mat-button (click)="reset()">นำเข้าไฟล์อื่น</button>
+          <a mat-flat-button routerLink="/pricing">ไปหน้าจัดการราคา</a>
+        }
+      </div>
+
+      @if (step() === 'saving') {
+        <mat-progress-bar mode="determinate" [value]="progress()" />
+      }
+
+      <div class="table-wrap">
+        <table class="rows">
+          <thead>
+            <tr>
+              <th class="num">แถว</th>
+              <th>รายการ</th>
+              <th>SKU</th>
+              <th>ชื่อสินค้า</th>
+              <th class="num">ราคา</th>
+              <th>ช่วงวันที่</th>
+              <th>ผลตรวจ / ผลนำเข้า</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of visibleRows(); track row.rowNo) {
+              <tr [class.error]="row.action === 'error'">
+                <td class="num text-muted">{{ row.rowNo }}</td>
+                <td>
+                  @switch (row.action) {
+                    @case ('create') {
+                      <span class="badge badge-success">เพิ่มใหม่</span>
+                    }
+                    @case ('update') {
+                      <span class="badge">แก้ไข</span>
+                    }
+                    @case ('unchanged') {
+                      <span class="text-muted">ไม่เปลี่ยนแปลง</span>
+                    }
+                    @default {
+                      <span class="badge badge-error">ผิดพลาด</span>
+                    }
+                  }
+                </td>
+                <td class="mono">{{ row.sku || '-' }}</td>
+                <td>{{ row.name || '-' }}</td>
+                <td class="num">
+                  @if (row.payload) {
+                    {{ row.payload.price | currency: 'THB' : 'symbol-narrow' : '1.0-2' }}
+                  } @else {
+                    -
+                  }
+                </td>
+                <td>{{ range(row) }}</td>
+                <td>
+                  @if (row.errors.length) {
+                    <ul class="errors">
+                      @for (e of row.errors; track e) {
+                        <li>{{ e }}</li>
+                      }
+                    </ul>
+                  } @else if (resultOf(row); as r) {
+                    @if (r.ok) {
+                      <span class="ok"><mat-icon inline>check_circle</mat-icon> บันทึกแล้ว</span>
+                    } @else {
+                      <span class="fail"><mat-icon inline>error</mat-icon> {{ r.message }}</span>
+                    }
+                  } @else if (row.action === 'unchanged') {
+                    <span class="text-muted">ไม่ต้องบันทึก</span>
+                  } @else {
+                    <span class="text-muted">พร้อมนำเข้า</span>
+                  }
+                  @if (row.closes.length || row.closedFor) {
+                    <ul class="closes">
+                      @for (c of row.closes; track c.id) {
+                        <li>ปิดช่วงเดิม {{ c.label }}</li>
+                      }
+                      @if (row.closedFor) {
+                        <li>{{ row.closedFor }}</li>
+                      }
+                    </ul>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="7" class="text-muted empty">ไม่มีแถวที่ผิด 🎉</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </mat-card-content>
+  </mat-card>
+}
