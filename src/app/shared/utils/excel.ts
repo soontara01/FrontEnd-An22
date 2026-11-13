@@ -1,4 +1,4 @@
-import type { Worksheet } from 'exceljs';
+import type { CellValue, Worksheet } from 'exceljs';
 
 /**
  * Shared ExcelJS helpers. ExcelJS (~1 MB) must stay in its own lazy chunk:
@@ -49,3 +49,34 @@ export function excelDate(iso: string): Date {
 
 export const EXCEL_DATETIME = 'dd/mm/yyyy hh:mm';
 export const EXCEL_MONEY = '#,##0.00';
+
+const BE_OFFSET = 543;
+
+/** 'YYYY-MM-DD' → '1/12/2569' (what a Thai user types). */
+export function thaiDateText(iso: string | null): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d}/${m}/${y + BE_OFFSET}`;
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * A typed `d/m/yyyy` (year ≥ 2400 = พ.ศ., same rule as `ThaiDateAdapter`) or an Excel date cell
+ * → 'YYYY-MM-DD'. undefined = blank, null = not a date.
+ */
+export function parseExcelDate(value: CellValue | undefined): string | null | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value instanceof Date) {
+    // ExcelJS gives a date cell as midnight UTC of that day.
+    if (Number.isNaN(value.getTime())) return null;
+    return `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())}`;
+  }
+  const parts = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(String(value).trim());
+  if (!parts) return null;
+  const [day, month, typedYear] = parts.slice(1).map(Number);
+  const year = typedYear >= 2400 ? typedYear - BE_OFFSET : typedYear;
+  const date = new Date(year, month - 1, day);
+  if (year < 1000 || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return `${year}-${pad(month)}-${pad(day)}`;
+}

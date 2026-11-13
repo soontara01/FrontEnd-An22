@@ -11,7 +11,7 @@ import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '@core/auth/auth.service';
 import { effectiveCost, formatDateRange } from '@core/models';
 import { AdminOnlyNote } from '@shared/components/admin-only-note/admin-only-note';
@@ -21,6 +21,8 @@ import { PageHeader } from '@shared/components/page-header/page-header';
 import { StatCard } from '@shared/components/stat-card/stat-card';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
+import { saveBlob, timestampedName } from '@shared/utils/download';
+import { exportPricesToExcel } from '../../data/price-excel';
 import { EXPIRING_DAYS, PriceRow, PricingStore } from '../../data/pricing.store';
 
 type RowFilter = 'all' | 'none' | 'scheduled' | 'expiring';
@@ -29,6 +31,7 @@ type RowFilter = 'all' | 'none' | 'scheduled' | 'expiring';
 @Component({
   selector: 'app-price-overview',
   imports: [
+    RouterLink,
     CurrencyPipe,
     DecimalPipe,
     MatTableModule,
@@ -61,6 +64,7 @@ export default class PriceOverview {
     ),
   );
   protected readonly dataSource = new MatTableDataSource<PriceRow>([]);
+  protected readonly exporting = signal(false);
   protected readonly filterText = signal('');
   protected readonly rowFilter = signal<RowFilter>('all');
 
@@ -117,6 +121,21 @@ export default class PriceOverview {
       this.dataSource.paginator = this.paginator() ?? null;
       this.dataSource.sort = this.sort() ?? null;
     });
+  }
+
+  /** Current + scheduled periods of every SKU in the import format, whatever the filters show. */
+  protected async exportExcel(): Promise<void> {
+    this.exporting.set(true);
+    try {
+      const blob = await exportPricesToExcel(
+        this.store.prices(),
+        this.store.products(),
+        this.store.today,
+      );
+      saveBlob(blob, `${timestampedName('prices')}.xlsx`);
+    } finally {
+      this.exporting.set(false);
+    }
   }
 
   protected cost(row: PriceRow): number {
