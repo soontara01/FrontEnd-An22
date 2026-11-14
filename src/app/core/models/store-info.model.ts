@@ -1,4 +1,9 @@
-import { branchDetailsError, companyInfoError, companyInfoOf } from './company.model';
+import {
+  branchDetailsError,
+  companyInfoError,
+  companyInfoOf,
+  type MfaRequirement,
+} from './company.model';
 import { BranchType } from './supplier.model';
 
 /**
@@ -38,6 +43,8 @@ export interface StoreInfo {
   shiftMaxHours: number;
   /** Staff (`user`) see cost / profit too (P5, E43); admins always do */
   staffSeeCost: boolean;
+  /** Who must log in with Microsoft Authenticator (E55); a company setting, not printed */
+  mfaRequired?: MfaRequirement;
 }
 
 export const STORE_INFO_DEFAULTS: StoreInfo = {

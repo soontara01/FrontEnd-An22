@@ -29,7 +29,17 @@
     <table mat-table matSort [dataSource]="dataSource">
       <ng-container matColumnDef="username">
         <th mat-header-cell *matHeaderCellDef mat-sort-header>ชื่อผู้ใช้</th>
-        <td mat-cell *matCellDef="let u">{{ u.username }}</td>
+        <td mat-cell *matCellDef="let u">
+          {{ u.username }}
+          @if (u.mfaEnabled) {
+            <mat-icon
+              class="mfa"
+              matTooltip="ใช้ Microsoft Authenticator"
+              aria-label="ใช้ Microsoft Authenticator"
+              >phonelink_lock</mat-icon
+            >
+          }
+        </td>
       </ng-container>
 
       <ng-container matColumnDef="name">
@@ -87,6 +97,18 @@
               <mat-icon>key</mat-icon>
             </button>
           </span>
+          @if (u.mfaEnabled) {
+            <span [matTooltip]="mfaResetBlocker(u) || 'ล้าง Microsoft Authenticator (มือถือหาย)'">
+              <button
+                mat-icon-button
+                aria-label="ล้าง Microsoft Authenticator"
+                [disabled]="!!mfaResetBlocker(u)"
+                (click)="resetMfa(u)"
+              >
+                <mat-icon>phonelink_erase</mat-icon>
+              </button>
+            </span>
+          }
           @if (isOwner() && u.role !== 'owner') {
             <span [matTooltip]="transferBlocker(u) || 'โอนความเป็นเจ้าของบริษัทให้ผู้ใช้นี้'">
               <button

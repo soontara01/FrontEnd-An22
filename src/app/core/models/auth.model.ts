@@ -7,7 +7,30 @@ export interface LoginRequest {
   companyCode: string;
   username: string;
   password: string;
+  /** Through `/auth/login-mfa`: always ask the Authenticator code (E55) */
+  mfa?: boolean;
 }
+
+/**
+ * Setting Authenticator up (E55): the secret (base32) to type by hand and the `otpauth://` URL the
+ * QR code holds. Sent only until the first code confirms it.
+ */
+export interface MfaSetup {
+  secret: string;
+  otpauthUrl: string;
+}
+
+/**
+ * The password was right, now the Authenticator code (E55, `POST /auth/mfa/verify { code }`):
+ * `verify` = the user has it, `setup` = scan `setup` first (the first code turns it on). The api's
+ * `challenge` stays in the web server's session, like a token.
+ */
+export type MfaChallenge = { mfa: 'verify' } | { mfa: 'setup'; setup: MfaSetup };
+
+/** `POST /auth/login`: the session, or the code step first. */
+export type LoginResult = LoginResponse | MfaChallenge;
+
+export const isMfaChallenge = (r: LoginResult): r is MfaChallenge => 'mfa' in r;
 
 /**
  * The session: user + company (the tenant comes only from the session's token, which the web

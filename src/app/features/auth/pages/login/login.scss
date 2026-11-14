@@ -40,3 +40,15 @@ mat-card-actions {
   margin: 0 0 16px;
   color: var(--mat-sys-error);
 }
+
+.lead {
+  margin: 0 0 16px;
+}
+
+.note {
+  margin: 0;
+  padding: 0 8px 8px;
+  font-size: 0.875rem;
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+}

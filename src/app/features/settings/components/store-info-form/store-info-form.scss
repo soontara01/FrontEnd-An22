@@ -88,3 +88,7 @@ form + form {
   padding-top: 8px;
   border-top: 1px solid var(--mat-sys-outline-variant);
 }
+
+.mfa-required {
+  width: min(360px, 100%);
+}

@@ -37,7 +37,10 @@ export type AuditAction =
   | 'terminal_change'
   | 'shift_close_other'
   | 'shift_approve'
-  | 'shift_adjust';
+  | 'shift_adjust'
+  | 'mfa_enable'
+  | 'mfa_disable'
+  | 'mfa_reset';
 
 export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   login: 'เข้าสู่ระบบ',
@@ -71,6 +74,9 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   shift_close_other: 'ปิดกะแทน',
   shift_approve: 'อนุมัติส่วนต่างกะ',
   shift_adjust: 'ปรับปรุงกะ',
+  mfa_enable: 'เปิดใช้ Authenticator',
+  mfa_disable: 'ปิด Authenticator',
+  mfa_reset: 'ล้าง Authenticator ของผู้ใช้',
 };
 
 /** Who did it: a user of the company, the SaaS operator (platform admin) or the system itself. */
@@ -178,6 +184,12 @@ export const auditBranchCodes = (
 
 const onOff = (v: boolean): string => (v ? 'เปิด' : 'ปิด');
 
+const MFA_TEXT: Record<CompanyInfo['mfaRequired'], string> = {
+  none: 'ไม่บังคับ',
+  admins: 'เจ้าของ + ผู้ดูแล',
+  all: 'ทุกคน',
+};
+
 /** Settings-page labels of the company settings an audit entry names, with how each value reads. */
 const COMPANY_SETTING_TEXT: { [K in keyof CompanyInfo]: [string, (v: CompanyInfo[K]) => string] } =
   {
@@ -191,6 +203,7 @@ const COMPANY_SETTING_TEXT: { [K in keyof CompanyInfo]: [string, (v: CompanyInfo
     shiftVarianceLimit: ['ส่วนต่างที่ต้องให้ admin อนุมัติ', auditBaht],
     shiftMaxHours: ['เตือนเมื่อกะเปิดนานเกิน', (v) => `${v} ชม.`],
     staffSeeCost: ['ผู้ใช้ทั่วไปเห็นทุน / กำไร', onOff],
+    mfaRequired: ['บังคับ Microsoft Authenticator', (v) => MFA_TEXT[v] ?? v],
   };
 
 /**

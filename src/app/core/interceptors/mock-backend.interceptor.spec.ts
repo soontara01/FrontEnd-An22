@@ -14,7 +14,10 @@ import {
   CompanyInfo,
   Promotion,
   LoginResponse,
+  LoginResult,
   MeResponse,
+  MfaChallenge,
+  MfaSetup,
   MenuAccess,
   PosTerminal,
   CountCheckResult,
@@ -61,6 +64,8 @@ import {
   serialMovements,
   storeInfoError,
   todayIso,
+  totpCode,
+  totpStep,
 } from '../models';
 import { SEED_STORE_INFO, mockBackendInterceptor, mockToken } from './mock-backend.interceptor';
 
@@ -3163,6 +3168,7 @@ describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
       active: true,
       branchIds: [],
       allBranches: true,
+      mfaEnabled: false,
       createdAt: '2026-10-18T00:00:00.000Z',
     };
     localStorage.setItem(
@@ -3306,6 +3312,7 @@ describe('mockBackendInterceptor – owner (E33)', () => {
             active: true,
             branchIds: [],
             allBranches: true,
+            mfaEnabled: false,
             createdAt: '',
           },
           {
@@ -3317,6 +3324,7 @@ describe('mockBackendInterceptor – owner (E33)', () => {
             active: true,
             branchIds: [1],
             allBranches: false,
+            mfaEnabled: false,
             createdAt: '',
           },
         ],
@@ -4413,5 +4421,181 @@ describe('mockBackendInterceptor – list limits', () => {
   it('keeps undated lists open', async () => {
     expect(await messageOf('products')).toBeNull();
     expect(await messageOf('transfers')).toBeNull();
+  });
+});
+
+describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
+  let http: HttpClient;
+  const ADMIN = mockToken(1, 1);
+  const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
+
+  const call = <T>(method: string, url: string, body?: unknown, token?: string) => {
+    const headers = token ? new HttpHeaders({ Authorization: `Bearer ${token}` }) : undefined;
+    return firstValueFrom(
+      http.request<T>(method, `/api/${method === 'GET' ? withRange(url) : url}`, { body, headers }),
+    );
+  };
+  const failure = (p: Promise<unknown>) =>
+    p.then(
+      () => null,
+      (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
+    );
+  const login = (username: string, password: string, mfa?: boolean) =>
+    call<LoginResult>('POST', 'auth/login', {
+      companyCode: 'DEMO',
+      username,
+      password,
+      ...(mfa && { mfa }),
+    });
+  const verify = (code: string) => call<LoginResponse>('POST', 'auth/mfa/verify', { code });
+  const codeNow = (secret: string, ahead = 0) => totpCode(secret, totpStep(Date.now()) + ahead);
+  const mfaSession = () => JSON.parse(localStorage.getItem('an22.mock.mfaSession') ?? 'null');
+  const audit = async () =>
+    (await call<AuditEvent[]>('GET', 'audit-log', undefined, ADMIN)).map((e) => [
+      e.action,
+      e.detail,
+    ]);
+  const setRequirement = async (mfaRequired: CompanyInfo['mfaRequired']) => {
+    const info = await call<CompanyInfo>('GET', 'settings/company', undefined, ADMIN);
+    await call('PUT', 'settings/company', { ...info, mfaRequired }, ADMIN);
+  };
+  /** Sets somchai up through /auth/login-mfa; returns the secret. */
+  const enrolStaff = async (): Promise<string> => {
+    const challenge = (await login('somchai', '1234', true)) as MfaChallenge;
+    if (challenge.mfa !== 'setup') throw new Error('expected setup');
+    await verify(codeNow(challenge.setup.secret));
+    await call('POST', 'auth/logout');
+    return challenge.setup.secret;
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+    TestBed.configureTestingModule({
+      providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
+    });
+    http = TestBed.inject(HttpClient);
+  });
+
+  it('keeps /auth/login one step for a user without Authenticator', async () => {
+    const session = await login('somchai', '1234');
+    expect('mfa' in session).toBe(false);
+    expect(sessionToken()).toBe(STAFF);
+  });
+
+  it('asks for set-up through /auth/login-mfa and logs in on the first right code', async () => {
+    const challenge = await login('somchai', '1234', true);
+    expect(challenge).toMatchObject({ mfa: 'setup' });
+    expect('challenge' in challenge).toBe(false); // kept by the web server's session
+    expect(sessionToken()).toBeNull();
+    expect(mfaSession()).toMatch(/^mock-mfa-token\.t1\.u2\.e\d+$/);
+    const { setup } = challenge as Extract<MfaChallenge, { mfa: 'setup' }>;
+    expect(setup.otpauthUrl).toBe(
+      `otpauth://totp/AN22%3ADEMO%3Asomchai?secret=${setup.secret}&issuer=AN22&algorithm=SHA1&digits=6&period=30`,
+    );
+    // The same waiting secret on another try (the user may have scanned it already).
+    const again = (await login('somchai', '1234', true)) as typeof challenge;
+    expect(again).toEqual(challenge);
+
+    expect(await failure(verify('000000'))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    const session = await verify(codeNow(setup.secret));
+    expect(session.user).toMatchObject({ username: 'somchai', mfaEnabled: true });
+    expect(sessionToken()).toBe(STAFF);
+    expect(mfaSession()).toBeNull();
+    expect((await audit()).slice(0, 3)).toEqual([
+      ['login', 'ด้วย Microsoft Authenticator'],
+      ['mfa_enable', 'ผูกตอนเข้าสู่ระบบ'],
+      ['login_failed', 'รหัส Microsoft Authenticator ไม่ถูกต้อง'],
+    ]);
+  });
+
+  it('never skips the code once a user has it, and a used code never passes again', async () => {
+    const secret = await enrolStaff();
+    expect(await login('somchai', '1234')).toEqual({ mfa: 'verify' });
+    expect(sessionToken()).toBeNull();
+    expect(await failure(verify(codeNow(secret)))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    expect((await verify(codeNow(secret, 1))).user.username).toBe('somchai');
+  });
+
+  it('refuses the code step without a waiting login (400, not 401)', async () => {
+    expect(await failure(verify('123456'))).toEqual([
+      400,
+      'หมดเวลายืนยันรหัส กรุณาเข้าสู่ระบบใหม่',
+    ]);
+  });
+
+  it('makes the users the company requires set it up at /auth/login', async () => {
+    await setRequirement('admins');
+    expect('mfa' in (await login('somchai', '1234'))).toBe(false);
+    expect(await login('admin', 'admin')).toMatchObject({ mfa: 'setup' });
+    await setRequirement('all');
+    expect(await login('somchai', '1234')).toMatchObject({ mfa: 'setup' });
+    expect(
+      await failure(
+        call(
+          'PUT',
+          'settings/company',
+          {
+            ...COMPANY_INFO_DEFAULTS,
+            name: 'x',
+            taxId: '',
+            vatRegistered: false,
+            mfaRequired: 'x',
+          },
+          ADMIN,
+        ),
+      ),
+    ).toEqual([400, 'การบังคับใช้ Microsoft Authenticator ไม่ถูกต้อง']);
+  });
+
+  it('lets a user turn their own on and off on the settings page', async () => {
+    const setup = await call<MfaSetup>('POST', 'me/mfa/setup', {}, STAFF);
+    expect(await failure(call('POST', 'me/mfa/confirm', { code: '000000' }, STAFF))).toEqual([
+      400,
+      'รหัสยืนยันไม่ถูกต้อง',
+    ]);
+    const on = await call<User>('POST', 'me/mfa/confirm', { code: codeNow(setup.secret) }, STAFF);
+    expect(on.mfaEnabled).toBe(true);
+    expect(await failure(call('POST', 'me/mfa/setup', {}, STAFF))).toEqual([
+      400,
+      'เปิดใช้ Microsoft Authenticator อยู่แล้ว',
+    ]);
+    expect(await failure(call('POST', 'me/mfa/disable', { password: 'x' }, STAFF))).toEqual([
+      400,
+      'รหัสผ่านไม่ถูกต้อง',
+    ]);
+    await setRequirement('all');
+    expect(await failure(call('POST', 'me/mfa/disable', { password: '1234' }, STAFF))).toEqual([
+      400,
+      'บริษัทบังคับให้ใช้ Microsoft Authenticator — ปิดเองไม่ได้',
+    ]);
+    await setRequirement('none');
+    const off = await call<User>('POST', 'me/mfa/disable', { password: '1234' }, STAFF);
+    expect(off.mfaEnabled).toBe(false);
+    expect((await audit()).filter(([a]) => a.startsWith('mfa_'))).toEqual([
+      ['mfa_disable', 'ปิดใช้จากหน้าตั้งค่า'],
+      ['mfa_enable', 'เปิดใช้จากหน้าตั้งค่า'],
+    ]);
+  });
+
+  it('lets an admin clear a lost phone, never their own; the flag is never written by the form', async () => {
+    await enrolStaff();
+    expect((await call<User>('PUT', 'users/2', { mfaEnabled: false }, ADMIN)).mfaEnabled).toBe(
+      true,
+    );
+    expect((await failure(call('DELETE', 'users/2/mfa', undefined, STAFF)))?.[0]).toBe(403);
+    expect(await failure(call('DELETE', 'users/1/mfa', undefined, ADMIN))).toEqual([
+      400,
+      'ล้าง Microsoft Authenticator ของตัวเองไม่ได้ — ปิดได้ที่หน้าตั้งค่า',
+    ]);
+    const cleared = await call<User>('DELETE', 'users/2/mfa', undefined, ADMIN);
+    expect(cleared.mfaEnabled).toBe(false);
+    expect('mfa' in (await login('somchai', '1234'))).toBe(false);
+    expect((await audit())[1]).toEqual([
+      'mfa_reset',
+      'ผู้ดูแลระบบล้าง Microsoft Authenticator ให้',
+    ]);
+    // Never in the company export (E38), like passwords.
+    const exported = await call<CompanyExport>('GET', 'company/export', undefined, ADMIN);
+    expect('mfa' in exported.data).toBe(false);
   });
 });

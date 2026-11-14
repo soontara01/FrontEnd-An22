@@ -86,6 +86,21 @@
         มีผลเมื่อผู้ใช้โหลดหน้าใหม่
       </p>
 
+      <h3 class="section">ยืนยันตัวตนสองขั้น (Microsoft Authenticator)</h3>
+      <mat-form-field appearance="outline" class="mfa-required">
+        <mat-label>บังคับใช้ Microsoft Authenticator</mat-label>
+        <mat-select formControlName="mfaRequired">
+          @for (o of mfaOptions; track o.value) {
+            <mat-option [value]="o.value">{{ o.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <p class="text-muted small">
+        ผู้ที่ถูกบังคับต้องใส่รหัส 6 หลักจากแอปทุกครั้งที่เข้าสู่ระบบ (ยังไม่ได้ผูก =
+        ผูกตอนเข้าสู่ระบบครั้งถัดไป) · ผู้ใช้ทุกคนเปิดใช้เองได้ที่การ์ดโปรไฟล์ ·
+        มีผลตั้งแต่การเข้าสู่ระบบครั้งถัดไป
+      </p>
+
       @if (companyEditable()) {
         <div class="actions">
           @if (companyProblem(); as message) {

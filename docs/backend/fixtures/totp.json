@@ -1,0 +1,132 @@
+[
+  {
+    "name": "RFC 6238 T=59",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "287082",
+      "nowMs": 59000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": 1,
+      "codeNow": "287082"
+    }
+  },
+  {
+    "name": "RFC 6238 T=1111111109",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "081804",
+      "nowMs": 1111111109000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": 37037036,
+      "codeNow": "081804"
+    }
+  },
+  {
+    "name": "RFC 6238 T=1234567890",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "005924",
+      "nowMs": 1234567890000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": 41152263,
+      "codeNow": "005924"
+    }
+  },
+  {
+    "name": "RFC 6238 T=2000000000",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "279037",
+      "nowMs": 2000000000000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": 66666666,
+      "codeNow": "279037"
+    }
+  },
+  {
+    "name": "RFC 6238 T=20000000000",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "353130",
+      "nowMs": 20000000000000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": 666666666,
+      "codeNow": "353130"
+    }
+  },
+  {
+    "name": "code of the step before now is taken (phone clock behind)",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "081804",
+      "nowMs": 1111111139000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": 37037036,
+      "codeNow": "050471"
+    }
+  },
+  {
+    "name": "two steps away is refused",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "287082",
+      "nowMs": 119000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": null,
+      "codeNow": "969429"
+    }
+  },
+  {
+    "name": "a used step never passes again",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "005924",
+      "nowMs": 1234567890000,
+      "lastStep": 41152263
+    },
+    "expected": {
+      "step": null,
+      "codeNow": "005924"
+    }
+  },
+  {
+    "name": "spaces are taken out",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "005 924",
+      "nowMs": 1234567890000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": 41152263,
+      "codeNow": "005924"
+    }
+  },
+  {
+    "name": "not 6 digits",
+    "input": {
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "code": "05924",
+      "nowMs": 1234567890000,
+      "lastStep": null
+    },
+    "expected": {
+      "step": null,
+      "codeNow": "005924"
+    }
+  }
+]
