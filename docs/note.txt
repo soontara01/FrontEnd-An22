@@ -6,7 +6,7 @@ docs/test-before-saas.md กับ docs/test-plan.md ยังอยู่แค
 
 เตรียมเครื่องที่จะใช้ทดสอบ (ทำครั้งเดียว)
 
-git pull แล้ว nvm use (Node 24) แล้ว npm install
+git pull แล้ว nvm use (Node 26) แล้ว npm install
 ติดตั้ง Claude in Chrome จาก https://claude.ai/chrome แล้ว login claude.ai ใน Chrome ด้วยบัญชีเดียวกับ Claude Code
 เปิด Claude Code ในโฟลเดอร์โปรเจกต์
 ใช้ Chrome บนเครื่องเดียวกับที่รันโปรเจกต์จะง่ายสุด ถ้าเป็นคนละเครื่อง ต้อง forward port 4200 ไปที่เครื่องที่เปิด Chrome

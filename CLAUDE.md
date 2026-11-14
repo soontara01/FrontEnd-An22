@@ -16,7 +16,7 @@ Domain: front end of a **retail system for an IT / electrical-appliance store** 
 
 ## Commands
 
-Node.js 24 (`.nvmrc`, `engines` in package.json) — `nvm use` before running anything.
+Node.js 26.13.1 (`.nvmrc`, `engines` in package.json) — `nvm use` before running anything.
 
 - `npm start` — dev server on http://localhost:4200 (login company `DEMO` + `admin` / `admin` = the owner; platform admin `/platform/login` `platform` / `platform`; staff: any active user by username, password `1234`, e.g. `somchai` / `1234` — the mock token names the user, so cashier names and admin-only rules follow the login)
 - `npm run build` — production build → `dist/frontend-an22/browser`; check the "Lazy chunk files" table
