@@ -23,6 +23,8 @@ import { qrDataUrl } from '@shared/utils/qr';
     <div class="qr">
       @if (qr(); as src) {
         <img [src]="src" width="200" height="200" alt="QR code สำหรับ Microsoft Authenticator" />
+      } @else if (qrFailed()) {
+        <p class="qr-failed" role="alert">แสดง QR ไม่ได้ — ใช้รหัสลับด้านล่างแทน</p>
       } @else {
         <div class="placeholder" aria-hidden="true"></div>
       }
@@ -53,6 +55,10 @@ import { qrDataUrl } from '@shared/utils/qr';
       background: #fff;
       border-radius: 8px;
     }
+    .qr-failed {
+      margin: 0;
+      color: var(--mat-sys-error);
+    }
     .manual {
       margin: 0 0 16px;
       font-size: 0.875rem;
@@ -73,15 +79,23 @@ import { qrDataUrl } from '@shared/utils/qr';
 export class MfaSetupPanel {
   readonly setup = input.required<MfaSetup>();
   protected readonly qr = signal<string | null>(null);
+  protected readonly qrFailed = signal(false);
   protected readonly secretText = () => formatTotpSecret(this.setup().secret);
 
   constructor() {
     effect(() => {
       const url = this.setup().otpauthUrl;
       this.qr.set(null);
+      this.qrFailed.set(false);
       qrDataUrl(url).then(
         (src) => this.qr.set(src),
-        () => this.qr.set(null),
+        (err: unknown) => {
+          this.qrFailed.set(true);
+          // Not an HTTP error: let GlobalErrorHandler log it (B13) — the secret still works.
+          queueMicrotask(() => {
+            throw err;
+          });
+        },
       );
     });
   }

@@ -2187,7 +2187,6 @@ function handle(
   if (path === 'me' && req.method === 'GET') {
     return ok(companySession(db, actor));
   }
-  if (path.startsWith('me/mfa')) return handleOwnMfa(req, path, db, actor);
   if (
     tenant.suspendedReason === 'deletion' &&
     !path.startsWith('company/') &&
@@ -2206,6 +2205,7 @@ function handle(
   if (branchHeader === null && needsBranch(req, path)) {
     return error(400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน');
   }
+  if (path.startsWith('me/mfa/')) return handleOwnMfa(req, path, db, actor);
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
   if (path === 'company' || path.startsWith('company/')) return handleCompany(req, path, db);
   if (path === 'audit-log' && req.method === 'GET') {

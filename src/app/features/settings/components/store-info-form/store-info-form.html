@@ -87,7 +87,7 @@
       </p>
 
       <h3 class="section">ยืนยันตัวตนสองขั้น (Microsoft Authenticator)</h3>
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" class="mfa-required">
         <mat-label>บังคับใช้ Microsoft Authenticator</mat-label>
         <mat-select formControlName="mfaRequired">
           @for (o of mfaOptions; track o.value) {
