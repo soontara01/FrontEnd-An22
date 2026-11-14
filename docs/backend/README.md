@@ -65,7 +65,7 @@ clone ทุก repo ไว้ในโฟลเดอร์แม่เดี�
   web ใส่ `Authorization` ให้ทุก request `/api`, ตอบ `auth/logout` / `platform/auth/logout` เอง, กัน CSRF ด้วย `XSRF-TOKEN` / `X-XSRF-TOKEN`, ไม่ใช้งาน 12 ชม. / สูงสุด 7 วัน — รายละเอียด `api-contract.md` หัวข้อ "Session"
 - **ความปลอดภัย (E49)**: CSP + header ความปลอดภัยทุกคำตอบ, log ไม่มีค่าลับใน query, จำกัดจำนวนครั้งต่อ IP (`AUTH_RATE_LIMIT`), ส่ง `X-Real-IP` ให้ api,
   `no-store` ให้คำตอบ `/api`, cookie `__Host-an22.sid` บน https
-- **ทำแล้ว (C1, 2026-10-19): repo `an22-web`** — Node 24 + Express 5 (TypeScript รันตรง), port `4000`, env `API_URL` / `DIST_DIR` / `LOG_LEVEL`,
+- **ทำแล้ว (C1, 2026-10-19): repo `an22-web`** — Node 26 (เดิม 24, ย้าย 2026-11-14) + Express 5 (TypeScript รันตรง), port `4000`, env `API_URL` / `DIST_DIR` / `LOG_LEVEL`,
   health `GET /healthz`, deploy เป็น Docker image ที่มี dist ของหน้าบ้านอยู่ในตัว (`npm run docker:build`); รายละเอียดใน `CLAUDE.md` ของ repo นั้น
 
 **api** (รวมงาน db เดิม — E47)
