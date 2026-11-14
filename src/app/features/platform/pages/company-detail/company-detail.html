@@ -154,6 +154,32 @@
           </button>
         </mat-card-content>
       </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header>
+          <mat-card-title>Microsoft Authenticator ของผู้ใช้</mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="stack">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>ชื่อผู้ใช้</mat-label>
+            <input
+              matInput
+              autocomplete="off"
+              spellcheck="false"
+              [placeholder]="c.owner?.username ?? ''"
+              [value]="mfaUsername()"
+              (input)="mfaUsername.set($any($event.target).value)"
+            />
+            <mat-hint>ว่าง = เจ้าของบริษัท ({{ c.owner?.username ?? '-' }})</mat-hint>
+          </mat-form-field>
+          <p class="text-muted small">
+            มือถือหายและไม่มีผู้ดูแลระดับบริษัทคนอื่นล้างให้ — ยืนยันตัวตนก่อน
+          </p>
+          <button mat-stroked-button [disabled]="busy() || !mfaTarget()" (click)="resetMfa()">
+            ล้าง Authenticator
+          </button>
+        </mat-card-content>
+      </mat-card>
     }
   </div>
 

@@ -17,6 +17,7 @@ import {
   LoginResult,
   MeResponse,
   MfaChallenge,
+  MfaChange,
   MenuAccess,
   PosTerminal,
   CountCheckResult,
@@ -4529,7 +4530,7 @@ describe('mockBackendInterceptor – list limits', () => {
   });
 });
 
-describe('mockBackendInterceptor – Microsoft Authenticator (E55 / E57)', () => {
+describe('mockBackendInterceptor – Microsoft Authenticator (E55 / E57 / E58)', () => {
   let http: HttpClient;
   const ADMIN = mockToken(1, 1);
   const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
@@ -4663,5 +4664,69 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55 / E57)', () =>
     // Never in the company export (E38), like passwords.
     const exported = await call<CompanyExport>('GET', 'company/export', undefined, ADMIN);
     expect('mfa' in exported.data).toBe(false);
+  });
+
+  it("moves one's own Authenticator to a new phone with the password + the old phone (E58)", async () => {
+    const old = await enrolStaff();
+    const start = (password: string, code: string) =>
+      call<MfaChange>('POST', 'me/mfa/change', { password, code }, STAFF);
+    expect(await failure(start('nope', totpCode(old, enrolStep + 1)))).toEqual([
+      400,
+      'รหัสผ่านไม่ถูกต้อง',
+    ]);
+    expect(await failure(start('1234', '000000'))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    const change = await start('1234', totpCode(old, enrolStep + 1));
+    expect(change.setup.secret).not.toBe(old);
+    expect(change.setup.otpauthUrl).toContain('AN22%3ADEMO%3Asomchai');
+
+    const confirm = (proof: string, code: string) =>
+      call<User>('POST', 'me/mfa/change/confirm', { change: proof, code }, STAFF);
+    const fresh = totpCode(change.setup.secret, totpStep(Date.now()));
+    expect(await failure(confirm('other', fresh))).toEqual([
+      400,
+      'หมดเวลาเปลี่ยนเครื่อง กรุณาเริ่มใหม่',
+    ]);
+    expect(await failure(confirm(change.change, '000000'))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    // Until confirmed the old phone stays the one.
+    expect(lastStepOf(old)).toBe(enrolStep + 1);
+
+    expect((await confirm(change.change, fresh)).mfaEnabled).toBe(true);
+    expect((await audit())[0]).toEqual(['mfa_enable', 'เปลี่ยนเครื่องจากหน้าตั้งค่า']);
+    // The old phone no longer works, the new one does; the proof is used up.
+    await login('somchai', '1234');
+    expect(await failure(verify(totpCode(old, totpStep(Date.now()) + 1)))).toEqual([
+      400,
+      'รหัสยืนยันไม่ถูกต้อง',
+    ]);
+    const next = totpStep(Date.now()) + 1;
+    expect((await verify(totpCode(change.setup.secret, next))).user.username).toBe('somchai');
+    expect(await failure(confirm(change.change, fresh))).toEqual([
+      400,
+      'หมดเวลาเปลี่ยนเครื่อง กรุณาเริ่มใหม่',
+    ]);
+  });
+
+  it("lets the platform clear a user's Authenticator, e.g. the owner (E58)", async () => {
+    await enrolStaff();
+    await passPlatformLogin((url, body) => call('POST', url, body));
+    const platform = sessionToken(true);
+    const reset = (username: string) =>
+      call('POST', 'platform/companies/1/mfa-reset', { username }, platform);
+    expect(await failure(reset('nobody'))).toEqual([400, 'ไม่พบชื่อผู้ใช้นี้ในบริษัท']);
+    expect(await reset('SomChai')).toBeNull();
+    expect(await failure(reset('somchai'))).toEqual([
+      400,
+      'ผู้ใช้นี้ยังไม่ได้ผูก Microsoft Authenticator',
+    ]);
+    // A shop token never reaches the platform endpoint.
+    expect((await failure(call('POST', 'platform/companies/1/mfa-reset', {}, ADMIN)))?.[0]).toBe(
+      401,
+    );
+    expect(await login('somchai', '1234')).toMatchObject({ mfa: 'setup' });
+    const events = await call<AuditEvent[]>('GET', 'audit-log', undefined, ADMIN);
+    expect(events.find((e) => e.action === 'mfa_reset')).toMatchObject({
+      detail: 'ผู้ให้บริการล้าง Microsoft Authenticator ให้',
+      actorKind: 'platform',
+    });
   });
 });

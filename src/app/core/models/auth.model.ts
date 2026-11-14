@@ -26,6 +26,17 @@ export interface MfaSetup {
 export type MfaChallenge = { mfa: 'verify' } | { mfa: 'setup'; setup: MfaSetup };
 
 /**
+ * Moving one's own Authenticator to another phone (E58, Settings): `POST /me/mfa/change
+ * { password, code }` (code of the phone in use) → the new phone's `setup` + `change` (a short-lived
+ * proof, 10 minutes) → `POST /me/mfa/change/confirm { change, code }` (code of the new phone) swaps
+ * them. The old phone keeps working until then.
+ */
+export interface MfaChange {
+  change: string;
+  setup: MfaSetup;
+}
+
+/**
  * `POST /auth/login` / `POST /auth/signup`: always the code step (E57) — the session comes from
  * `POST /auth/mfa/verify`. Kept a union so an answer is never taken for a session by accident.
  */

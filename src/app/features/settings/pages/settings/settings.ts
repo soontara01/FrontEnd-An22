@@ -1,10 +1,12 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, inject } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { MatListModule } from '@angular/material/list';
 import { AuthService } from '@core/auth/auth.service';
 import { ROLE_LABEL } from '@core/models';
 import { ThemeService } from '@core/services/theme.service';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
+import { MfaChangeDialog } from '../../dialogs/mfa-change-dialog';
 import { StoreInfoForm } from '../../components/store-info-form/store-info-form';
 import { ThisTerminal } from '../../components/this-terminal/this-terminal';
 
@@ -83,13 +85,19 @@ import { ThisTerminal } from '../../components/this-terminal/this-terminal';
                 }
               </span>
               <span matListItemLine
-                >Microsoft Authenticator — ใช้ทุกครั้งที่เข้าสู่ระบบ · ทำมือถือหาย / เปลี่ยนเครื่อง
-                ให้ผู้ดูแลระบบล้างให้</span
+                >Microsoft Authenticator — ใช้ทุกครั้งที่เข้าสู่ระบบ · เปลี่ยนเครื่องเองได้ด้านล่าง
+                · ทำมือถือหาย ให้ผู้ดูแลระบบล้างให้</span
               >
             </mat-list-item>
           </mat-list>
         </mat-card-content>
         <mat-card-actions>
+          @if (user.mfaEnabled) {
+            <button mat-stroked-button (click)="changeMfaPhone()">
+              <mat-icon>phonelink_setup</mat-icon>
+              เปลี่ยนเครื่อง Authenticator
+            </button>
+          }
           <button mat-stroked-button (click)="auth.logout()">
             <mat-icon>logout</mat-icon>
             ออกจากระบบ
@@ -116,4 +124,11 @@ export default class Settings {
   protected readonly auth = inject(AuthService);
   protected readonly theme = inject(ThemeService);
   protected readonly roleLabel = ROLE_LABEL;
+  private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
+
+  /** E58: the dialog needs the route's `SettingsApi`. */
+  protected changeMfaPhone(): void {
+    this.dialog.open(MfaChangeDialog, { injector: this.injector, width: '420px' });
+  }
 }

@@ -86,6 +86,16 @@ TOTP มาตรฐาน RFC 6238 (HMAC-SHA1, 6 หลัก, ช่วง 30 
 - secret เก็บเข้ารหัส (`PiiCipher`) ไม่เคยส่งออกหลังยืนยันแล้ว และไม่อยู่ใน `GET /company/export`
 - `POST /auth/signup` ก็ตอบขั้นรหัสแบบ `setup` (ไม่มี token) — owner เข้าระบบได้หลังผูกด้วย `POST /auth/mfa/verify` (E57)
 - ผูกได้ตอน login / สมัครเท่านั้น ผู้ใช้ปิดเองไม่ได้; มือถือหาย → admin `DELETE /users/:id/mfa` แล้วผูกใหม่ตอน login ครั้งถัดไป
+  (owner ที่ไม่มีผู้ดูแลระดับบริษัทคนอื่น → platform `POST /platform/companies/:id/mfa-reset`, E58)
+- **เปลี่ยนเครื่องเอง** (E58, ตอน login อยู่ — หน้าตั้งค่า, ทุก role):
+  - `POST /me/mfa/change { password, code }` → `MfaChange { change, setup: { secret, otpauthUrl } }` — ตรวจตามลำดับ: รหัสผ่านผิด → 400 "รหัสผ่านไม่ถูกต้อง"
+    (นับผิดแบบ `auth/verify`), ยังไม่ผูก → 400 "ผู้ใช้นี้ยังไม่ได้ผูก Microsoft Authenticator", รหัสของเครื่องเดิมผิด / ช่วงที่ใช้แล้ว → 400 "รหัสยืนยันไม่ถูกต้อง"
+    (นับผิดในตัวนับบัญชีเดียวกับ login); ถูก = ใช้ช่วงนั้นแล้ว · secret ใหม่ยังไม่บันทึก เครื่องเดิมใช้ได้ต่อจนยืนยัน
+  - `change` = JWT aud `mfa-change` อายุ **10 นาที** (tenant, user, secret ใหม่เข้ารหัส) — browser ได้รับ (ไม่ใช่ token: ใช้แทน token / challenge ไม่ได้ → 401)
+  - `POST /me/mfa/change/confirm { change, code }` → `User` — `change` ไม่มี / หมดอายุ / ของผู้ใช้อื่น / ใช้ไปแล้ว / ถูกล้างไประหว่างนั้น →
+    400 "หมดเวลาเปลี่ยนเครื่อง กรุณาเริ่มใหม่"; รหัสแรกของเครื่องใหม่ผิด → 400 "รหัสยืนยันไม่ถูกต้อง"; ถูก → secret ใหม่แทนเดิม (ช่วงนั้นใช้แล้ว),
+    audit `mfa_enable` "เปลี่ยนเครื่องจากหน้าตั้งค่า"
+  - api ไม่ log body ของ `/me/mfa/**`; web จำกัดจำนวนครั้งต่อ IP ของ `POST /api/me/mfa/change` (นับเฉพาะที่ไม่ผ่าน)
 - `POST /auth/verify` (อนุมัติที่เครื่อง POS) ยังตรวจรหัสผ่านอย่างเดียว ไม่ถามรหัส Authenticator
 
 ### Error
@@ -227,6 +237,7 @@ token แยก (mock `mock-platform-token.p<id>`; อยู่ใน session �
 | `PUT /platform/companies/:id/plan`           | `{ planId }` → detail                            | audit `plan_change`                                                                                                                                                                                                                                                                                                                          |
 | `POST /platform/companies/:id/suspend`       | `{ note }` → detail                              | `suspendCompanyError()`; `suspendedReason: 'platform'`; audit `company_suspend`                                                                                                                                                                                                                                                              |
 | `POST /platform/companies/:id/reactivate`    | → detail                                         | `reactivateCompanyError()`: เฉพาะที่ platform ระงับ (ค้างชำระ → รับชำระ, รอลบ → owner ยกเลิก); audit `company_reactivate`                                                                                                                                                                                                                    |
+| `POST /platform/companies/:id/mfa-reset`     | `{ username }` → `null`                          | E58: ล้าง Microsoft Authenticator ของผู้ใช้ร้าน (เช่น owner ทำมือถือหายและไม่มีผู้ดูแลระดับบริษัทคนอื่น); username ไม่สนตัวพิมพ์ / ช่องว่าง; ไม่มี → 400 "ไม่พบชื่อผู้ใช้นี้ในบริษัท", ยังไม่ผูก → 400 "ผู้ใช้นี้ยังไม่ได้ผูก Microsoft Authenticator"; audit `mfa_reset` "ผู้ให้บริการล้าง Microsoft Authenticator ให้" |
 | `PUT /platform/companies/:id/owner-password` | `{ password }` → `null`                          | `passwordError()`; audit `user_password`                                                                                                                                                                                                                                                                                                     |
 | `POST /platform/invoices/:id/pay`            | → detail                                         | `payInvoiceError()`; ถ้าระงับเพราะค้างและไม่เหลือใบเกินผ่อนผัน → เปิดใช้งานเอง; audit `invoice_paid`                                                                                                                                                                                                                                         |
 | `GET /platform/outbox`                       | → `PlatformEmail[]`                              | **mock เท่านั้น** (อีเมลที่ระบบจะส่ง — ลิงก์ตั้งรหัสผ่าน E41); api จริงส่งอีเมลแทน                                                                                                                                                                                                                                                           |

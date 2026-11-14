@@ -5,8 +5,10 @@ import {
   Branch,
   BranchDetails,
   CompanyInfo,
+  MfaChange,
   PosTerminal,
   Shift,
+  User,
   normalizeShift,
 } from '@core/models';
 
@@ -31,6 +33,16 @@ export class SettingsApi {
 
   saveBranch(details: BranchDetails): Observable<Branch> {
     return this.api.put<Branch>('settings/branch', details);
+  }
+
+  /** E58: moving one's Authenticator to a new phone — password + a code of the phone in use. */
+  mfaChange(password: string, code: string): Observable<MfaChange> {
+    return this.api.post<MfaChange>('me/mfa/change', { password, code });
+  }
+
+  /** E58: the new phone's first code swaps the secret. */
+  mfaChangeConfirm(change: string, code: string): Observable<User> {
+    return this.api.post<User>('me/mfa/change/confirm', { change, code });
   }
 
   posTerminals(): Observable<PosTerminal[]> {

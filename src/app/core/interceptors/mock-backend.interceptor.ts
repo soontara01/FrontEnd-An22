@@ -246,9 +246,14 @@ import {
   companySettingsChanges,
   AuditAction,
   MfaChallenge,
+  MfaChange,
   MfaSetup,
   MFA_CHALLENGE_EXPIRED,
+  MFA_CHANGE_EXPIRED,
+  MFA_NOT_SET,
+  MFA_USER_NOT_FOUND,
   MFA_WRONG_CODE,
+  MFA_WRONG_PASSWORD,
   PLATFORM_MFA_ACCOUNT,
   mfaResetError,
   newTotpSecret,
@@ -349,7 +354,12 @@ interface MockMfa {
   secret: string;
   confirmed: boolean;
   lastStep: number | null;
+  /** E58: the new phone's secret while a change waits for its first code (`change` = the proof) */
+  pending?: { secret: string; change: string; expiresAt: number };
 }
+
+/** E58: how long a started phone change waits for the new phone's code. */
+const MFA_CHANGE_MINUTES = 10;
 
 /**
  * A tenant in the platform registry with its package (E34); name and tax ID come from the
@@ -1806,6 +1816,20 @@ function platformResponse(
     platformChanged = true;
     return ok(platformDetail(company, storage));
   }
+  if (action === 'mfa-reset' && req.method === 'POST') {
+    let result = MFA_USER_NOT_FOUND as User | string;
+    withTenantDb(storage, company, (db) => {
+      result = platformMfaReset(db, String(body['username'] ?? ''));
+      if (typeof result !== 'string') {
+        pushAudit(
+          db,
+          mfaEvent('mfa_reset', result, 'ผู้ให้บริการล้าง Microsoft Authenticator ให้'),
+          by,
+        );
+      }
+    });
+    return typeof result === 'string' ? error(400, result) : ok(null);
+  }
   if (action === 'owner-password' && req.method === 'PUT') {
     const password = String(body['password'] ?? '');
     const problem = passwordError(password);
@@ -2097,6 +2121,8 @@ function recordAudit(
       ref: { kind: 'user', id: user?.id ?? null, label: user?.username ?? '' },
       detail: 'ผู้ดูแลระบบตั้งรหัสผ่านใหม่ให้',
     });
+  } else if (path === 'me/mfa/change/confirm' && actor) {
+    add(mfaEvent('mfa_enable', actor as User, 'เปลี่ยนเครื่องจากหน้าตั้งค่า'));
   } else if ((m = /^users\/(\d+)\/mfa$/.exec(path))) {
     const user = db.users.find((u) => u.id === Number(m![1]));
     if (user) add(mfaEvent('mfa_reset', user, 'ผู้ดูแลระบบล้าง Microsoft Authenticator ให้'));
@@ -2245,6 +2271,7 @@ function handle(
   if (path === 'me' && req.method === 'GET') {
     return ok(companySession(db, actor));
   }
+  if (path.startsWith('me/mfa/')) return handleOwnMfa(req, path, db, actor as User);
   if (
     tenant.suspendedReason === 'deletion' &&
     !path.startsWith('company/') &&
@@ -5702,6 +5729,63 @@ function verifyMfaLogin(req: HttpRequest<unknown>, db: MockDb): Observable<HttpR
   }
   pushAudit(db, { action: 'login', ref: null, detail: 'ด้วย Microsoft Authenticator' }, user);
   return ok({ token: mockToken(tenant.id, user.id), ...companySession(db, user) });
+}
+
+/**
+ * Moving one's own Authenticator to a new phone (E58): `POST me/mfa/change { password, code }`
+ * (the phone in use) → the new phone's setup + `change`; `POST me/mfa/change/confirm { change,
+ * code }` (the new phone) swaps the secret. Until then the old phone keeps working.
+ */
+function handleOwnMfa(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+  me: User,
+): Observable<HttpResponse<unknown>> {
+  if (req.method !== 'POST') return notFound(req, path);
+  const body = (req.body ?? {}) as { password?: unknown; code?: unknown; change?: unknown };
+  const entry = db.mfa[me.id];
+  if (path === 'me/mfa/change') {
+    if (String(body.password ?? '') !== passwordOf(db, me.id)) {
+      return error(400, MFA_WRONG_PASSWORD);
+    }
+    if (!entry?.confirmed) return error(400, MFA_NOT_SET);
+    const step = verifyTotp(entry.secret, String(body.code ?? ''), Date.now(), entry.lastStep);
+    if (step === null) return error(400, MFA_WRONG_CODE);
+    entry.lastStep = step;
+    const secret = newTotpSecret();
+    const change = `mock-mfa-change.u${me.id}.${Date.now()}`;
+    entry.pending = { secret, change, expiresAt: Date.now() + MFA_CHANGE_MINUTES * 60_000 };
+    const answer: MfaChange = {
+      change,
+      setup: { secret, otpauthUrl: otpauthUrl(tenant.code, me.username, secret) },
+    };
+    return ok(answer);
+  }
+  if (path === 'me/mfa/change/confirm') {
+    const pending = entry?.pending;
+    if (!entry || !pending || pending.change !== body.change || pending.expiresAt < Date.now()) {
+      return error(400, MFA_CHANGE_EXPIRED);
+    }
+    const step = verifyTotp(pending.secret, String(body.code ?? ''), Date.now(), null);
+    if (step === null) return error(400, MFA_WRONG_CODE);
+    db.mfa[me.id] = { secret: pending.secret, confirmed: true, lastStep: step };
+    return ok({ ...me, mfaEnabled: true });
+  }
+  return notFound(req, path);
+}
+
+/**
+ * The platform clearing a user's Authenticator (E58, e.g. an owner who lost the phone with no
+ * other company admin): by username; the next login sets it up again.
+ */
+function platformMfaReset(db: MockDb, usernameIn: string): User | string {
+  const user = db.users.find((u) => u.username === normalizeUsername(usernameIn));
+  if (!user) return MFA_USER_NOT_FOUND;
+  if (!db.mfa[user.id]?.confirmed) return MFA_NOT_SET;
+  delete db.mfa[user.id];
+  user.mfaEnabled = false;
+  return user;
 }
 
 const mfaEvent = (action: AuditAction, user: User, detail: string): AuditEntry => ({
