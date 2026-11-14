@@ -96,6 +96,26 @@ const sessionToken = (platform = false): string =>
     localStorage.getItem(platform ? 'an22.mock.platformSession' : 'an22.mock.session') ?? 'null',
   );
 
+/**
+ * A platform admin's whole login (E56): the password, then the Authenticator code — the secret is
+ * read from the mock's registry (the app would show it as a QR the first time).
+ */
+async function passPlatformLogin(
+  post: <T>(url: string, body: unknown) => Promise<T>,
+): Promise<PlatformLoginResponse> {
+  await post<MfaChallenge>('platform/auth/login', { username: 'platform', password: 'platform' });
+  const entry = (
+    JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}') as {
+      platformMfa?: Record<number, { secret: string; lastStep: number | null }>;
+    }
+  ).platformMfa?.[1];
+  if (!entry) throw new Error('no platform Authenticator secret');
+  const step = Math.max(totpStep(Date.now()), (entry.lastStep ?? -1) + 1);
+  return post<PlatformLoginResponse>('platform/auth/mfa/verify', {
+    code: totpCode(entry.secret, step),
+  });
+}
+
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
 const atTerminal1: HttpInterceptorFn = (req, next) =>
   next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
@@ -3843,10 +3863,7 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
       (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
     );
   const loginPlatform = async () =>
-    (await call<PlatformLoginResponse>('POST', 'platform/auth/login', {
-      username: 'platform',
-      password: 'platform',
-    })) && sessionToken(true);
+    (await passPlatformLogin((url, body) => call('POST', url, body))) && sessionToken(true);
   const plantOverdue = () =>
     localStorage.setItem(
       'an22.mock.platform',
@@ -3871,6 +3888,43 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
       providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
+  });
+
+  it('always asks a platform admin for the Authenticator code (E56)', async () => {
+    const post = <T>(url: string, body: unknown) => call<T>('POST', url, body);
+    expect(await failure(post('platform/auth/mfa/verify', { code: '123456' }))).toEqual([
+      400,
+      'หมดเวลายืนยันรหัส กรุณาเข้าสู่ระบบใหม่',
+    ]);
+    const first = await post<MfaChallenge>('platform/auth/login', {
+      username: 'platform',
+      password: 'platform',
+    });
+    expect(first).toMatchObject({ mfa: 'setup' });
+    expect('challenge' in first).toBe(false);
+    expect(sessionToken(true)).toBeNull();
+    const { setup } = first as Extract<MfaChallenge, { mfa: 'setup' }>;
+    expect(setup.otpauthUrl).toContain('otpauth://totp/AN22%3APLATFORM%3Aplatform?secret=');
+    expect(await failure(post('platform/auth/mfa/verify', { code: '000000' }))).toEqual([
+      400,
+      'รหัสยืนยันไม่ถูกต้อง',
+    ]);
+    const step = totpStep(Date.now());
+    const session = await post<PlatformLoginResponse>('platform/auth/mfa/verify', {
+      code: totpCode(setup.secret, step),
+    });
+    expect(session).toEqual({ admin: { id: 1, username: 'platform', name: 'ผู้ดูแลแพลตฟอร์ม' } });
+    expect(sessionToken(true)).toBe('mock-platform-token.p1');
+
+    await post('platform/auth/logout', null);
+    expect(
+      await post('platform/auth/login', { username: 'platform', password: 'platform' }),
+    ).toEqual({ mfa: 'verify' });
+    expect(
+      await failure(post('platform/auth/mfa/verify', { code: totpCode(setup.secret, step) })),
+    ).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    await post('platform/auth/mfa/verify', { code: totpCode(setup.secret, step + 1) });
+    expect(sessionToken(true)).toBe('mock-platform-token.p1');
   });
 
   it('logs in apart from the companies; tokens of one side never pass on the other', async () => {
@@ -4012,11 +4066,8 @@ describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
       http.post<LoginResponse>('/api/auth/login', { companyCode: 'DEMO', username, password }),
     );
   const platformToken = async () =>
-    (await firstValueFrom(
-      http.post<PlatformLoginResponse>('/api/platform/auth/login', {
-        username: 'platform',
-        password: 'platform',
-      }),
+    (await passPlatformLogin((url, body) =>
+      firstValueFrom(http.post<never>(`/api/${url}`, body)),
     )) && sessionToken(true);
 
   beforeEach(() => {
@@ -4289,11 +4340,7 @@ describe('mockBackendInterceptor – web server session (E48)', () => {
       username: 'admin',
       password: 'admin',
     });
-  const platformLogin = () =>
-    call<PlatformLoginResponse>('POST', 'platform/auth/login', {
-      username: 'platform',
-      password: 'platform',
-    });
+  const platformLogin = () => passPlatformLogin((url, body) => call('POST', url, body));
 
   beforeEach(() => {
     localStorage.clear();
@@ -4460,10 +4507,13 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
     await call('PUT', 'settings/company', { ...info, mfaRequired }, ADMIN);
   };
   /** Sets somchai up through /auth/login-mfa; returns the secret. */
+  /** The step its code was used in, so later codes don't depend on the clock ticking (no flake). */
+  let enrolStep = 0;
   const enrolStaff = async (): Promise<string> => {
     const challenge = (await login('somchai', '1234', true)) as MfaChallenge;
     if (challenge.mfa !== 'setup') throw new Error('expected setup');
-    await verify(codeNow(challenge.setup.secret));
+    enrolStep = totpStep(Date.now());
+    await verify(totpCode(challenge.setup.secret, enrolStep));
     await call('POST', 'auth/logout');
     return challenge.setup.secret;
   };
@@ -4512,8 +4562,11 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
     const secret = await enrolStaff();
     expect(await login('somchai', '1234')).toEqual({ mfa: 'verify' });
     expect(sessionToken()).toBeNull();
-    expect(await failure(verify(codeNow(secret)))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
-    expect((await verify(codeNow(secret, 1))).user.username).toBe('somchai');
+    expect(await failure(verify(totpCode(secret, enrolStep)))).toEqual([
+      400,
+      'รหัสยืนยันไม่ถูกต้อง',
+    ]);
+    expect((await verify(totpCode(secret, enrolStep + 1))).user.username).toBe('somchai');
   });
 
   it('refuses the code step without a waiting login (400, not 401)', async () => {

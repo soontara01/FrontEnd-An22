@@ -36,6 +36,13 @@ export function loginNeedsMfa(
   return asked || user.mfaEnabled || mfaRequiredFor(user, company);
 }
 
+/**
+ * Platform admins (E56) always log in with Authenticator; their account in the app reads
+ * "AN22 · PLATFORM:<username>" (no company). A lost phone is cleared on the server
+ * (`scripts/platform-mfa-reset.sh` of the api).
+ */
+export const PLATFORM_MFA_ACCOUNT = 'PLATFORM';
+
 export const MFA_WRONG_CODE = 'รหัสยืนยันไม่ถูกต้อง';
 export const MFA_CHALLENGE_EXPIRED = 'หมดเวลายืนยันรหัส กรุณาเข้าสู่ระบบใหม่';
 

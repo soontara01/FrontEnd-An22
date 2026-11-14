@@ -30,7 +30,9 @@ export type MfaChallenge = { mfa: 'verify' } | { mfa: 'setup'; setup: MfaSetup }
 /** `POST /auth/login`: the session, or the code step first. */
 export type LoginResult = LoginResponse | MfaChallenge;
 
-export const isMfaChallenge = (r: LoginResult): r is MfaChallenge => 'mfa' in r;
+/** The code step (shop login E55 / platform login E56) rather than a session. */
+export const isMfaChallenge = <T extends object>(r: T | MfaChallenge): r is MfaChallenge =>
+  'mfa' in r;
 
 /**
  * The session: user + company (the tenant comes only from the session's token, which the web
