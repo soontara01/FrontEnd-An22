@@ -1,6 +1,7 @@
 import creditNote from '../../../../../docs/backend/fixtures/credit-note.json';
 import payment from '../../../../../docs/backend/fixtures/payment.json';
 import priceCart from '../../../../../docs/backend/fixtures/price-cart.json';
+import totp from '../../../../../docs/backend/fixtures/totp.json';
 import { buildGoldenFixtures } from './golden-fixtures';
 
 // The JSON is what the API's tests read; it must stay what the rules produce today.
@@ -9,6 +10,7 @@ const written: Record<string, unknown[]> = {
   'price-cart': priceCart,
   payment,
   'credit-note': creditNote,
+  totp,
 };
 
 describe('golden fixtures (docs/backend/fixtures)', () => {

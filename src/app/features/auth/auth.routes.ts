@@ -14,6 +14,14 @@ export default [
     canMatch: [guestGuard],
     component: Login,
   },
+  // Same page, always with the Microsoft Authenticator code after the password (E55).
+  {
+    path: 'login-mfa',
+    title: 'เข้าสู่ระบบด้วย Microsoft Authenticator',
+    canMatch: [guestGuard],
+    component: Login,
+    data: { mfa: true },
+  },
   // Signing up (E37) and an owner's password reset (E41): no session needed.
   { path: 'signup', title: 'สมัครใช้งาน', canMatch: [guestGuard], component: Signup },
   {

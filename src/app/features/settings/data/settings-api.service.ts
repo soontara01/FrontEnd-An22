@@ -5,8 +5,10 @@ import {
   Branch,
   BranchDetails,
   CompanyInfo,
+  MfaSetup,
   PosTerminal,
   Shift,
+  User,
   normalizeShift,
 } from '@core/models';
 
@@ -31,6 +33,20 @@ export class SettingsApi {
 
   saveBranch(details: BranchDetails): Observable<Branch> {
     return this.api.put<Branch>('settings/branch', details);
+  }
+
+  /** Own Microsoft Authenticator (E55): a waiting secret, its first code turns it on. */
+  mfaSetup(): Observable<MfaSetup> {
+    return this.api.post<MfaSetup>('me/mfa/setup', {});
+  }
+
+  mfaConfirm(code: string): Observable<User> {
+    return this.api.post<User>('me/mfa/confirm', { code });
+  }
+
+  /** Turns it off (the password typed again); refused while the company requires it. */
+  mfaDisable(password: string): Observable<User> {
+    return this.api.post<User>('me/mfa/disable', { password });
   }
 
   posTerminals(): Observable<PosTerminal[]> {

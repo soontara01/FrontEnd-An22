@@ -19,6 +19,7 @@ import { AuthService } from '@core/auth/auth.service';
 import {
   ROLE_LABEL,
   User,
+  mfaResetError,
   ownerTransferError,
   userChangeError,
   userScopeError,
@@ -130,6 +131,29 @@ export default class UserList {
 
   protected setPassword(user: User): void {
     this.dialog.open(PasswordDialog, { data: user, width: '400px' });
+  }
+
+  /** Why this admin may not clear the user's Authenticator ('' = may, E55). */
+  protected mfaResetBlocker(user: User): string {
+    return this.scopeBlocker(user) || (mfaResetError(user, this.auth.user()?.id ?? 0) ?? '');
+  }
+
+  protected resetMfa(user: User): void {
+    openConfirm(this.dialog, {
+      title: 'ล้าง Microsoft Authenticator',
+      message:
+        `ล้าง Authenticator ของ "${user.name}" ใช่หรือไม่? ` +
+        'ครั้งถัดไปที่ต้องใช้ ผู้ใช้จะต้องสแกน QR ผูกใหม่ — ใช้เมื่อผู้ใช้ทำมือถือหายหรือเปลี่ยนเครื่อง',
+      confirmText: 'ล้าง',
+    })
+      .pipe(
+        filter(Boolean),
+        switchMap(() => this.store.resetMfa(user.id)),
+      )
+      .subscribe({
+        next: () => this.notify.success('ล้าง Microsoft Authenticator แล้ว'),
+        error: httpErrorShown,
+      });
   }
 
   /** Why this user cannot be deleted ('' = can): yourself / the last active admin. */

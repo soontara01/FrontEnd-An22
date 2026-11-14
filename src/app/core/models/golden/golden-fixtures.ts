@@ -21,6 +21,7 @@ import {
   toRefunds,
 } from '../credit-note.model';
 import type { Exchange } from '../exchange.model';
+import { base32Encode, totpCode, totpStep, verifyTotp } from '../totp.model';
 import {
   SALE_DEFAULTS,
   type BranchHere,
@@ -1091,9 +1092,43 @@ const creditNoteFixture = (c: CreditNoteCase): CreditNoteFixture => {
   };
 };
 
+/**
+ * TOTP (E55): `verifyTotp(secret, code, nowMs, lastStep)` → the matched step or null, plus the
+ * code of the step (`totpCode()`). Secret = RFC 6238's SHA-1 key "12345678901234567890".
+ */
+export interface TotpFixture {
+  name: string;
+  input: { secret: string; code: string; nowMs: number; lastStep: number | null };
+  expected: { step: number | null; codeNow: string };
+}
+
+const TOTP_SECRET = base32Encode(new TextEncoder().encode('12345678901234567890'));
+const TOTP_CASES: [string, string, number, number | null][] = [
+  ['RFC 6238 T=59', '287082', 59_000, null],
+  ['RFC 6238 T=1111111109', '081804', 1_111_111_109_000, null],
+  ['RFC 6238 T=1234567890', '005924', 1_234_567_890_000, null],
+  ['RFC 6238 T=2000000000', '279037', 2_000_000_000_000, null],
+  ['RFC 6238 T=20000000000', '353130', 20_000_000_000_000, null],
+  ['code of the step before now is taken (phone clock behind)', '081804', 1_111_111_139_000, null],
+  ['two steps away is refused', '287082', 59_000 + 60_000, null],
+  ['a used step never passes again', '005924', 1_234_567_890_000, 41_152_263],
+  ['spaces are taken out', '005 924', 1_234_567_890_000, null],
+  ['not 6 digits', '05924', 1_234_567_890_000, null],
+];
+
+const totpFixture = ([name, code, nowMs, lastStep]: (typeof TOTP_CASES)[number]): TotpFixture => ({
+  name,
+  input: { secret: TOTP_SECRET, code, nowMs, lastStep },
+  expected: {
+    step: verifyTotp(TOTP_SECRET, code, nowMs, lastStep),
+    codeNow: totpCode(TOTP_SECRET, totpStep(nowMs)),
+  },
+});
+
 /** File name (without `.json`) → its cases, as written to `docs/backend/fixtures/`. */
 export const buildGoldenFixtures = (): Record<string, unknown[]> => ({
   'price-cart': CART_CASES.map(priceCartFixture),
   payment: PAYMENT_CASES.map(paymentFixture),
   'credit-note': CN_CASES.map(creditNoteFixture),
+  totp: TOTP_CASES.map(totpFixture),
 });

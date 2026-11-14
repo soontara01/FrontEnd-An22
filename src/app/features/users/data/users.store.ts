@@ -56,6 +56,12 @@ export class UsersStore {
       .pipe(tap((user) => this._users.update((list) => list.map((u) => (u.id === id ? user : u)))));
   }
 
+  resetMfa(id: number): Observable<User> {
+    return this.api
+      .resetMfa(id)
+      .pipe(tap((user) => this._users.update((list) => list.map((u) => (u.id === id ? user : u)))));
+  }
+
   setPassword(id: number, password: string): Observable<null> {
     return this.api.setPassword(id, password);
   }

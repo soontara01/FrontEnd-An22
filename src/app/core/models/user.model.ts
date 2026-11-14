@@ -25,10 +25,12 @@ export interface User {
   branchIds: number[];
   /** Every branch of the company, now and later (an admin with it = company admin, E5; owner always) */
   allBranches: boolean;
+  /** Logs in with Microsoft Authenticator (E55) — server-derived, changed only via `/me/mfa` / reset */
+  mfaEnabled: boolean;
   createdAt: string;
 }
 
-export type UserPayload = Omit<User, 'id' | 'createdAt'>;
+export type UserPayload = Omit<User, 'id' | 'createdAt' | 'mfaEnabled'>;
 
 /** `POST /users`: a new user needs a password (E10); the API never returns it. */
 export type NewUserPayload = UserPayload & { password: string };

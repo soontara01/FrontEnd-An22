@@ -1,6 +1,6 @@
 <mat-card class="card" appearance="outlined">
   <mat-card-header>
-    <mat-card-title>เข้าสู่ระบบ</mat-card-title>
+    <mat-card-title>{{ title() }}</mat-card-title>
     @if (demo) {
       <mat-card-subtitle>
         ทดลองใช้: บริษัท DEMO · admin / admin · พนักงาน: somchai / 1234
@@ -8,85 +8,147 @@
     }
   </mat-card-header>
 
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <mat-card-content>
-      @if (auth.unavailable()) {
-        <p class="expired" role="alert">ระบบไม่ตอบสนองชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่</p>
-      } @else if (expired()) {
-        <p class="expired" role="alert">เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่</p>
-      }
-      @if (editCompany()) {
+  @if (step() === 'password') {
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <mat-card-content>
+        @if (auth.unavailable()) {
+          <p class="expired" role="alert">
+            ระบบไม่ตอบสนองชั่วคราว กรุณาลองใหม่อีกครั้งในอีกสักครู่
+          </p>
+        } @else if (expired()) {
+          <p class="expired" role="alert">เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่</p>
+        }
+        @if (editCompany()) {
+          <mat-form-field appearance="outline">
+            <mat-label>รหัสบริษัท</mat-label>
+            <input
+              matInput
+              appAutofocus
+              formControlName="companyCode"
+              autocomplete="organization"
+              autocapitalize="characters"
+              spellcheck="false"
+            />
+            <mat-icon matPrefix>domain</mat-icon>
+            @if (form.controls.companyCode.hasError('required')) {
+              <mat-error>กรุณากรอกรหัสบริษัท</mat-error>
+            }
+          </mat-form-field>
+        } @else {
+          <div class="company">
+            <mat-icon>domain</mat-icon>
+            <span>
+              บริษัท: <strong>{{ auth.companyCode() }}</strong>
+            </span>
+            <button mat-button type="button" (click)="changeCompany()">เปลี่ยน</button>
+          </div>
+        }
+
         <mat-form-field appearance="outline">
-          <mat-label>รหัสบริษัท</mat-label>
+          <mat-label>ชื่อผู้ใช้</mat-label>
+          <input matInput formControlName="username" autocomplete="username" />
+          <mat-icon matPrefix>person</mat-icon>
+          @if (form.controls.username.hasError('required')) {
+            <mat-error>กรุณากรอกชื่อผู้ใช้</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>รหัสผ่าน</mat-label>
+          <input
+            matInput
+            [appAutofocus]="!editCompany()"
+            formControlName="password"
+            autocomplete="current-password"
+            [type]="hidePassword() ? 'password' : 'text'"
+          />
+          <mat-icon matPrefix>lock</mat-icon>
+          <button
+            mat-icon-button
+            matSuffix
+            type="button"
+            [attr.aria-label]="hidePassword() ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'"
+            (click)="hidePassword.set(!hidePassword())"
+          >
+            <mat-icon>{{ hidePassword() ? 'visibility' : 'visibility_off' }}</mat-icon>
+          </button>
+          @if (form.controls.password.hasError('required')) {
+            <mat-error>กรุณากรอกรหัสผ่าน</mat-error>
+          }
+        </mat-form-field>
+      </mat-card-content>
+
+      <mat-card-actions>
+        <button mat-flat-button type="submit" [disabled]="submitting()">
+          @if (submitting()) {
+            <mat-spinner diameter="20" />
+          } @else {
+            เข้าสู่ระบบ
+          }
+        </button>
+        <div class="links">
+          <a mat-button routerLink="/auth/forgot-password">ลืมรหัสผ่าน (เจ้าของบริษัท)</a>
+          <a mat-button routerLink="/auth/signup">สมัครใช้งานบริษัทใหม่</a>
+        </div>
+        @if (mfa()) {
+          <a mat-button routerLink="/auth/login">เข้าสู่ระบบด้วยรหัสผ่านอย่างเดียว</a>
+        } @else {
+          <a mat-button routerLink="/auth/login-mfa">
+            <mat-icon>phonelink_lock</mat-icon>
+            เข้าสู่ระบบด้วย Microsoft Authenticator
+          </a>
+        }
+      </mat-card-actions>
+    </form>
+  } @else {
+    <form [formGroup]="codeForm" (ngSubmit)="submitCode()">
+      <mat-card-content>
+        @if (setup(); as s) {
+          <p class="lead">
+            ตั้งค่า Microsoft Authenticator ให้บัญชี
+            <strong>{{ form.controls.username.value }}</strong>
+          </p>
+          <app-mfa-setup [setup]="s" />
+        } @else {
+          <p class="lead">
+            เปิดแอป <strong>Microsoft Authenticator</strong> บนมือถือ แล้วพิมพ์รหัส 6 หลักของบัญชี
+            <strong>AN22 · {{ auth.companyCode() }}:{{ form.controls.username.value }}</strong>
+          </p>
+        }
+        <mat-form-field appearance="outline">
+          <mat-label>รหัส 6 หลัก</mat-label>
           <input
             matInput
             appAutofocus
-            formControlName="companyCode"
-            autocomplete="organization"
-            autocapitalize="characters"
+            formControlName="code"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            maxlength="7"
             spellcheck="false"
           />
-          <mat-icon matPrefix>domain</mat-icon>
-          @if (form.controls.companyCode.hasError('required')) {
-            <mat-error>กรุณากรอกรหัสบริษัท</mat-error>
+          <mat-icon matPrefix>pin</mat-icon>
+          @if (code.hasError('required')) {
+            <mat-error>กรุณากรอกรหัส 6 หลักจากแอป</mat-error>
+          } @else if (code.hasError('format')) {
+            <mat-error>รหัสต้องเป็นตัวเลข 6 หลัก</mat-error>
           }
+          <mat-hint>รหัสเปลี่ยนทุก 30 วินาที</mat-hint>
         </mat-form-field>
-      } @else {
-        <div class="company">
-          <mat-icon>domain</mat-icon>
-          <span>
-            บริษัท: <strong>{{ auth.companyCode() }}</strong>
-          </span>
-          <button mat-button type="button" (click)="changeCompany()">เปลี่ยน</button>
-        </div>
-      }
+      </mat-card-content>
 
-      <mat-form-field appearance="outline">
-        <mat-label>ชื่อผู้ใช้</mat-label>
-        <input matInput formControlName="username" autocomplete="username" />
-        <mat-icon matPrefix>person</mat-icon>
-        @if (form.controls.username.hasError('required')) {
-          <mat-error>กรุณากรอกชื่อผู้ใช้</mat-error>
-        }
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>รหัสผ่าน</mat-label>
-        <input
-          matInput
-          [appAutofocus]="!editCompany()"
-          formControlName="password"
-          autocomplete="current-password"
-          [type]="hidePassword() ? 'password' : 'text'"
-        />
-        <mat-icon matPrefix>lock</mat-icon>
-        <button
-          mat-icon-button
-          matSuffix
-          type="button"
-          [attr.aria-label]="hidePassword() ? 'แสดงรหัสผ่าน' : 'ซ่อนรหัสผ่าน'"
-          (click)="hidePassword.set(!hidePassword())"
-        >
-          <mat-icon>{{ hidePassword() ? 'visibility' : 'visibility_off' }}</mat-icon>
+      <mat-card-actions>
+        <button mat-flat-button type="submit" [disabled]="submitting()">
+          @if (submitting()) {
+            <mat-spinner diameter="20" />
+          } @else {
+            {{ setup() ? 'ยืนยันและเข้าสู่ระบบ' : 'ยืนยัน' }}
+          }
         </button>
-        @if (form.controls.password.hasError('required')) {
-          <mat-error>กรุณากรอกรหัสผ่าน</mat-error>
+        <button mat-button type="button" (click)="back()">กลับ</button>
+        @if (!setup()) {
+          <p class="note">ทำมือถือหาย? ติดต่อผู้ดูแลระบบของบริษัทให้ล้าง Authenticator ให้</p>
         }
-      </mat-form-field>
-    </mat-card-content>
-
-    <mat-card-actions>
-      <button mat-flat-button type="submit" [disabled]="submitting()">
-        @if (submitting()) {
-          <mat-spinner diameter="20" />
-        } @else {
-          เข้าสู่ระบบ
-        }
-      </button>
-      <div class="links">
-        <a mat-button routerLink="/auth/forgot-password">ลืมรหัสผ่าน (เจ้าของบริษัท)</a>
-        <a mat-button routerLink="/auth/signup">สมัครใช้งานบริษัทใหม่</a>
-      </div>
-    </mat-card-actions>
-  </form>
+      </mat-card-actions>
+    </form>
+  }
 </mat-card>

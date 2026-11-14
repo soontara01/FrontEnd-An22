@@ -38,7 +38,9 @@
             ],
             "allowedCommonJsDependencies": [
               "exceljs",
-              "jsbarcode"
+              "jsbarcode",
+              "qrcode",
+              "dijkstrajs"
             ]
           },
           "configurations": {

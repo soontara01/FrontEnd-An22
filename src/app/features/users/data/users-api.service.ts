@@ -34,6 +34,11 @@ export class UsersApi {
     return this.api.put<null>(`users/${id}/password`, { password });
   }
 
+  /** An admin clears a user's Microsoft Authenticator (E55, a lost phone). */
+  resetMfa(id: number): Observable<User> {
+    return this.api.delete<User>(`users/${id}/mfa`);
+  }
+
   /** The owner hands ownership over (E33), confirming with their own password. */
   transferOwner(userId: number, password: string): Observable<User[]> {
     return this.api.post<User[]>('company/owner', { userId, password });

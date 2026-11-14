@@ -39,13 +39,17 @@ browser ถือแค่ cookie `an22.sid` (httpOnly, SameSite=Lax, Secure บ
 
 - `POST /auth/login`, `POST /auth/signup`, `POST /platform/auth/login`: api ตอบ `{ token, ... }` ตามเดิม → web เก็บ `token` ใน session (ร้าน / platform แยกช่อง), เปลี่ยน session id
   แล้วตอบ browser **โดยไม่มี field `token`** (`LoginResponse` / `PlatformLoginResponse` ของหน้าบ้านไม่มี `token`)
+- ขั้นรหัส Microsoft Authenticator (E55): `POST /auth/login` ที่ตอบ 2xx พร้อม `challenge` (ไม่มี `token`) → web เก็บ `challenge` ไว้ในช่อง `mfaToken` ของ session
+  (เปลี่ยน session id, ไม่แตะ token ร้านที่อาจมีอยู่) แล้วตอบ browser โดยไม่มี `challenge`; 2xx ที่ไม่มีทั้ง `token` และ `challenge` → 502 เหมือนเดิม ·
+  `POST /auth/mfa/verify` → web ส่ง `Authorization: Bearer <mfaToken>` (ไม่มี → **400** "หมดเวลายืนยันรหัส กรุณาเข้าสู่ระบบใหม่" โดยไม่ถึง api) —
+  ตอบ `token` = login สำเร็จ: เก็บ token ร้าน, ลบ `mfaToken`, เปลี่ยน session id · `POST /auth/logout` ลบ `mfaToken` ด้วย
 - request อื่น: web ทิ้ง `Authorization` / `Cookie` ที่ browser ส่งมา แล้วใส่ `Authorization: Bearer` จาก session — `/platform/…` ใช้ token ของ platform, ที่เหลือใช้ของร้าน
 - api ตอบ 401 → web ลบ token ช่องนั้นออกจาก session แล้วส่ง 401 ต่อ
 - `POST /auth/logout`, `POST /platform/auth/logout` → `null`: **web ตอบเอง** (ลบช่องนั้น; ไม่เหลือทั้งสองช่อง = ทำลาย session) — api ไม่ต้องมี
 - CSRF: web ตั้ง cookie `XSRF-TOKEN` (อ่านได้) — POST / PUT / PATCH / DELETE ต้องมี header `X-XSRF-TOKEN` ตรงกัน (Angular `HttpClient` ส่งให้เอง) ไม่งั้น **403** "คำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่"
 - หน้าบ้านรู้ว่า login อยู่จาก `GET /me` ตอนเปิดทุกหน้า (401 = ยังไม่ login, ไม่ขึ้นข้อความ); platform ใช้ `GET /platform/me`
-- mock จำลองทั้ง web + api: token อยู่ใน `an22.mock.session` / `an22.mock.platformSession` (localStorage — เฉพาะ mock)
-- web จำกัดจำนวนครั้งต่อ IP (E49) ของ POST `auth/login`, `auth/signup`, `auth/forgot-password`, `auth/reset-password`, `auth/verify`, `platform/auth/login`,
+- mock จำลองทั้ง web + api: token อยู่ใน `an22.mock.session` / `an22.mock.platformSession`, challenge ของ E55 ใน `an22.mock.mfaSession` (localStorage — เฉพาะ mock)
+- web จำกัดจำนวนครั้งต่อ IP (E49) ของ POST `auth/login`, `auth/mfa/verify`, `auth/signup`, `auth/forgot-password`, `auth/reset-password`, `auth/verify`, `platform/auth/login`,
   `shifts/:id/unlock` → เกิน = **429** "พยายามบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่" (ไม่ถึง api) — api ยังต้องจำกัดต่อบัญชีเอง
 - web ใส่ `X-Real-IP` / `X-Forwarded-For` / `-Proto` / `-Host` ใหม่จาก IP ที่เชื่อถือได้ (ทิ้งค่าที่ browser ส่งมา) — api ใช้ `X-Real-IP` เป็น IP ของผู้ใช้ (จำกัดจำนวนครั้ง, audit)
 - คำตอบที่ api ไม่ได้ใส่ `Cache-Control` → web ใส่ `no-store`; หน้าเว็บอยู่ใต้ Content-Security-Policy ของ web (ห้าม `eval` / สคริปต์ inline ใหม่ / โหลดจากโดเมนอื่นนอกจาก Google Fonts)
@@ -55,14 +59,30 @@ browser ถือแค่ cookie `an22.sid` (httpOnly, SameSite=Lax, Secure บ
 - **เข้าถึงได้จาก web เท่านั้น** (network ภายใน / firewall) — ห้ามเปิด api ออกอินเทอร์เน็ตตรง ๆ: header `X-Real-IP` / `X-Forwarded-*` เชื่อได้เพราะมาจาก web เท่านั้น
 - **ลิงก์ในอีเมล** (ตั้งรหัสผ่านใหม่ ฯลฯ) สร้างจาก base URL ที่ตั้งค่าไว้ของระบบ — ห้ามใช้ `Host` / `X-Forwarded-Host` ของ request (ไม่งั้นลิงก์ในอีเมลชี้ไปเว็บอื่นได้)
 - **GET / HEAD ห้ามแก้ข้อมูล** — การกัน CSRF ของ web ตรวจเฉพาะ POST / PUT / PATCH / DELETE
-- จำกัดจำนวนครั้งที่ api (ตกลง 2026-10-22, ทำใน C2 ขั้น 2) ของ `POST /auth/login`, `/auth/verify`, `/platform/auth/login`, `/shifts/:id/unlock` — นับใน DB (ทุก instance เห็นเหมือนกัน):
-  - ต่อบัญชี = รหัสบริษัท + ชื่อผู้ใช้ที่พิมพ์ (platform: ชื่อผู้ใช้; `auth/verify` / unlock: บริษัทของ token + ชื่อที่พิมพ์) — นับแม้ไม่มีบัญชีนี้ (ไม่บอกว่ามีหรือไม่):
+- จำกัดจำนวนครั้งที่ api (ตกลง 2026-10-22, ทำใน C2 ขั้น 2) ของ `POST /auth/login`, `/auth/mfa/verify`, `/auth/verify`, `/platform/auth/login`, `/shifts/:id/unlock` — นับใน DB (ทุก instance เห็นเหมือนกัน):
+  - ต่อบัญชี = รหัสบริษัท + ชื่อผู้ใช้ที่พิมพ์ (platform: ชื่อผู้ใช้; `auth/verify` / unlock: บริษัทของ token + ชื่อที่พิมพ์; `auth/mfa/verify`: บริษัท + ชื่อผู้ใช้ของ challenge — **ตัวนับเดียวกับรหัสผ่าน**) — นับแม้ไม่มีบัญชีนี้ (ไม่บอกว่ามีหรือไม่):
     ผิดครบ **5 ครั้งใน 15 นาที → ล็อก 15 นาที**; login สำเร็จล้างตัวนับของบัญชี
   - ต่อ `X-Real-IP`: ผิดครบ **30 ครั้งใน 15 นาที → ล็อก 15 นาที** (รวมทุกบัญชี)
   - ระหว่างล็อก → **429** "พยายามบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่" (ข้อความเดียวกับ web; รหัสผ่านถูกก็ไม่ผ่าน) — ไม่ใช่ 401 จึงไม่ logout คนหน้าเครื่อง POS
   - mock ไม่จำลองข้อนี้
 - ข้อความ error ของ login เหมือนกันทุกกรณี (E3)
 - ไม่ log รหัสผ่าน / token / body ของ auth
+
+### Microsoft Authenticator (E55 — login สองขั้น)
+
+TOTP มาตรฐาน RFC 6238 (HMAC-SHA1, 6 หลัก, ช่วง 30 วินาที — Microsoft Authenticator / แอปอื่นที่รองรับ TOTP ใช้ได้) กฎใน `totp.model.ts` / `mfa.model.ts`
+
+- **ต้องผ่านขั้นรหัส** (`loginNeedsMfa()`) เมื่อ `LoginRequest.mfa: true` (หน้า `/auth/login-mfa`) **หรือ** ผู้ใช้เปิดใช้แล้ว (`User.mfaEnabled`) **หรือ** บริษัทบังคับ
+  (`CompanyInfo.mfaRequired`: `none` / `admins` = owner + admin / `all` → `mfaRequiredFor()`) — `/auth/login` แบบเดิมจึงข้ามขั้นรหัสไม่ได้
+- ขั้นที่ 1 `POST /auth/login` รหัสผ่านถูก + ต้องใช้รหัส → **200** `{ challenge, mfa: 'verify' }` หรือ `{ challenge, mfa: 'setup', setup: { secret, otpauthUrl } }`
+  (ยังไม่เคยผูก: secret ใหม่ 20 ไบต์ base32 เก็บแบบ "รอยืนยัน" — login ซ้ำได้ secret เดิมจนกว่าจะยืนยัน) · ยังไม่ออก token และยังไม่บันทึก audit `login`
+  · `challenge` = JWT `aud=mfa` อายุ **5 นาที** (tenant, user) — decoder ของ token ร้าน / platform ต้องไม่รับ
+- ขั้นที่ 2 `POST /auth/mfa/verify { code }` (Bearer = challenge) → `LoginResponse` + `token` เหมือน login · รับรหัสของช่วงปัจจุบัน ±1 ช่วง และ**ไม่รับช่วงที่ ≤ ช่วงที่ใช้ล่าสุด**
+  (`last_step` — รหัสเดิมใช้ซ้ำไม่ได้) · ถ้าเป็น setup รหัสแรกที่ถูก = เปิดใช้ (audit `mfa_enable` "ผูกตอนเข้าสู่ระบบ") · สำเร็จ → audit `login` detail "ด้วย Microsoft Authenticator"
+- ผิดตอนขั้นที่ 2 → **400** "รหัสยืนยันไม่ถูกต้อง" (audit `login_failed` detail "รหัส Microsoft Authenticator ไม่ถูกต้อง") · challenge ไม่มี / หมดอายุ / ผู้ใช้ถูกปิด →
+  **400** "หมดเวลายืนยันรหัส กรุณาเข้าสู่ระบบใหม่" · ห้าม 401 (หน้าบ้าน logout) · บริษัทถูกระงับระหว่างนั้น → 401 ข้อความระงับเหมือน login
+- secret เก็บเข้ารหัส (`PiiCipher`) ไม่เคยส่งออกหลังยืนยันแล้ว และไม่อยู่ใน `GET /company/export`
+- `POST /auth/verify` (อนุมัติที่เครื่อง POS) ยังตรวจรหัสผ่านอย่างเดียว ไม่ถามรหัส Authenticator
 
 ### Error
 
@@ -71,7 +91,7 @@ browser ถือแค่ cookie `an22.sid` (httpOnly, SameSite=Lax, Secure บ
 
 | status    | เมื่อไร                                                                                                                     |
 | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| 400       | ผิดกฎธุรกิจ / ข้อมูลไม่ถูกต้อง / login ผิดตอน `auth/verify` หรือผู้อนุมัติผิด                                               |
+| 400       | ผิดกฎธุรกิจ / ข้อมูลไม่ถูกต้อง / login ผิดตอน `auth/verify` หรือผู้อนุมัติผิด / รหัส Authenticator ผิดตอน `auth/mfa/verify` |
 | 401       | token ไม่มี / ไม่รู้จัก / ผู้ใช้ถูกปิด — **ทุก endpoint ยกเว้น `POST /auth/login`, `POST /auth/verify`** → หน้าบ้าน logout  |
 | 403 (web) | CSRF ไม่ผ่าน (หัวข้อ "Session") — ข้อความ "คำขอไม่ถูกต้อง กรุณาโหลดหน้าใหม่"                                                |
 | 403       | ไม่มีสิทธิ์ (หัวข้อ "สิทธิ์") — หน้าบ้านไม่ logout                                                                          |
@@ -79,7 +99,7 @@ browser ถือแค่ cookie `an22.sid` (httpOnly, SameSite=Lax, Secure บ
 | 429       | พยายาม login / ตรวจรหัสผิดบ่อยเกินไป (หัวข้อ "ความปลอดภัยของ api") — web ตอบเองด้วยเมื่อเกินเพดานต่อ IP                     |
 | 503       | DB ใช้เวลาเกิน `statement_timeout` — "ระบบใช้เวลานานเกินไป กรุณาลองใหม่หรือลดช่วงข้อมูล" (api เท่านั้น — mock ไม่มีกรณีนี้) |
 
-`POST /auth/login` ผิด → 401 (หน้าบ้านยกเว้น path นี้ไม่ logout) · token ที่ไม่มี tenant (ก่อน SaaS) หรือบริษัทถูกระงับ → 401 · `POST /auth/verify` ผิด → **400 เสมอ** (ห้าม 401: จะ logout คนที่ยืนอยู่หน้าเครื่อง)
+`POST /auth/login` ผิด → 401 (หน้าบ้านยกเว้น path นี้ไม่ logout) · `POST /auth/mfa/verify` ผิด → **400 เสมอ** (E55) · token ที่ไม่มี tenant (ก่อน SaaS) หรือบริษัทถูกระงับ → 401 · `POST /auth/verify` ผิด → **400 เสมอ** (ห้าม 401: จะ logout คนที่ยืนอยู่หน้าเครื่อง)
 
 ## สิทธิ์ (owner / admin / user)
 
@@ -114,12 +134,16 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 | method + path                          | body → response                                                                                                                                   | หมายเหตุ                                                                                                                                                                                                                                                                                                                                         |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `POST /auth/login`                     | `LoginRequest { companyCode, username, password }` → `LoginResponse { user, company, branches }` (api ส่ง `token` ด้วย — web เก็บแล้วตัดออก, E48) | D4; ผิดทุกกรณี (รหัสบริษัท / ชื่อ / รหัสผ่าน / ผู้ใช้ถูกปิด) → 401 ข้อความเดียว "รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง" (E3); บริษัทถูกระงับ → 401 "บริษัทนี้ถูกระงับการใช้งาน…" เฉพาะเมื่อรหัสผ่านถูก; `companyCode` ไม่สนตัวพิมพ์; `branches` = สาขาที่ใช้งานอยู่ที่ผู้ใช้เข้าได้ (`canWorkIn()`: `allBranches` หรืออยู่ใน `branchIds`) |
+| `POST /auth/mfa/verify`                | `{ code }` → `LoginResponse` (+ `token` ที่ web เก็บ)                                                                                             | ขั้นที่ 2 ของ login (E55, หัวข้อ "Microsoft Authenticator") — Bearer = `challenge` ที่ web เก็บไว้; ผิด → 400                                                                                                                                                                                                                                    |
+| `POST /me/mfa/setup`                   | `{}` → `MfaSetup { secret, otpauthUrl }`                                                                                                          | ผู้ใช้เปิด Authenticator ของตัวเองจากหน้าตั้งค่า (E55): secret "รอยืนยัน" (เดิมถ้ามี) · เปิดอยู่แล้ว → 400 "เปิดใช้ Microsoft Authenticator อยู่แล้ว"                                                                                                                                                                                            |
+| `POST /me/mfa/confirm`                 | `{ code }` → `User`                                                                                                                               | รหัสแรกที่ถูกเปิดใช้ (`mfaEnabled: true`, audit `mfa_enable` "เปิดใช้จากหน้าตั้งค่า") · ผิด → 400 "รหัสยืนยันไม่ถูกต้อง" · ไม่มี secret รอ → 400 "กรุณาเริ่มตั้งค่า Microsoft Authenticator ใหม่"                                                                                                                                                |
+| `POST /me/mfa/disable`                 | `{ password }` → `User`                                                                                                                           | ปิดของตัวเอง: รหัสผ่านผิด → 400 "รหัสผ่านไม่ถูกต้อง"; `mfaDisableError()` (ยังไม่เปิด / บริษัทบังคับ) → 400 · ลบ secret, audit `mfa_disable` · ใช้ POST ไม่ใช่ DELETE เพราะมี body                                                                                                                                                               |
 | `GET /me`                              | → `MeResponse { user, company, branches, billing, canSeeCost }`                                                                                   | `canSeeCost` = `canSeeCost(user, companyInfo)` (E43); session ปัจจุบันตาม token (ไม่ออก token ใหม่) — หน้าบ้านเรียกทุกครั้งที่โหลดหน้า + หน้าเลือกสาขา; **ไม่ตรวจ `X-Branch-Id`** (สาขาที่เครื่องจำไว้อาจหมดสิทธิ์แล้ว)                                                                                                                          |
 | `POST /auth/verify`                    | `{ username, password }` → `{ user }`                                                                                                             | ตรวจรหัสของผู้ใช้**ในบริษัทของ token** โดยไม่สร้าง session (ปลดล็อก POS, ผู้อนุมัติ) — ผิด / ไม่มี token / ผู้ใช้ถูกปิด → 400 ข้อความเดียว                                                                                                                                                                                                       |
 | `GET /settings/store`                  | `?branchId=` → `StoreInfo`                                                                                                                        | ค่าประกอบ `storeInfoOf(companyInfo, สาขา)` — สาขาใน `X-Branch-Id` (ไม่ส่ง = สาขาแรก) หรือ `?branchId=` = สาขาของเอกสารที่พิมพ์ (E22: ใบเสร็จ / ใบกำกับ / ใบลดหนี้ / ใบเปลี่ยน / Z พิมพ์ข้อมูลผู้ขายของสาขาที่ออกเอกสาร ไม่ใช่สาขาที่เปิดดู; สาขาไม่มี → 404) — เอกสาร / POS อ่านอันนี้ (E11, คงไว้ช่วงเปลี่ยนผ่าน)                               |
 | `PUT /settings/store`                  | `StoreInfo` → `StoreInfo`                                                                                                                         | ช่วงเปลี่ยนผ่าน: admin บริษัท (403); `storeInfoError()`, `requireShiftChangeError()` → 400; เขียนลง company + สาขาปัจจุบัน (เลขสาขาไม่เปลี่ยน)                                                                                                                                                                                                   |
 | `GET /settings/company`                | → `CompanyInfo`                                                                                                                                   | ผู้ใช้ทุกคน                                                                                                                                                                                                                                                                                                                                      |
-| `PUT /settings/company`                | `CompanyInfo` → `CompanyInfo`                                                                                                                     | admin บริษัท (E6, อื่น → 403); `companyInfoError()`, `requireShiftChangeError()` (มีกะเปิดสาขาใด → ปิดระบบกะไม่ได้); `staffSeeCost` (E43) มีผลกับ `user` ตั้งแต่ request ถัดไป                                                                                                                                                                   |
+| `PUT /settings/company`                | `CompanyInfo` → `CompanyInfo`                                                                                                                     | admin บริษัท (E6, อื่น → 403); `companyInfoError()`, `requireShiftChangeError()` (มีกะเปิดสาขาใด → ปิดระบบกะไม่ได้); `staffSeeCost` (E43) มีผลกับ `user` ตั้งแต่ request ถัดไป; `mfaRequired` (E55, `none` / `admins` / `all`) มีผลตั้งแต่ login ครั้งถัดไป                                                                                      |
 | `GET /settings/branch`                 | → `Branch`                                                                                                                                        | สาขาปัจจุบัน (`X-Branch-Id`)                                                                                                                                                                                                                                                                                                                     |
 | `PUT /settings/branch`                 | `BranchDetails { name, address, phone, receiptFooter }` → `Branch`                                                                                | admin ที่เข้าสาขานั้นได้ (สาขาอื่น → 403 จาก `X-Branch-Id`); `branchDetailsError()`; code / เลขสาขา / สถานะแก้ที่ `/branches`                                                                                                                                                                                                                    |
 | `GET /branches` · `GET /branches/:id`  | → `Branch[]` / `Branch`                                                                                                                           | ผู้ใช้ทุกคน (ทุกสาขาของบริษัท รวมที่ปิด)                                                                                                                                                                                                                                                                                                         |
@@ -130,7 +154,11 @@ server เป็นผู้ตรวจ (`adminOnlyError()` ใน mock; ตา
 ### Users (admin เท่านั้น)
 
 `GET /users` → `User[]` · `POST /users` (`NewUserPayload` = `UserPayload` + `password`) · `GET/PUT/DELETE /users/:id` ·
-`PUT /users/:id/password { password }` → `null` (admin ตั้งรหัสใหม่ให้, E10) — ไม่มี endpoint ไหนคืน `password`
+`PUT /users/:id/password { password }` → `null` (admin ตั้งรหัสใหม่ให้, E10) — ไม่มี endpoint ไหนคืน `password` ·
+`DELETE /users/:id/mfa` → `User` (ล้าง Microsoft Authenticator เมื่อผู้ใช้ทำมือถือหาย, E55: `userScopeError()` → 403, `mfaResetError()` (ของตัวเอง / ยังไม่เปิด) → 400, audit `mfa_reset`;
+ครั้งถัดไปที่ต้องใช้ ผู้ใช้ผูกใหม่ตอน login)
+
+- `User.mfaEnabled` (E55) server-derived (มี secret ที่ยืนยันแล้ว) — `POST` / `PUT /users` ไม่สนค่าที่ส่งมา
 
 - `userChangeError()` → 400 (ลด / ปิด / ลบตัวเองไม่ได้, ต้องเหลือ admin ที่ใช้งาน ≥ 1 — owner นับเป็น admin; owner ลบ / ปิดใช้งาน / เปลี่ยน role ไม่ได้, E33)
 - `ownerRoleError()` → 400: `POST` / `PUT /users` ตั้ง role `owner` ไม่ได้ และ owner เปลี่ยน role ไม่ได้ — เปลี่ยนเจ้าของด้วย `POST /company/owner` เท่านั้น; owner ต้องมีอีเมล (`userIdentityError()`) และได้ `allBranches: true` เสมอ (server บังคับ)

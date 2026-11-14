@@ -48,6 +48,17 @@ spec `golden-fixtures.spec.ts` แดงทันทีถ้า JSON ไม่�
 
 บิลลงเวลา `2026-10-01T03:00:00Z` (= 10:00 ท้องถิ่น) — วันขายเหมือนกันทั้ง UTC และ Asia/Bangkok
 
+### `totp.json` — `verifyTotp()`, `totpCode()` (`core/models/totp.model.ts`, E55)
+
+```text
+[{ name,
+   input: { secret (base32), code, nowMs, lastStep: number | null },
+   expected: { step: number | null,    // ช่วงที่รหัสตรง (±1 ช่วงของ now, > lastStep) หรือ null = ไม่ผ่าน
+               codeNow: string } }]     // รหัสของช่วง now
+```
+
+secret = คีย์ SHA-1 ของ RFC 6238 ("12345678901234567890") — 5 เคสแรกคือ test vector ของ RFC (6 หลักท้าย)
+
 ## ใช้ใน repo api (JUnit 5)
 
 ```java

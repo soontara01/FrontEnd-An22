@@ -245,6 +245,17 @@ import {
   auditBaht,
   auditBranchCodes,
   companySettingsChanges,
+  AuditAction,
+  MfaChallenge,
+  MfaSetup,
+  MFA_CHALLENGE_EXPIRED,
+  MFA_WRONG_CODE,
+  loginNeedsMfa,
+  mfaDisableError,
+  mfaResetError,
+  newTotpSecret,
+  otpauthUrl,
+  verifyTotp,
 } from '../models';
 import { MENU } from '../navigation/menu.config';
 import { StorageService } from '../services/storage.service';
@@ -326,9 +337,20 @@ interface MockDb {
   nextBranchId: number;
   /** Passwords by user id (a real API keeps a hash); none = `admin` for the first user, else `1234` (E10). */
   passwords: Record<number, string>;
+  /**
+   * Microsoft Authenticator per user id (E55): the base32 secret (a real API keeps it encrypted),
+   * `confirmed` once the first code was right (before that = set up but not on), the last step used.
+   */
+  mfa: Record<number, MockMfa>;
   /** Audit log (E40): appended by `recordAudit()` / `pushAudit()`, never edited or deleted. */
   auditLog: AuditEvent[];
   nextAuditId: number;
+}
+
+interface MockMfa {
+  secret: string;
+  confirmed: boolean;
+  lastStep: number | null;
 }
 
 /**
@@ -399,6 +421,10 @@ const PLATFORM_KEY = 'mock.platform';
  */
 const SESSION_KEY = 'mock.session';
 const PLATFORM_SESSION_KEY = 'mock.platformSession';
+/** A login waiting for its Authenticator code (E55): the api's challenge, kept like a token. */
+const MFA_SESSION_KEY = 'mock.mfaSession';
+/** How long a login waits for its code (E55) */
+const MFA_CHALLENGE_MINUTES = 5;
 
 /** A parked bill as the mock keeps it: with the branch + terminal it belongs to. */
 type StoredHeldBill = HeldBill & { branchId: number; terminalId: number };
@@ -406,6 +432,8 @@ type StoredHeldBill = HeldBill & { branchId: number; terminalId: number };
 /** What the api answers a login with: the session + the token, which the web server keeps. */
 type ApiLoginResponse = LoginResponse & { token: string };
 type ApiPlatformLoginResponse = PlatformLoginResponse & { token: string };
+/** The code step (E55): the api's challenge goes into the web server's session too. */
+type ApiMfaChallenge = MfaChallenge & { challenge: string };
 
 /** Storage key of a company's data: `mock.db` for DEMO, `mock.db.<id>` for the others. */
 const tenantKey = (companyId: number): string =>
@@ -421,6 +449,7 @@ const SEED_USERS: User[] = [
     active: true,
     branchIds: [],
     allBranches: true,
+    mfaEnabled: false,
     createdAt: '2026-01-05T09:00:00Z',
   },
   {
@@ -432,6 +461,7 @@ const SEED_USERS: User[] = [
     active: true,
     branchIds: [1],
     allBranches: false,
+    mfaEnabled: false,
     createdAt: '2026-02-11T10:30:00Z',
   },
   {
@@ -443,6 +473,7 @@ const SEED_USERS: User[] = [
     active: false,
     branchIds: [1],
     allBranches: false,
+    mfaEnabled: false,
     createdAt: '2026-03-20T14:15:00Z',
   },
   {
@@ -454,6 +485,7 @@ const SEED_USERS: User[] = [
     active: true,
     branchIds: [1],
     allBranches: false,
+    mfaEnabled: false,
     createdAt: '2026-05-02T08:45:00Z',
   },
 ];
@@ -1050,6 +1082,7 @@ const seedDb = (): MockDb => ({
   branches: SEED_BRANCHES.map((b) => ({ ...b })),
   nextBranchId: SEED_BRANCHES.length + 1,
   passwords: {},
+  mfa: {},
   auditLog: [],
   nextAuditId: 1,
 });
@@ -1099,6 +1132,7 @@ const blankDb = (): MockDb => ({
   branches: [],
   nextBranchId: 1,
   passwords: {},
+  mfa: {},
   auditLog: [],
   nextAuditId: 1,
 });
@@ -1302,7 +1336,7 @@ let branchHeader: string | null = null;
 let stockBranch = 1;
 
 /** Paths whose answer carries a token for the web server's session (E48). */
-const LOGIN_PATHS = ['auth/login', 'auth/signup', 'platform/auth/login'];
+const LOGIN_PATHS = ['auth/login', 'auth/signup', 'auth/mfa/verify', 'platform/auth/login'];
 
 /**
  * Fake backend for development without a real API: plays the web server (an22-web, E48) in
@@ -1323,9 +1357,11 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
 
   if (original.method === 'POST' && (path === 'auth/logout' || path === 'platform/auth/logout')) {
     storage.remove(slot);
+    if (slot === SESSION_KEY) storage.remove(MFA_SESSION_KEY);
     return ok(null).pipe(delay(LATENCY_MS));
   }
-  const token = storage.get<string>(slot);
+  // The code step of a login (E55) goes with the waiting challenge, not the session's token.
+  const token = storage.get<string>(path === 'auth/mfa/verify' ? MFA_SESSION_KEY : slot);
   const req =
     token && !original.headers.has('Authorization')
       ? original.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
@@ -1334,8 +1370,21 @@ export const mockBackendInterceptor: HttpInterceptorFn = (original, next) => {
   return apiResponse(req, storage).pipe(
     map((event): HttpEvent<unknown> => {
       if (!isLogin || !(event instanceof HttpResponse)) return event;
-      const { token: issued, ...session } = event.body as { token: string };
-      storage.set(slot, issued);
+      const {
+        token: issued,
+        challenge,
+        ...session
+      } = event.body as {
+        token?: string;
+        challenge?: string;
+      };
+      if (challenge) {
+        // Password right, code next (E55): no session yet.
+        storage.set(MFA_SESSION_KEY, challenge);
+      } else {
+        storage.remove(MFA_SESSION_KEY);
+        storage.set(slot, issued);
+      }
       return event.clone({ body: session });
     }),
     tap({
@@ -1394,7 +1443,7 @@ function requestCompany(
     return registry.companies.find((c) => c.code === code && !c.deletedAt);
   }
   // A deleted company (E39) has no data left: its code and tokens lead nowhere.
-  const id = tokenIds(req)?.companyId;
+  const id = (path === 'auth/mfa/verify' ? mfaChallengeOf(req) : tokenIds(req))?.companyId;
   return registry.companies.find((c) => c.id === id && !c.deletedAt);
 }
 
@@ -1458,6 +1507,7 @@ function signup(
     active: true,
     branchIds: [],
     allBranches: true,
+    mfaEnabled: false,
     createdAt: new Date().toISOString(),
   };
   const cash = SEED_PAYMENT_METHODS.find((m) => m.type === 'cash') as PaymentMethod;
@@ -1483,6 +1533,7 @@ function signup(
     users: [owner],
     nextId: 2,
     passwords: { [owner.id]: p.owner.password },
+    mfa: {},
     paymentMethods: [{ ...structuredClone(cash), id: 1, sortOrder: 1 }],
     nextPaymentMethodId: 2,
   };
@@ -1773,6 +1824,8 @@ function platformDetail(company: StoredCompany, storage: StorageService): Platfo
 function noTenant(req: HttpRequest<unknown>, path: string): Observable<never> {
   if (path === 'auth/login' && req.method === 'POST') return error(401, WRONG_COMPANY_LOGIN);
   if (path === 'auth/verify' && req.method === 'POST') return error(400, WRONG_LOGIN);
+  // No waiting login (E55): 400 like a wrong code — a 401 would log the page out.
+  if (path === 'auth/mfa/verify' && req.method === 'POST') return error(400, MFA_CHALLENGE_EXPIRED);
   return error(401, SESSION_EXPIRED);
 }
 
@@ -1982,6 +2035,13 @@ function recordAudit(
       ref: { kind: 'user', id: user?.id ?? null, label: user?.username ?? '' },
       detail: 'ผู้ดูแลระบบตั้งรหัสผ่านใหม่ให้',
     });
+  } else if ((m = /^users\/(\d+)\/mfa$/.exec(path))) {
+    const user = db.users.find((u) => u.id === Number(m![1]));
+    if (user) add(mfaEvent('mfa_reset', user, 'ผู้ดูแลระบบล้าง Microsoft Authenticator ให้'));
+  } else if (path === 'me/mfa/confirm' && actor) {
+    add(mfaEvent('mfa_enable', actor, 'เปิดใช้จากหน้าตั้งค่า'));
+  } else if (path === 'me/mfa/disable' && actor) {
+    add(mfaEvent('mfa_disable', actor, 'ปิดใช้จากหน้าตั้งค่า'));
   } else if (path === 'users' || /^users\/\d+$/.test(path)) {
     const user = body as User | null;
     const rights = user
@@ -2120,12 +2180,14 @@ function handle(
     const user = actor ? checkCredentials(username, password, db) : WRONG_LOGIN;
     return typeof user === 'string' ? error(400, user) : ok({ user });
   }
+  if (path === 'auth/mfa/verify' && req.method === 'POST') return verifyMfaLogin(req, db);
   // No fallback user: the company comes only from the token, an unknown one never passes.
   if (!actor) return error(401, SESSION_EXPIRED);
   // `/me` answers whatever branch the client remembers, so a stale one can be corrected (step 2).
   if (path === 'me' && req.method === 'GET') {
     return ok(companySession(db, actor));
   }
+  if (path.startsWith('me/mfa')) return handleOwnMfa(req, path, db, actor);
   if (
     tenant.suspendedReason === 'deletion' &&
     !path.startsWith('company/') &&
@@ -2304,9 +2366,27 @@ function handleUsers(
     if (problem) return error(400, problem);
     const limit = limitError(db, 'users', body.active);
     if (limit) return error(403, limit);
-    const user: User = { ...body, id: db.nextId++, createdAt: new Date().toISOString() };
+    const user: User = {
+      ...body,
+      mfaEnabled: false,
+      id: db.nextId++,
+      createdAt: new Date().toISOString(),
+    };
     users.push(user);
     db.passwords[user.id] = password;
+    return ok(user);
+  }
+  const mfaMatch = /^users\/(\d+)\/mfa$/.exec(path);
+  if (mfaMatch && req.method === 'DELETE') {
+    // A lost phone (E55): an admin clears it; the next login that needs it sets it up again.
+    const user = users.find((u) => u.id === Number(mfaMatch[1]));
+    if (!user) return error(404, 'ไม่พบผู้ใช้');
+    const scope = userScopeError(caller, user, user);
+    if (scope) return error(403, scope);
+    const problem = mfaResetError(user, caller.id);
+    if (problem) return error(400, problem);
+    delete db.mfa[user.id];
+    user.mfaEnabled = false;
     return ok(user);
   }
   const passwordMatch = /^users\/(\d+)\/password$/.exec(path);
@@ -2330,7 +2410,12 @@ function handleUsers(
       case 'GET':
         return ok(users[index]);
       case 'PUT': {
-        const payload = withUserRules({ ...users[index], ...(req.body as Partial<UserPayload>) });
+        // `mfaEnabled` changes only through `/me/mfa` or a reset (E55).
+        const payload = withUserRules({
+          ...users[index],
+          ...(req.body as Partial<UserPayload>),
+          mfaEnabled: users[index].mfaEnabled,
+        });
         const scope = userScopeError(caller, users[index], payload);
         if (scope) return error(403, scope);
         const identity =
@@ -2359,6 +2444,7 @@ function handleUsers(
         if (problem) return error(400, problem);
         users.splice(index, 1);
         delete db.passwords[Number(idMatch[1])];
+        delete db.mfa[Number(idMatch[1])];
         return ok(null);
       }
     }
@@ -2475,7 +2561,7 @@ function handleCompany(
 /** Every collection of the company as stored, never a password (E38). */
 function companyExport(db: MockDb): CompanyExport {
   const stored: Record<string, unknown> = { ...db, products: storeBranchStock(db, stockBranch) };
-  for (const key of ['passwords', 'storeInfo', 'legacyPosId'] as const) delete stored[key];
+  for (const key of ['passwords', 'mfa', 'storeInfo', 'legacyPosId'] as const) delete stored[key];
   for (const key of Object.keys(stored)) {
     // Counters and one-time migration flags are the mock's own bookkeeping.
     if (/^next[A-Z]/.test(key) || /(Migrated|Fixed|Enabled)$/.test(key)) delete stored[key];
@@ -2542,6 +2628,9 @@ function fillOwner(db: MockDb): boolean {
  */
 function fillUserDefaults(db: MockDb): void {
   const { users } = db;
+  db.mfa ??= {};
+  // Server-derived (E55): on when a confirmed secret is stored.
+  for (const u of users) u.mfaEnabled = !!db.mfa[u.id]?.confirmed;
   for (const u of users) {
     if (u.allBranches !== undefined) continue;
     u.allBranches = hasAdminRights(u);
@@ -5463,9 +5552,9 @@ function handleBranches(
  * names the company and the user so later requests know who is calling (`requestUser()`).
  */
 function login(
-  { companyCode, username, password }: Partial<LoginRequest>,
+  { companyCode, username, password, mfa }: Partial<LoginRequest>,
   db: MockDb,
-): Observable<HttpResponse<ApiLoginResponse>> {
+): Observable<HttpResponse<ApiLoginResponse | ApiMfaChallenge>> {
   // `requestCompany()` already found the company by its code (none → `noTenant()`).
   const company = tenant;
   if (company.code !== normalizeCompanyCode(companyCode ?? ''))
@@ -5484,8 +5573,124 @@ function login(
   if (!company.active && !ownerDeleting) {
     return error(401, SUSPENDED_MESSAGE[company.suspendedReason ?? 'platform']);
   }
+  // Authenticator next (E55): `login` is logged only once the code is right.
+  if (loginNeedsMfa(user, db.companyInfo, mfa === true)) return ok(mfaChallenge(db, user));
   pushAudit(db, { action: 'login', ref: null, detail: '' }, user);
   return ok({ token: mockToken(company.id, user.id), ...companySession(db, user) });
+}
+
+/**
+ * The code step of a login (E55): `verify` when the user has Authenticator, else `setup` with a
+ * secret that waits (unconfirmed, the same one on every try) until its first code is right.
+ */
+function mfaChallenge(db: MockDb, user: User): ApiMfaChallenge {
+  const challenge = `mock-mfa-token.t${tenant.id}.u${user.id}.e${Date.now() + MFA_CHALLENGE_MINUTES * 60_000}`;
+  if (db.mfa[user.id]?.confirmed) return { challenge, mfa: 'verify' };
+  return { challenge, mfa: 'setup', setup: pendingMfaSetup(db, user) };
+}
+
+/** The waiting (unconfirmed) secret of a user, made on first need. */
+function pendingMfaSetup(db: MockDb, user: User): MfaSetup {
+  const entry = (db.mfa[user.id] ??= { secret: newTotpSecret(), confirmed: false, lastStep: null });
+  return { secret: entry.secret, otpauthUrl: otpauthUrl(tenant.code, user.username, entry.secret) };
+}
+
+/** Company, user and expiry a mock challenge names; undefined = missing / malformed. */
+function mfaChallengeOf(
+  req: HttpRequest<unknown>,
+): { companyId: number; userId: number; expiresAt: number } | undefined {
+  const token = req.headers.get('Authorization')?.replace(/^Bearer\s+/, '') ?? '';
+  const match = /^mock-mfa-token\.t(\d+)\.u(\d+)\.e(\d+)$/.exec(token);
+  return match
+    ? { companyId: Number(match[1]), userId: Number(match[2]), expiresAt: Number(match[3]) }
+    : undefined;
+}
+
+/**
+ * `POST /auth/mfa/verify { code }` (E55): the code of the login waiting in the session → the
+ * session. Always 400 on failure (a 401 would log out); a set-up secret is turned on by its first
+ * right code; a used step never passes again.
+ */
+function verifyMfaLogin(req: HttpRequest<unknown>, db: MockDb): Observable<HttpResponse<unknown>> {
+  const challenge = mfaChallengeOf(req);
+  const user = db.users.find((u) => u.id === challenge?.userId && u.active);
+  if (
+    !challenge ||
+    challenge.companyId !== tenant.id ||
+    challenge.expiresAt < Date.now() ||
+    !user
+  ) {
+    return error(400, MFA_CHALLENGE_EXPIRED);
+  }
+  const ownerDeleting = tenant.suspendedReason === 'deletion' && isOwner(user);
+  if (!tenant.active && !ownerDeleting) {
+    return error(401, SUSPENDED_MESSAGE[tenant.suspendedReason ?? 'platform']);
+  }
+  const entry = db.mfa[user.id];
+  const code = String((req.body as { code?: unknown } | null)?.code ?? '');
+  const step = entry ? verifyTotp(entry.secret, code, Date.now(), entry.lastStep) : null;
+  if (!entry || step === null) {
+    pushAudit(
+      db,
+      { action: 'login_failed', ref: null, detail: 'รหัส Microsoft Authenticator ไม่ถูกต้อง' },
+      user,
+    );
+    return error(400, MFA_WRONG_CODE);
+  }
+  entry.lastStep = step;
+  if (!entry.confirmed) {
+    entry.confirmed = true;
+    user.mfaEnabled = true;
+    pushAudit(db, mfaEvent('mfa_enable', user, 'ผูกตอนเข้าสู่ระบบ'), user);
+  }
+  pushAudit(db, { action: 'login', ref: null, detail: 'ด้วย Microsoft Authenticator' }, user);
+  return ok({ token: mockToken(tenant.id, user.id), ...companySession(db, user) });
+}
+
+const mfaEvent = (action: AuditAction, user: User, detail: string): AuditEntry => ({
+  action,
+  ref: { kind: 'user', id: user.id, label: user.username },
+  detail,
+});
+
+/**
+ * The caller's own Authenticator (E55): `POST me/mfa/setup` → a waiting secret, `POST
+ * me/mfa/confirm { code }` turns it on, `POST me/mfa/disable { password }` turns it off unless the
+ * company requires it. Audit in `recordAudit()`.
+ */
+function handleOwnMfa(
+  req: HttpRequest<unknown>,
+  path: string,
+  db: MockDb,
+  me: User,
+): Observable<HttpResponse<unknown>> {
+  if (req.method !== 'POST') return notFound(req, path);
+  const body = (req.body ?? {}) as { code?: unknown; password?: unknown };
+  if (path === 'me/mfa/setup') {
+    if (me.mfaEnabled) return error(400, 'เปิดใช้ Microsoft Authenticator อยู่แล้ว');
+    return ok(pendingMfaSetup(db, me));
+  }
+  if (path === 'me/mfa/confirm') {
+    const entry = db.mfa[me.id];
+    if (me.mfaEnabled) return error(400, 'เปิดใช้ Microsoft Authenticator อยู่แล้ว');
+    if (!entry) return error(400, 'กรุณาเริ่มตั้งค่า Microsoft Authenticator ใหม่');
+    const step = verifyTotp(entry.secret, String(body.code ?? ''), Date.now(), entry.lastStep);
+    if (step === null) return error(400, MFA_WRONG_CODE);
+    Object.assign(entry, { confirmed: true, lastStep: step });
+    me.mfaEnabled = true;
+    return ok(me);
+  }
+  if (path === 'me/mfa/disable') {
+    if (String(body.password ?? '') !== passwordOf(db, me.id)) {
+      return error(400, 'รหัสผ่านไม่ถูกต้อง');
+    }
+    const problem = mfaDisableError(me, db.companyInfo);
+    if (problem) return error(400, problem);
+    delete db.mfa[me.id];
+    me.mfaEnabled = false;
+    return ok(me);
+  }
+  return notFound(req, path);
 }
 
 const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';

@@ -73,7 +73,12 @@ export interface CompanyInfo {
   shiftMaxHours: number;
   /** Staff (`user`) see cost / profit too (P5, E43 — `canSeeCost()`); off = only the owner / admins */
   staffSeeCost: boolean;
+  /** Who must log in with Microsoft Authenticator (E55, `mfaRequiredFor()`) */
+  mfaRequired: MfaRequirement;
 }
+
+/** Company rule for two-step login (E55): nobody / the owner + admins / everyone. */
+export type MfaRequirement = 'none' | 'admins' | 'all';
 
 export const COMPANY_INFO_DEFAULTS: CompanyInfo = {
   name: '',
@@ -86,6 +91,7 @@ export const COMPANY_INFO_DEFAULTS: CompanyInfo = {
   shiftVarianceLimit: 100,
   shiftMaxHours: 12,
   staffSeeCost: false,
+  mfaRequired: 'none',
 };
 
 export const HEAD_OFFICE_BRANCH_NO = '00000';
@@ -129,6 +135,7 @@ export function companyInfoOf(s: StoreInfo): CompanyInfo {
     shiftVarianceLimit: s.shiftVarianceLimit,
     shiftMaxHours: s.shiftMaxHours,
     staffSeeCost: s.staffSeeCost ?? false,
+    mfaRequired: s.mfaRequired ?? 'none',
   };
 }
 
@@ -148,6 +155,7 @@ export function normalizeCompanyInfo(c: CompanyInfo): CompanyInfo {
     shiftVarianceLimit: n(c.shiftVarianceLimit, COMPANY_INFO_DEFAULTS.shiftVarianceLimit),
     shiftMaxHours: n(c.shiftMaxHours, COMPANY_INFO_DEFAULTS.shiftMaxHours),
     staffSeeCost: !!c.staffSeeCost,
+    mfaRequired: c.mfaRequired ?? COMPANY_INFO_DEFAULTS.mfaRequired,
   };
 }
 
@@ -187,6 +195,9 @@ export function companyInfoError(c: CompanyInfo): string | null {
   }
   if (!Number.isInteger(c.shiftMaxHours) || c.shiftMaxHours < 1 || c.shiftMaxHours > 48) {
     return 'ชั่วโมงเตือนกะเปิดค้างต้องเป็นจำนวนเต็ม 1–48';
+  }
+  if (!['none', 'admins', 'all'].includes(c.mfaRequired)) {
+    return 'การบังคับใช้ Microsoft Authenticator ไม่ถูกต้อง';
   }
   return null;
 }

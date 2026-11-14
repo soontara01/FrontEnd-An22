@@ -9,6 +9,7 @@ import type {
   Company,
   LoginRequest,
   LoginResponse,
+  LoginResult,
   MeResponse,
   SignupPayload,
   User,
@@ -116,9 +117,22 @@ export class AuthService {
     );
   }
 
-  login(credentials: LoginRequest): Observable<LoginResponse> {
+  /**
+   * Step 1 of a login: the session, or (E55) the Authenticator step first — then `verifyMfa()`.
+   * `'mfa' in result` = the challenge (inlined `isMfaChallenge()`: eager code).
+   */
+  login(credentials: LoginRequest): Observable<LoginResult> {
+    return this.api.post<LoginResult>('auth/login', credentials).pipe(
+      tap((result) => {
+        if (!('mfa' in result)) this.startSession(result);
+      }),
+    );
+  }
+
+  /** Step 2 (E55): the 6-digit Authenticator code of the login waiting in the web server's session. */
+  verifyMfa(code: string): Observable<LoginResponse> {
     return this.api
-      .post<LoginResponse>('auth/login', credentials)
+      .post<LoginResponse>('auth/mfa/verify', { code })
       .pipe(tap((session) => this.startSession(session)));
   }
 

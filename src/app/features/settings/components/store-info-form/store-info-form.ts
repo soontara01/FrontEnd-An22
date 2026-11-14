@@ -6,6 +6,8 @@ import {
   BRANCH_DEFAULTS,
   Branch,
   COMPANY_INFO_DEFAULTS,
+  MFA_REQUIRED_LABEL,
+  MFA_REQUIREMENTS,
   branchDetailsError,
   companyInfoError,
   normalizeBranch,
@@ -70,7 +72,12 @@ export class StoreInfoForm {
     shiftVarianceLimit: COMPANY_INFO_DEFAULTS.shiftVarianceLimit,
     shiftMaxHours: COMPANY_INFO_DEFAULTS.shiftMaxHours,
     staffSeeCost: COMPANY_INFO_DEFAULTS.staffSeeCost,
+    mfaRequired: COMPANY_INFO_DEFAULTS.mfaRequired,
   });
+  protected readonly mfaOptions = MFA_REQUIREMENTS.map((value) => ({
+    value,
+    label: MFA_REQUIRED_LABEL[value],
+  }));
 
   protected readonly details = this.fb.group({
     name: '',
