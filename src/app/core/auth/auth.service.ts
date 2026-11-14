@@ -11,6 +11,7 @@ import type {
   LoginResponse,
   LoginResult,
   MeResponse,
+  MfaChallenge,
   SignupPayload,
   User,
 } from '../models';
@@ -118,8 +119,8 @@ export class AuthService {
   }
 
   /**
-   * Step 1 of a login: the session, or (E55) the Authenticator step first — then `verifyMfa()`.
-   * `'mfa' in result` = the challenge (inlined `isMfaChallenge()`: eager code).
+   * Step 1 of a login: the Authenticator step (always since E57) — then `verifyMfa()`. A session
+   * here is still taken (`'mfa' in result` = the challenge, inlined `isMfaChallenge()`: eager code).
    */
   login(credentials: LoginRequest): Observable<LoginResult> {
     return this.api.post<LoginResult>('auth/login', credentials).pipe(
@@ -136,11 +137,12 @@ export class AuthService {
       .pipe(tap((session) => this.startSession(session)));
   }
 
-  /** Signs a new company up (E37) and logs its owner in, like `login()`. */
-  signup(payload: SignupPayload): Observable<LoginResponse> {
-    return this.api
-      .post<LoginResponse>('auth/signup', payload)
-      .pipe(tap((session) => this.startSession(session)));
+  /**
+   * Signs a new company up (E37): the owner sets up Microsoft Authenticator next (E57) — the answer
+   * is the code step, then `verifyMfa()` like a login.
+   */
+  signup(payload: SignupPayload): Observable<MfaChallenge> {
+    return this.api.post<MfaChallenge>('auth/signup', payload);
   }
 
   private startSession(session: LoginResponse): void {

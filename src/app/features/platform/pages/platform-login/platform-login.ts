@@ -1,10 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  inject,
+  input,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { isMfaChallenge, type MfaSetup } from '@core/models/auth.model';
 import { PLATFORM_MFA_ACCOUNT } from '@core/models/mfa.model';
-import { isTotpCode, normalizeTotpCode } from '@core/models/totp.model';
-import { MfaSetupPanel } from '@shared/components/mfa-setup/mfa-setup';
+import { MfaCodeStep } from '@shared/components/mfa-setup/mfa-code-step';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { environment } from '@env/environment';
 import { MATERIAL } from '@shared/material';
@@ -16,7 +22,7 @@ import { PlatformAuth } from '../../data/platform-auth.service';
  */
 @Component({
   selector: 'app-platform-login',
-  imports: [ReactiveFormsModule, AutofocusDirective, MfaSetupPanel, MATERIAL],
+  imports: [ReactiveFormsModule, AutofocusDirective, MfaCodeStep, MATERIAL],
   template: `
     <main class="page">
       <mat-card class="card" appearance="outlined">
@@ -54,45 +60,16 @@ import { PlatformAuth } from '../../data/platform-auth.service';
             </mat-card-actions>
           </form>
         } @else {
-          <form [formGroup]="codeForm" (ngSubmit)="submitCode()">
-            <mat-card-content>
-              @if (setup(); as s) {
-                <p class="lead">
-                  ผู้ดูแลแพลตฟอร์มต้องใช้ Microsoft Authenticator — ตั้งค่าให้บัญชี
-                  <strong>{{ form.controls.username.value }}</strong>
-                </p>
-                <app-mfa-setup [setup]="s" />
-              } @else {
-                <p class="lead">
-                  เปิดแอป <strong>Microsoft Authenticator</strong> แล้วพิมพ์รหัส 6 หลักของบัญชี
-                  <strong>AN22 · {{ account }}:{{ form.controls.username.value }}</strong>
-                </p>
-              }
-              <mat-form-field appearance="outline">
-                <mat-label>รหัส 6 หลัก</mat-label>
-                <input
-                  matInput
-                  appAutofocus
-                  formControlName="code"
-                  inputmode="numeric"
-                  autocomplete="one-time-code"
-                  maxlength="7"
-                />
-                @if (codeForm.controls.code.hasError('required')) {
-                  <mat-error>กรุณากรอกรหัส 6 หลักจากแอป</mat-error>
-                } @else if (codeForm.controls.code.hasError('format')) {
-                  <mat-error>รหัสต้องเป็นตัวเลข 6 หลัก</mat-error>
-                }
-                <mat-hint>รหัสเปลี่ยนทุก 30 วินาที</mat-hint>
-              </mat-form-field>
-            </mat-card-content>
-            <mat-card-actions class="code-actions">
-              <button mat-flat-button type="submit" [disabled]="submitting()">
-                {{ setup() ? 'ยืนยันและเข้าสู่ระบบ' : 'ยืนยัน' }}
-              </button>
-              <button mat-button type="button" (click)="back()">กลับ</button>
-            </mat-card-actions>
-          </form>
+          <app-mfa-code-step
+            [setup]="setup()"
+            [account]="account + ':' + form.controls.username.value.trim().toLowerCase()"
+            [username]="form.controls.username.value"
+            [submitting]="submitting()"
+            [demoSecret]="demoSecret()"
+            lostPhone="ให้ผู้ดูแล server ล้างด้วย scripts/platform-mfa-reset.sh"
+            (code)="submitCode($event)"
+            (back)="back()"
+          />
         }
       </mat-card>
     </main>
@@ -116,13 +93,6 @@ import { PlatformAuth } from '../../data/platform-auth.service';
     mat-card-actions button {
       width: 100%;
     }
-    .code-actions {
-      flex-direction: column;
-      gap: 8px;
-    }
-    .lead {
-      margin: 0 0 16px;
-    }
     .expired {
       margin: 0 0 16px;
       color: var(--mat-sys-error);
@@ -141,22 +111,15 @@ export default class PlatformLogin {
   protected readonly submitting = signal(false);
   protected readonly step = signal<'password' | 'code'>('password');
   protected readonly setup = signal<MfaSetup | null>(null);
+  /** Mock only: the secret it sends along, to show the current code */
+  protected readonly demoSecret = signal<string | null>(null);
+  private readonly codeStep = viewChild(MfaCodeStep);
 
   private readonly fb = inject(NonNullableFormBuilder);
   protected readonly form = this.fb.group({
     username: ['', Validators.required],
     password: ['', Validators.required],
   });
-  protected readonly codeForm = this.fb.group({
-    code: [
-      '',
-      [
-        Validators.required,
-        (c: { value: string }) => (c.value && !isTotpCode(c.value) ? { format: true } : null),
-      ],
-    ],
-  });
-
   protected submit(): void {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
@@ -171,25 +134,23 @@ export default class PlatformLogin {
           this.enter();
           return;
         }
-        this.codeForm.reset();
         this.setup.set(result.mfa === 'setup' ? result.setup : null);
+        this.demoSecret.set(
+          this.demo ? ((result as { demoSecret?: string }).demoSecret ?? null) : null,
+        );
         this.step.set('code');
       },
       error: () => this.submitting.set(false),
     });
   }
 
-  protected submitCode(): void {
-    if (this.codeForm.invalid) {
-      this.codeForm.markAllAsTouched();
-      return;
-    }
+  protected submitCode(code: string): void {
     this.submitting.set(true);
-    this.auth.verifyMfa(normalizeTotpCode(this.codeForm.controls.code.value)).subscribe({
+    this.auth.verifyMfa(code).subscribe({
       next: () => this.enter(),
       error: () => {
         this.submitting.set(false);
-        this.codeForm.reset();
+        this.codeStep()?.reset();
       },
     });
   }

@@ -49,7 +49,6 @@ import {
   LoginRequest,
   MeResponse,
   normalizeCompanyCode,
-  LoginResponse,
   PAYMENT_METHOD_DEFAULTS,
   PRODUCT_DEFAULTS,
   PROMOTION_DEFAULTS,
@@ -251,8 +250,6 @@ import {
   MFA_CHALLENGE_EXPIRED,
   MFA_WRONG_CODE,
   PLATFORM_MFA_ACCOUNT,
-  loginNeedsMfa,
-  mfaDisableError,
   mfaResetError,
   newTotpSecret,
   otpauthUrl,
@@ -434,11 +431,13 @@ const MFA_CHALLENGE_MINUTES = 5;
 /** A parked bill as the mock keeps it: with the branch + terminal it belongs to. */
 type StoredHeldBill = HeldBill & { branchId: number; terminalId: number };
 
-/** What the api answers a login with: the session + the token, which the web server keeps. */
-type ApiLoginResponse = LoginResponse & { token: string };
+/** What the api answers a platform login with: the admin + the token, which the web server keeps. */
 type ApiPlatformLoginResponse = PlatformLoginResponse & { token: string };
-/** The code step (E55): the api's challenge goes into the web server's session too. */
-type ApiMfaChallenge = MfaChallenge & { challenge: string };
+/**
+ * The code step (E55): the api's challenge goes into the web server's session too. `demoSecret` is
+ * the mock's own (not the api's): the dev login page shows the current code with it — no phone.
+ */
+type ApiMfaChallenge = MfaChallenge & { challenge: string; demoSecret?: string };
 
 /** Storage key of a company's data: `mock.db` for DEMO, `mock.db.<id>` for the others. */
 const tenantKey = (companyId: number): string =>
@@ -1487,7 +1486,7 @@ function publicResponse(
 function signup(
   body: SignupPayload | null,
   storage: StorageService,
-): Observable<HttpResponse<ApiLoginResponse>> {
+): Observable<HttpResponse<ApiMfaChallenge>> {
   const p: SignupPayload = {
     companyCode: body?.companyCode ?? '',
     companyName: (body?.companyName ?? '').trim(),
@@ -1561,8 +1560,10 @@ function signup(
     ref: { kind: 'company', id: company.id, label: code },
     detail: `สมัครใช้งาน แพ็กเกจ ${planOf(p.planId).name} ทดลองใช้ถึง ${trialEndsOn}`,
   });
+  // The owner gets in only after setting up Microsoft Authenticator (E57).
+  const challenge = mfaChallenge(db, owner);
   saveTenantDb(storage, company.id, db, null);
-  return ok({ token: mockToken(company.id, owner.id), ...companySession(db, owner) });
+  return ok(challenge);
 }
 
 /**
@@ -1642,10 +1643,11 @@ function platformMfaChallenge(admin: PlatformAdmin): ApiMfaChallenge {
     confirmed: false,
     lastStep: null,
   });
-  if (entry.confirmed) return { challenge, mfa: 'verify' };
+  if (entry.confirmed) return { challenge, mfa: 'verify', demoSecret: entry.secret };
   return {
     challenge,
     mfa: 'setup',
+    demoSecret: entry.secret,
     setup: {
       secret: entry.secret,
       otpauthUrl: otpauthUrl(PLATFORM_MFA_ACCOUNT, admin.username, entry.secret),
@@ -2098,10 +2100,6 @@ function recordAudit(
   } else if ((m = /^users\/(\d+)\/mfa$/.exec(path))) {
     const user = db.users.find((u) => u.id === Number(m![1]));
     if (user) add(mfaEvent('mfa_reset', user, 'ผู้ดูแลระบบล้าง Microsoft Authenticator ให้'));
-  } else if (path === 'me/mfa/confirm' && actor) {
-    add(mfaEvent('mfa_enable', actor, 'เปิดใช้จากหน้าตั้งค่า'));
-  } else if (path === 'me/mfa/disable' && actor) {
-    add(mfaEvent('mfa_disable', actor, 'ปิดใช้จากหน้าตั้งค่า'));
   } else if (path === 'users' || /^users\/\d+$/.test(path)) {
     const user = body as User | null;
     const rights = user
@@ -2265,7 +2263,6 @@ function handle(
   if (branchHeader === null && needsBranch(req, path)) {
     return error(400, 'ไม่ได้เลือกสาขา กรุณาเลือกสาขาที่ทำงานก่อน');
   }
-  if (path.startsWith('me/mfa/')) return handleOwnMfa(req, path, db, actor);
   if (path === 'users' || path.startsWith('users/')) return handleUsers(req, path, db);
   if (path === 'company' || path.startsWith('company/')) return handleCompany(req, path, db);
   if (path === 'audit-log' && req.method === 'GET') {
@@ -5612,9 +5609,9 @@ function handleBranches(
  * names the company and the user so later requests know who is calling (`requestUser()`).
  */
 function login(
-  { companyCode, username, password, mfa }: Partial<LoginRequest>,
+  { companyCode, username, password }: Partial<LoginRequest>,
   db: MockDb,
-): Observable<HttpResponse<ApiLoginResponse | ApiMfaChallenge>> {
+): Observable<HttpResponse<ApiMfaChallenge>> {
   // `requestCompany()` already found the company by its code (none → `noTenant()`).
   const company = tenant;
   if (company.code !== normalizeCompanyCode(companyCode ?? ''))
@@ -5633,10 +5630,8 @@ function login(
   if (!company.active && !ownerDeleting) {
     return error(401, SUSPENDED_MESSAGE[company.suspendedReason ?? 'platform']);
   }
-  // Authenticator next (E55): `login` is logged only once the code is right.
-  if (loginNeedsMfa(user, db.companyInfo, mfa === true)) return ok(mfaChallenge(db, user));
-  pushAudit(db, { action: 'login', ref: null, detail: '' }, user);
-  return ok({ token: mockToken(company.id, user.id), ...companySession(db, user) });
+  // Always the Authenticator next (E57): `login` is logged only once the code is right.
+  return ok(mfaChallenge(db, user));
 }
 
 /**
@@ -5645,8 +5640,10 @@ function login(
  */
 function mfaChallenge(db: MockDb, user: User): ApiMfaChallenge {
   const challenge = `mock-mfa-token.t${tenant.id}.u${user.id}.e${Date.now() + MFA_CHALLENGE_MINUTES * 60_000}`;
-  if (db.mfa[user.id]?.confirmed) return { challenge, mfa: 'verify' };
-  return { challenge, mfa: 'setup', setup: pendingMfaSetup(db, user) };
+  const entry = db.mfa[user.id];
+  if (entry?.confirmed) return { challenge, mfa: 'verify', demoSecret: entry.secret };
+  const setup = pendingMfaSetup(db, user);
+  return { challenge, mfa: 'setup', setup, demoSecret: setup.secret };
 }
 
 /** The waiting (unconfirmed) secret of a user, made on first need. */
@@ -5712,46 +5709,6 @@ const mfaEvent = (action: AuditAction, user: User, detail: string): AuditEntry =
   ref: { kind: 'user', id: user.id, label: user.username },
   detail,
 });
-
-/**
- * The caller's own Authenticator (E55): `POST me/mfa/setup` → a waiting secret, `POST
- * me/mfa/confirm { code }` turns it on, `POST me/mfa/disable { password }` turns it off unless the
- * company requires it. Audit in `recordAudit()`.
- */
-function handleOwnMfa(
-  req: HttpRequest<unknown>,
-  path: string,
-  db: MockDb,
-  me: User,
-): Observable<HttpResponse<unknown>> {
-  if (req.method !== 'POST') return notFound(req, path);
-  const body = (req.body ?? {}) as { code?: unknown; password?: unknown };
-  if (path === 'me/mfa/setup') {
-    if (me.mfaEnabled) return error(400, 'เปิดใช้ Microsoft Authenticator อยู่แล้ว');
-    return ok(pendingMfaSetup(db, me));
-  }
-  if (path === 'me/mfa/confirm') {
-    const entry = db.mfa[me.id];
-    if (me.mfaEnabled) return error(400, 'เปิดใช้ Microsoft Authenticator อยู่แล้ว');
-    if (!entry) return error(400, 'กรุณาเริ่มตั้งค่า Microsoft Authenticator ใหม่');
-    const step = verifyTotp(entry.secret, String(body.code ?? ''), Date.now(), entry.lastStep);
-    if (step === null) return error(400, MFA_WRONG_CODE);
-    Object.assign(entry, { confirmed: true, lastStep: step });
-    me.mfaEnabled = true;
-    return ok(me);
-  }
-  if (path === 'me/mfa/disable') {
-    if (String(body.password ?? '') !== passwordOf(db, me.id)) {
-      return error(400, 'รหัสผ่านไม่ถูกต้อง');
-    }
-    const problem = mfaDisableError(me, db.companyInfo);
-    if (problem) return error(400, problem);
-    delete db.mfa[me.id];
-    me.mfaEnabled = false;
-    return ok(me);
-  }
-  return notFound(req, path);
-}
 
 const WRONG_LOGIN = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
 /** Told only after a correct login (E3), by why the company is suspended. */

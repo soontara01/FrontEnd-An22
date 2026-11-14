@@ -60,16 +60,16 @@ describe('Login', () => {
     expect(text).not.toContain('เซสชันหมดอายุ');
   });
 
-  describe('Microsoft Authenticator (E55)', () => {
+  describe('Microsoft Authenticator (E57: every login)', () => {
     const assign = vi.fn();
     const login = vi.fn();
     const verifyMfa = vi.fn();
 
-    function open(mfa = false) {
+    function open(mock = false) {
       assign.mockReset();
       login.mockReset();
       verifyMfa.mockReset();
-      environment.useMock = false;
+      environment.useMock = mock;
       TestBed.configureTestingModule({
         imports: [Login],
         providers: [
@@ -97,7 +97,6 @@ describe('Login', () => {
         ],
       });
       const fixture = TestBed.createComponent(Login);
-      if (mfa) fixture.componentRef.setInput('mfa', true);
       fixture.detectChanges();
       const el = fixture.nativeElement as HTMLElement;
       const type = (selector: string, value: string) => {
@@ -114,10 +113,9 @@ describe('Login', () => {
       return { fixture, el, type, submit };
     }
 
-    it('asks /auth/login-mfa logins for the code and goes in after it', async () => {
-      const { el, type, submit } = open(true);
-      expect(el.textContent).toContain('เข้าสู่ระบบด้วย Microsoft Authenticator');
-      expect(el.textContent).toContain('เข้าสู่ระบบด้วยรหัสผ่านอย่างเดียว');
+    it('asks for the code after the password and goes in after it', async () => {
+      const { el, type, submit } = open();
+      expect(el.textContent).not.toContain('เข้าสู่ระบบด้วย Microsoft Authenticator');
       login.mockReturnValue(of({ mfa: 'verify' }));
       type('input[formControlName="username"]', 'somchai');
       type('input[formControlName="password"]', '1234');
@@ -126,10 +124,9 @@ describe('Login', () => {
         companyCode: 'DEMO',
         username: 'somchai',
         password: '1234',
-        mfa: true,
       });
       expect(assign).not.toHaveBeenCalled();
-      expect(el.textContent).toContain('รหัส 6 หลัก');
+      expect(el.textContent).toContain('AN22 · DEMO:somchai');
 
       verifyMfa.mockReturnValue(throwError(() => new Error('400')));
       type('input[autocomplete="one-time-code"]', '123 456');
@@ -143,18 +140,7 @@ describe('Login', () => {
       expect(assign).toHaveBeenCalledWith('/');
     });
 
-    it('goes straight in from /auth/login when the server asks no code', async () => {
-      const { el, type, submit } = open();
-      expect(el.textContent).toContain('เข้าสู่ระบบด้วย Microsoft Authenticator');
-      login.mockReturnValue(of({ user: {}, company: {}, branches: [] }));
-      type('input[formControlName="username"]', 'somchai');
-      type('input[formControlName="password"]', '1234');
-      await submit();
-      expect(login.mock.calls[0][0]).not.toHaveProperty('mfa');
-      expect(assign).toHaveBeenCalledWith('/');
-    });
-
-    it('shows the set-up QR step when the server asks for it', async () => {
+    it('shows the set-up QR step on the first login', async () => {
       const { el, type, submit } = open();
       login.mockReturnValue(
         of({ mfa: 'setup', setup: { secret: 'ABCDEFGHIJKLMNOP', otpauthUrl: 'otpauth://x' } }),
@@ -162,9 +148,23 @@ describe('Login', () => {
       type('input[formControlName="username"]', 'somchai');
       type('input[formControlName="password"]', '1234');
       await submit();
-      expect(el.textContent).toContain('ตั้งค่า Microsoft Authenticator ให้บัญชี');
+      expect(el.textContent).toContain('ทุกการเข้าสู่ระบบต้องใช้ Microsoft Authenticator');
       expect(el.textContent).toContain('ABCD EFGH IJKL MNOP');
       expect(el.textContent).toContain('ยืนยันและเข้าสู่ระบบ');
+    });
+
+    it('shows the current code on the mock only (demoSecret)', async () => {
+      const real = open(false);
+      login.mockReturnValue(of({ mfa: 'verify', demoSecret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' }));
+      real.type('input[formControlName="password"]', '1234');
+      await real.submit();
+      expect(real.el.textContent).not.toContain('ทดลอง (mock)');
+      TestBed.resetTestingModule();
+      const mock = open(true);
+      login.mockReturnValue(of({ mfa: 'verify', demoSecret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ' }));
+      mock.type('input[formControlName="password"]', 'admin');
+      await mock.submit();
+      expect(mock.el.textContent).toMatch(/ทดลอง \(mock\): รหัสตอนนี้ \d{6}/);
     });
   });
 });

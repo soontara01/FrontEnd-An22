@@ -7,8 +7,6 @@ export interface LoginRequest {
   companyCode: string;
   username: string;
   password: string;
-  /** Through `/auth/login-mfa`: always ask the Authenticator code (E55) */
-  mfa?: boolean;
 }
 
 /**
@@ -27,7 +25,10 @@ export interface MfaSetup {
  */
 export type MfaChallenge = { mfa: 'verify' } | { mfa: 'setup'; setup: MfaSetup };
 
-/** `POST /auth/login`: the session, or the code step first. */
+/**
+ * `POST /auth/login` / `POST /auth/signup`: always the code step (E57) — the session comes from
+ * `POST /auth/mfa/verify`. Kept a union so an answer is never taken for a session by accident.
+ */
 export type LoginResult = LoginResponse | MfaChallenge;
 
 /** The code step (shop login E55 / platform login E56) rather than a session. */
