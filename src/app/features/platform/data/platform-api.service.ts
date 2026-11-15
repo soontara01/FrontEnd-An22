@@ -32,6 +32,11 @@ export class PlatformApi {
     return this.api.put<null>(`platform/companies/${id}/owner-password`, { password });
   }
 
+  /** Clears a user's Microsoft Authenticator (E58): they set it up again at the next login. */
+  resetUserMfa(id: number, username: string): Observable<null> {
+    return this.api.post<null>(`platform/companies/${id}/mfa-reset`, { username });
+  }
+
   payInvoice(invoiceId: number): Observable<PlatformCompanyDetail> {
     return this.api.post<PlatformCompanyDetail>(`platform/invoices/${invoiceId}/pay`, {});
   }

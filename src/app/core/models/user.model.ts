@@ -25,7 +25,7 @@ export interface User {
   branchIds: number[];
   /** Every branch of the company, now and later (an admin with it = company admin, E5; owner always) */
   allBranches: boolean;
-  /** Logs in with Microsoft Authenticator (E55) — server-derived, changed only via `/me/mfa` / reset */
+  /** Microsoft Authenticator set up (E55 / E57) — server-derived; false = sets it up at the next login */
   mfaEnabled: boolean;
   createdAt: string;
 }

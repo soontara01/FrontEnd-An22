@@ -1,6 +1,6 @@
 <mat-card class="card" appearance="outlined">
   <mat-card-header>
-    <mat-card-title>{{ title() }}</mat-card-title>
+    <mat-card-title>เข้าสู่ระบบ</mat-card-title>
     @if (demo) {
       <mat-card-subtitle>
         ทดลองใช้: บริษัท DEMO · admin / admin · พนักงาน: somchai / 1234
@@ -90,65 +90,17 @@
           <a mat-button routerLink="/auth/forgot-password">ลืมรหัสผ่าน (เจ้าของบริษัท)</a>
           <a mat-button routerLink="/auth/signup">สมัครใช้งานบริษัทใหม่</a>
         </div>
-        @if (mfa()) {
-          <a mat-button routerLink="/auth/login">เข้าสู่ระบบด้วยรหัสผ่านอย่างเดียว</a>
-        } @else {
-          <a mat-button routerLink="/auth/login-mfa">
-            <mat-icon>phonelink_lock</mat-icon>
-            เข้าสู่ระบบด้วย Microsoft Authenticator
-          </a>
-        }
       </mat-card-actions>
     </form>
   } @else {
-    <form [formGroup]="codeForm" (ngSubmit)="submitCode()">
-      <mat-card-content>
-        @if (setup(); as s) {
-          <p class="lead">
-            ตั้งค่า Microsoft Authenticator ให้บัญชี
-            <strong>{{ form.controls.username.value }}</strong>
-          </p>
-          <app-mfa-setup [setup]="s" />
-        } @else {
-          <p class="lead">
-            เปิดแอป <strong>Microsoft Authenticator</strong> บนมือถือ แล้วพิมพ์รหัส 6 หลักของบัญชี
-            <strong>AN22 · {{ auth.companyCode() }}:{{ form.controls.username.value }}</strong>
-          </p>
-        }
-        <mat-form-field appearance="outline">
-          <mat-label>รหัส 6 หลัก</mat-label>
-          <input
-            matInput
-            appAutofocus
-            formControlName="code"
-            inputmode="numeric"
-            autocomplete="one-time-code"
-            maxlength="7"
-            spellcheck="false"
-          />
-          <mat-icon matPrefix>pin</mat-icon>
-          @if (code.hasError('required')) {
-            <mat-error>กรุณากรอกรหัส 6 หลักจากแอป</mat-error>
-          } @else if (code.hasError('format')) {
-            <mat-error>รหัสต้องเป็นตัวเลข 6 หลัก</mat-error>
-          }
-          <mat-hint>รหัสเปลี่ยนทุก 30 วินาที</mat-hint>
-        </mat-form-field>
-      </mat-card-content>
-
-      <mat-card-actions>
-        <button mat-flat-button type="submit" [disabled]="submitting()">
-          @if (submitting()) {
-            <mat-spinner diameter="20" />
-          } @else {
-            {{ setup() ? 'ยืนยันและเข้าสู่ระบบ' : 'ยืนยัน' }}
-          }
-        </button>
-        <button mat-button type="button" (click)="back()">กลับ</button>
-        @if (!setup()) {
-          <p class="note">ทำมือถือหาย? ติดต่อผู้ดูแลระบบของบริษัทให้ล้าง Authenticator ให้</p>
-        }
-      </mat-card-actions>
-    </form>
+    <app-mfa-code-step
+      [setup]="setup()"
+      [account]="account()"
+      [username]="form.controls.username.value"
+      [submitting]="submitting()"
+      [demoSecret]="demoSecret()"
+      (code)="submitCode($event)"
+      (back)="back()"
+    />
   }
 </mat-card>

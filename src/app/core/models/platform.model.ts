@@ -1,3 +1,4 @@
+import type { MfaChallenge } from './auth.model';
 import { PlanId, PlanUsage } from './plan.model';
 import { CompanyDeletion } from './company-data.model';
 import {
@@ -21,6 +22,12 @@ export interface PlatformAdmin {
 export interface PlatformLoginResponse {
   admin: PlatformAdmin;
 }
+
+/**
+ * `POST /platform/auth/login` (E56): always the Authenticator step first (`MfaChallenge`), then
+ * `POST /platform/auth/mfa/verify { code }` → `PlatformLoginResponse`.
+ */
+export type PlatformLoginResult = PlatformLoginResponse | MfaChallenge;
 
 export const SUSPEND_REASON_LABEL: Record<CompanySuspendReason, string> = {
   overdue: 'ค้างชำระ',

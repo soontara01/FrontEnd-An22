@@ -40,7 +40,7 @@ import { PlatformApi } from '../../data/platform-api.service';
 
 /**
  * One company for the SaaS operator (E36): package, suspend / turn back on, invoices (mark paid),
- * the owner's password. Same rules as the server (`platform.model.ts`).
+ * the owner's password, clearing a user's Authenticator (E58). Same rules as the server (`platform.model.ts`).
  */
 @Component({
   selector: 'app-company-detail',
@@ -80,6 +80,11 @@ export default class CompanyDetail {
   protected readonly note = signal('');
   protected readonly password = signal('');
   protected readonly passwordTouched = signal(false);
+  /** E58: whose Authenticator to clear — empty = the owner */
+  protected readonly mfaUsername = signal('');
+  protected readonly mfaTarget = computed(
+    () => this.mfaUsername().trim() || this.company()?.owner?.username || '',
+  );
 
   protected readonly data = rxResource({
     params: () => Number(this.id()),
@@ -188,6 +193,34 @@ export default class CompanyDetail {
       },
       error: () => this.busy.set(false),
     });
+  }
+
+  protected resetMfa(): void {
+    const c = this.company();
+    const username = this.mfaTarget();
+    if (!c || !username || this.busy()) return;
+    openConfirm(this.dialog, {
+      title: 'ล้าง Microsoft Authenticator',
+      message: `ล้าง Authenticator ของ ${username} (${c.code})? ครั้งถัดไปที่เข้าสู่ระบบจะต้องสแกน QR ใหม่`,
+      confirmText: 'ล้าง',
+    })
+      .pipe(
+        filter(Boolean),
+        switchMap(() => {
+          this.busy.set(true);
+          return this.api.resetUserMfa(c.id, username);
+        }),
+      )
+      .subscribe({
+        next: () => {
+          this.busy.set(false);
+          this.mfaUsername.set('');
+          this.notify.success(
+            `ล้าง Authenticator ของ ${username} แล้ว — สแกน QR ใหม่ตอนเข้าสู่ระบบ`,
+          );
+        },
+        error: () => this.busy.set(false),
+      });
   }
 
   private confirmThen(

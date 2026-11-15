@@ -2,7 +2,7 @@ import { DOCUMENT, Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, catchError, map, of, tap } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
 import { silentUnauthorized } from '@core/http/silent-unauthorized';
-import { PlatformAdmin, PlatformLoginResponse } from '@core/models';
+import { PlatformAdmin, PlatformLoginResponse, PlatformLoginResult } from '@core/models';
 
 /**
  * The platform admin's session (E36), apart from the shop session of the device: the web server
@@ -35,9 +35,19 @@ export class PlatformAuth {
     return this.loading;
   }
 
-  login(username: string, password: string): Observable<PlatformLoginResponse> {
+  /** Step 1: the password — always answered with the Authenticator step (E56). */
+  login(username: string, password: string): Observable<PlatformLoginResult> {
+    return this.api.post<PlatformLoginResult>('platform/auth/login', { username, password }).pipe(
+      tap((result) => {
+        if ('admin' in result) this._admin.set(result.admin);
+      }),
+    );
+  }
+
+  /** Step 2: the 6-digit code of the login waiting in the web server's session. */
+  verifyMfa(code: string): Observable<PlatformLoginResponse> {
     return this.api
-      .post<PlatformLoginResponse>('platform/auth/login', { username, password })
+      .post<PlatformLoginResponse>('platform/auth/mfa/verify', { code })
       .pipe(tap(({ admin }) => this._admin.set(admin)));
   }
 

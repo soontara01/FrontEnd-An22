@@ -5,7 +5,7 @@ import {
   Branch,
   BranchDetails,
   CompanyInfo,
-  MfaSetup,
+  MfaChange,
   PosTerminal,
   Shift,
   User,
@@ -35,18 +35,14 @@ export class SettingsApi {
     return this.api.put<Branch>('settings/branch', details);
   }
 
-  /** Own Microsoft Authenticator (E55): a waiting secret, its first code turns it on. */
-  mfaSetup(): Observable<MfaSetup> {
-    return this.api.post<MfaSetup>('me/mfa/setup', {});
+  /** E58: moving one's Authenticator to a new phone — password + a code of the phone in use. */
+  mfaChange(password: string, code: string): Observable<MfaChange> {
+    return this.api.post<MfaChange>('me/mfa/change', { password, code });
   }
 
-  mfaConfirm(code: string): Observable<User> {
-    return this.api.post<User>('me/mfa/confirm', { code });
-  }
-
-  /** Turns it off (the password typed again); refused while the company requires it. */
-  mfaDisable(password: string): Observable<User> {
-    return this.api.post<User>('me/mfa/disable', { password });
+  /** E58: the new phone's first code swaps the secret. */
+  mfaChangeConfirm(change: string, code: string): Observable<User> {
+    return this.api.post<User>('me/mfa/change/confirm', { change, code });
   }
 
   posTerminals(): Observable<PosTerminal[]> {

@@ -1,24 +1,14 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  Injector,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, inject } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatListModule } from '@angular/material/list';
 import { AuthService } from '@core/auth/auth.service';
-import { httpErrorShown } from '@core/http/http-error-shown';
-import { CompanyInfo, ROLE_LABEL, mfaRequiredFor } from '@core/models';
+import { ROLE_LABEL } from '@core/models';
 import { ThemeService } from '@core/services/theme.service';
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
+import { MfaChangeDialog } from '../../dialogs/mfa-change-dialog';
 import { StoreInfoForm } from '../../components/store-info-form/store-info-form';
 import { ThisTerminal } from '../../components/this-terminal/this-terminal';
-import { SettingsApi } from '../../data/settings-api.service';
-import { MfaDisableDialog } from '../../dialogs/mfa-disable-dialog';
-import { MfaSetupDialog } from '../../dialogs/mfa-setup-dialog';
 
 @Component({
   selector: 'app-settings',
@@ -89,30 +79,23 @@ import { MfaSetupDialog } from '../../dialogs/mfa-setup-dialog';
               <mat-icon matListItemIcon>phonelink_lock</mat-icon>
               <span matListItemTitle>
                 @if (user.mfaEnabled) {
-                  <span class="badge badge-success">เปิดใช้อยู่</span>
+                  <span class="badge badge-success">ผูกแล้ว</span>
                 } @else {
-                  <span class="badge">ยังไม่เปิด</span>
-                }
-                @if (mfaRequired()) {
-                  <span class="text-muted small"> · บริษัทบังคับใช้</span>
+                  <span class="badge">ยังไม่ผูก — ผูกตอนเข้าสู่ระบบครั้งถัดไป</span>
                 }
               </span>
-              <span matListItemLine>Microsoft Authenticator (ยืนยันตัวตนสองขั้น)</span>
+              <span matListItemLine
+                >Microsoft Authenticator — ใช้ทุกครั้งที่เข้าสู่ระบบ · เปลี่ยนเครื่องเองได้ด้านล่าง
+                · ทำมือถือหาย ให้ผู้ดูแลระบบล้างให้</span
+              >
             </mat-list-item>
           </mat-list>
         </mat-card-content>
         <mat-card-actions>
           @if (user.mfaEnabled) {
-            @if (!mfaRequired()) {
-              <button mat-stroked-button (click)="disableMfa()">
-                <mat-icon>phonelink_erase</mat-icon>
-                ปิด Authenticator
-              </button>
-            }
-          } @else {
-            <button mat-stroked-button (click)="enableMfa()">
-              <mat-icon>phonelink_lock</mat-icon>
-              เปิดใช้ Microsoft Authenticator
+            <button mat-stroked-button (click)="changeMfaPhone()">
+              <mat-icon>phonelink_setup</mat-icon>
+              เปลี่ยนเครื่อง Authenticator
             </button>
           }
           <button mat-stroked-button (click)="auth.logout()">
@@ -141,38 +124,11 @@ export default class Settings {
   protected readonly auth = inject(AuthService);
   protected readonly theme = inject(ThemeService);
   protected readonly roleLabel = ROLE_LABEL;
-  private readonly api = inject(SettingsApi);
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
-  private readonly companyInfo = signal<CompanyInfo | null>(null);
-  /** The company makes this user use Authenticator (E55): it cannot be turned off here. */
-  protected readonly mfaRequired = computed(() => {
-    const user = this.auth.user();
-    const info = this.companyInfo();
-    return !!user && !!info && mfaRequiredFor(user, info);
-  });
 
-  constructor() {
-    this.api
-      .companyInfo()
-      .subscribe({ next: (i) => this.companyInfo.set(i), error: httpErrorShown });
-  }
-
-  protected enableMfa(): void {
-    this.openMfa(MfaSetupDialog);
-  }
-
-  protected disableMfa(): void {
-    this.openMfa(MfaDisableDialog);
-  }
-
-  /** Dialogs use the route's `SettingsApi`; the session is read again once it changed. */
-  private openMfa(component: typeof MfaSetupDialog | typeof MfaDisableDialog): void {
-    this.dialog
-      .open<unknown, unknown, boolean>(component, { width: '440px', injector: this.injector })
-      .afterClosed()
-      .subscribe((changed) => {
-        if (changed) this.auth.refresh().subscribe({ error: httpErrorShown });
-      });
+  /** E58: the dialog needs the route's `SettingsApi`. */
+  protected changeMfaPhone(): void {
+    this.dialog.open(MfaChangeDialog, { injector: this.injector, width: '420px' });
   }
 }

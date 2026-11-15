@@ -17,7 +17,7 @@ import {
   LoginResult,
   MeResponse,
   MfaChallenge,
-  MfaSetup,
+  MfaChange,
   MenuAccess,
   PosTerminal,
   CountCheckResult,
@@ -96,6 +96,57 @@ const sessionToken = (platform = false): string =>
     localStorage.getItem(platform ? 'an22.mock.platformSession' : 'an22.mock.session') ?? 'null',
   );
 
+/**
+ * A platform admin's whole login (E56): the password, then the Authenticator code — the secret is
+ * read from the mock's registry (the app would show it as a QR the first time).
+ */
+async function passPlatformLogin(
+  post: <T>(url: string, body: unknown) => Promise<T>,
+): Promise<PlatformLoginResponse> {
+  await post<MfaChallenge>('platform/auth/login', { username: 'platform', password: 'platform' });
+  const entry = (
+    JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}') as {
+      platformMfa?: Record<number, { secret: string; lastStep: number | null }>;
+    }
+  ).platformMfa?.[1];
+  if (!entry) throw new Error('no platform Authenticator secret');
+  const step = Math.max(totpStep(Date.now()), (entry.lastStep ?? -1) + 1);
+  return post<PlatformLoginResponse>('platform/auth/mfa/verify', {
+    code: totpCode(entry.secret, step),
+  });
+}
+
+/** The step a mock secret was last used in (any company's stored db), so a code is never reused. */
+function lastStepOf(secret: string): number | null {
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i) ?? '';
+    if (!key.startsWith('an22.mock.db')) continue;
+    const mfa = (
+      JSON.parse(localStorage.getItem(key) ?? '{}') as {
+        mfa?: Record<string, { secret: string; lastStep: number | null }>;
+      }
+    ).mfa;
+    const entry = Object.values(mfa ?? {}).find((e) => e.secret === secret);
+    if (entry) return entry.lastStep;
+  }
+  return null;
+}
+
+/**
+ * A shop login / signup with its Authenticator step (E57): the first answer is the code step; the
+ * mock-only `demoSecret` stands in for the phone. Failures of the first step come through as is.
+ */
+async function viaCode<T = unknown>(
+  post: (url: string, body: unknown) => Promise<unknown>,
+  url: string,
+  body: unknown,
+): Promise<T> {
+  const first = (await post(url, body)) as { demoSecret?: string };
+  if (!first?.demoSecret) return first as T;
+  const step = Math.max(totpStep(Date.now()), (lastStepOf(first.demoSecret) ?? -1) + 1);
+  return (await post('auth/mfa/verify', { code: totpCode(first.demoSecret, step) })) as T;
+}
+
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
 const atTerminal1: HttpInterceptorFn = (req, next) =>
   next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
@@ -107,7 +158,8 @@ const atTerminal1: HttpInterceptorFn = (req, next) =>
  */
 const asAdminByDefault: HttpInterceptorFn = (req, next) => {
   let headers = req.headers;
-  if (!headers.has('Authorization')) {
+  // Logins (and their Authenticator step) go without: the web server gives the code step its challenge.
+  if (!headers.has('Authorization') && !/\/api\/auth\/(login|signup|mfa\/verify)$/.test(req.url)) {
     headers = headers.set('Authorization', `Bearer ${mockToken(1, 1)}`);
   }
   if (!headers.has('X-Branch-Id')) headers = headers.set('X-Branch-Id', '1');
@@ -1176,7 +1228,7 @@ describe('mockBackendInterceptor – POS sales', () => {
 
   it('logs staff in by username and applies their name and role to the sale', async () => {
     const login = (username: string, password: string) =>
-      post<{ user: { name: string } }>('auth/login', {
+      viaCode<{ user: { name: string } }>(post, 'auth/login', {
         companyCode: 'DEMO',
         username,
         password,
@@ -2121,7 +2173,7 @@ describe('mockBackendInterceptor – auth (B3)', () => {
   });
 
   it("keeps login open and auth/verify at 400, checked in the token's company", async () => {
-    const login = await call<LoginResponse>('POST', 'auth/login', {
+    const login = await viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
       companyCode: 'demo',
       username: 'somchai',
       password: '1234',
@@ -2139,7 +2191,11 @@ describe('mockBackendInterceptor – auth (B3)', () => {
 
   it('logs in with company code + username + password, one message for every failure (E3)', async () => {
     const login = (companyCode: string, username: string, password: string) =>
-      call<LoginResponse>('POST', 'auth/login', { companyCode, username, password });
+      viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
+        companyCode,
+        username,
+        password,
+      });
     const failure = (p: Promise<unknown>) =>
       p.then(
         () => null,
@@ -2197,7 +2253,11 @@ describe('mockBackendInterceptor – auth (B3)', () => {
       JSON.stringify({ companies: [{ id: 1, code: 'DEMO', active: false }] }),
     );
     const login = (password: string) =>
-      call('POST', 'auth/login', { companyCode: 'DEMO', username: 'admin', password }).then(
+      viaCode((u, b) => call('POST', u, b), 'auth/login', {
+        companyCode: 'DEMO',
+        username: 'admin',
+        password,
+      }).then(
         () => null,
         (e: { error: { message: string } }) => e.error.message,
       );
@@ -2253,7 +2313,7 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
     expect(await errorOf(call('PUT', `users/${user.id}`, { username: 'john' }))).toBe(
       'ชื่อผู้ใช้นี้มีอยู่แล้ว',
     );
-    const login = await call<LoginResponse>('POST', 'auth/login', {
+    const login = await viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
       companyCode: 'DEMO',
       username: 'somsak',
       password: '5678',
@@ -2305,7 +2365,7 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
     const user = await newUser('somsak');
     expect(user).not.toHaveProperty('password');
     const login = (password: string) =>
-      call<LoginResponse>('POST', 'auth/login', {
+      viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
         companyCode: 'DEMO',
         username: 'somsak',
         password,
@@ -2322,7 +2382,11 @@ describe('mockBackendInterceptor – usernames (B5)', () => {
     await call('PUT', 'users/2/password', { password: '9999' });
     expect(
       await errorOf(
-        call('POST', 'auth/login', { companyCode: 'DEMO', username: 'somchai', password: '1234' }),
+        viaCode((u, b) => call('POST', u, b), 'auth/login', {
+          companyCode: 'DEMO',
+          username: 'somchai',
+          password: '1234',
+        }),
       ),
     ).toBe('รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง');
   });
@@ -3223,7 +3287,11 @@ describe('mockBackendInterceptor – companies (SaaS step 6)', () => {
   it('logs in to each company with its own users, data and password', async () => {
     plantAcme();
     const login = (companyCode: string, password: string) =>
-      call<LoginResponse>('POST', 'auth/login', { companyCode, username: 'admin', password });
+      viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
+        companyCode,
+        username: 'admin',
+        password,
+      });
     const acme = await login('acme', 'acme-pass');
     expect(sessionToken()).toBe(ACME_ADMIN);
     expect(acme.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
@@ -3425,13 +3493,18 @@ describe('mockBackendInterceptor – audit log (E40)', () => {
   it('records logins and failed logins of a known company', async () => {
     const login = (username: string, password: string) =>
       statusOf(
-        firstValueFrom(http.post('/api/auth/login', { companyCode: 'DEMO', username, password })),
+        viaCode((u, b) => firstValueFrom(http.post(`/api/${u}`, b)), 'auth/login', {
+          companyCode: 'DEMO',
+          username,
+          password,
+        }),
       );
     expect(await login('somchai', 'x')).toBe(401);
     expect(await login('somchai', '1234')).toBe(200);
     const events = await log();
     expect(events.map((e) => [e.action, e.userName, e.userId])).toEqual([
       ['login', 'สมชาย ใจดี', 2],
+      ['mfa_enable', 'สมชาย ใจดี', 2], // first login sets Authenticator up (E57)
       ['login_failed', 'somchai', null],
     ]);
   });
@@ -3758,7 +3831,7 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
   });
 
   it('creates a company on a trial with only its first branch, owner and cash', async () => {
-    const session = await post<LoginResponse>('auth/signup', payload);
+    const session = await viaCode<LoginResponse>(post, 'auth/signup', payload);
     expect(session.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
     expect(session.user).toMatchObject({ username: 'boss', role: 'owner', allBranches: true });
     expect(session.branches.map((b) => b.code)).toEqual(['HQ']);
@@ -3778,9 +3851,10 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
       users: 1,
     });
     const events = await get<AuditEvent[]>('audit-log', sessionToken());
-    expect(events.map((e) => e.action)).toEqual(['signup']);
+    // Getting in after signup sets Authenticator up and logs in (E57).
+    expect(events.map((e) => e.action)).toEqual(['login', 'mfa_enable', 'signup']);
     // the new owner logs in with their own code; DEMO is untouched
-    const login = await post<LoginResponse>('auth/login', {
+    const login = await viaCode<LoginResponse>(post, 'auth/login', {
       companyCode: 'ACME',
       username: 'boss',
       password: 'secret',
@@ -3790,11 +3864,10 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
   });
 
   it('refuses a taken code and an invalid form', async () => {
-    expect(await failure(post('auth/signup', { ...payload, companyCode: 'demo' }))).toEqual([
-      400,
-      'รหัสบริษัทนี้ถูกใช้แล้ว',
-    ]);
-    expect(await failure(post('auth/signup', { ...payload, companyCode: 'x' }))).toEqual([
+    expect(
+      await failure(viaCode(post, 'auth/signup', { ...payload, companyCode: 'demo' })),
+    ).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
+    expect(await failure(viaCode(post, 'auth/signup', { ...payload, companyCode: 'x' }))).toEqual([
       400,
       'รหัสบริษัทใช้ได้เฉพาะ A-Z, 0-9 ยาว 3–20 ตัว',
     ]);
@@ -3802,7 +3875,7 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
   });
 
   it('sends a single-use reset link only to the owner, with one answer for everything', async () => {
-    await post('auth/signup', payload);
+    await viaCode(post, 'auth/signup', payload);
     const ask = (companyCode: string, email: string) =>
       post<{ message: string }>('auth/forgot-password', { companyCode, email });
     const same = (await ask('NOPE', 'x@y.z')).message;
@@ -3819,7 +3892,7 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
       400,
       'ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่',
     ]);
-    const login = await post<LoginResponse>('auth/login', {
+    const login = await viaCode<LoginResponse>(post, 'auth/login', {
       companyCode: 'ACME',
       username: 'boss',
       password: 'new-pass',
@@ -3843,10 +3916,7 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
       (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
     );
   const loginPlatform = async () =>
-    (await call<PlatformLoginResponse>('POST', 'platform/auth/login', {
-      username: 'platform',
-      password: 'platform',
-    })) && sessionToken(true);
+    (await passPlatformLogin((url, body) => call('POST', url, body))) && sessionToken(true);
   const plantOverdue = () =>
     localStorage.setItem(
       'an22.mock.platform',
@@ -3871,6 +3941,43 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
       providers: [provideHttpClient(withInterceptors([mockBackendInterceptor]))],
     });
     http = TestBed.inject(HttpClient);
+  });
+
+  it('always asks a platform admin for the Authenticator code (E56)', async () => {
+    const post = <T>(url: string, body: unknown) => call<T>('POST', url, body);
+    expect(await failure(post('platform/auth/mfa/verify', { code: '123456' }))).toEqual([
+      400,
+      'หมดเวลายืนยันรหัส กรุณาเข้าสู่ระบบใหม่',
+    ]);
+    const first = await post<MfaChallenge>('platform/auth/login', {
+      username: 'platform',
+      password: 'platform',
+    });
+    expect(first).toMatchObject({ mfa: 'setup' });
+    expect('challenge' in first).toBe(false);
+    expect(sessionToken(true)).toBeNull();
+    const { setup } = first as Extract<MfaChallenge, { mfa: 'setup' }>;
+    expect(setup.otpauthUrl).toContain('otpauth://totp/AN22%3APLATFORM%3Aplatform?secret=');
+    expect(await failure(post('platform/auth/mfa/verify', { code: '000000' }))).toEqual([
+      400,
+      'รหัสยืนยันไม่ถูกต้อง',
+    ]);
+    const step = totpStep(Date.now());
+    const session = await post<PlatformLoginResponse>('platform/auth/mfa/verify', {
+      code: totpCode(setup.secret, step),
+    });
+    expect(session).toEqual({ admin: { id: 1, username: 'platform', name: 'ผู้ดูแลแพลตฟอร์ม' } });
+    expect(sessionToken(true)).toBe('mock-platform-token.p1');
+
+    await post('platform/auth/logout', null);
+    expect(
+      await post('platform/auth/login', { username: 'platform', password: 'platform' }),
+    ).toMatchObject({ mfa: 'verify' });
+    expect(
+      await failure(post('platform/auth/mfa/verify', { code: totpCode(setup.secret, step) })),
+    ).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    await post('platform/auth/mfa/verify', { code: totpCode(setup.secret, step + 1) });
+    expect(sessionToken(true)).toBe('mock-platform-token.p1');
   });
 
   it('logs in apart from the companies; tokens of one side never pass on the other', async () => {
@@ -3971,7 +4078,7 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
     );
     expect(changed.planId).toBe('standard');
     await call('PUT', 'platform/companies/1/owner-password', { password: 'owner-new' }, token);
-    const login = await call<LoginResponse>('POST', 'auth/login', {
+    const login = await viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
       companyCode: 'DEMO',
       username: 'admin',
       password: 'owner-new',
@@ -4008,15 +4115,14 @@ describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
       (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
     );
   const login = (username: string, password: string) =>
-    firstValueFrom(
-      http.post<LoginResponse>('/api/auth/login', { companyCode: 'DEMO', username, password }),
-    );
+    viaCode<LoginResponse>((u, b) => firstValueFrom(http.post(`/api/${u}`, b)), 'auth/login', {
+      companyCode: 'DEMO',
+      username,
+      password,
+    });
   const platformToken = async () =>
-    (await firstValueFrom(
-      http.post<PlatformLoginResponse>('/api/platform/auth/login', {
-        username: 'platform',
-        password: 'platform',
-      }),
+    (await passPlatformLogin((url, body) =>
+      firstValueFrom(http.post<never>(`/api/${url}`, body)),
     )) && sessionToken(true);
 
   beforeEach(() => {
@@ -4284,16 +4390,12 @@ describe('mockBackendInterceptor – web server session (E48)', () => {
       (e: { status: number }) => e.status,
     );
   const shopLogin = () =>
-    call<LoginResponse>('POST', 'auth/login', {
+    viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
       companyCode: 'DEMO',
       username: 'admin',
       password: 'admin',
     });
-  const platformLogin = () =>
-    call<PlatformLoginResponse>('POST', 'platform/auth/login', {
-      username: 'platform',
-      password: 'platform',
-    });
+  const platformLogin = () => passPlatformLogin((url, body) => call('POST', url, body));
 
   beforeEach(() => {
     localStorage.clear();
@@ -4332,7 +4434,11 @@ describe('mockBackendInterceptor – web server session (E48)', () => {
     await shopLogin();
     expect(
       await statusOf(
-        call('POST', 'auth/login', { companyCode: 'DEMO', username: 'admin', password: 'x' }),
+        viaCode((u, b) => call('POST', u, b), 'auth/login', {
+          companyCode: 'DEMO',
+          username: 'admin',
+          password: 'x',
+        }),
       ),
     ).toBe(401);
     expect(sessionToken()).toBe(mockToken(1, 1));
@@ -4344,7 +4450,7 @@ describe('mockBackendInterceptor – web server session (E48)', () => {
   });
 
   it('signing up logs the new owner in through the session', async () => {
-    const session = await call<LoginResponse>('POST', 'auth/signup', {
+    const session = await viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/signup', {
       companyCode: 'ACME',
       companyName: 'บริษัท แอคมี จำกัด',
       taxId: '',
@@ -4424,7 +4530,7 @@ describe('mockBackendInterceptor – list limits', () => {
   });
 });
 
-describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
+describe('mockBackendInterceptor – Microsoft Authenticator (E55 / E57 / E58)', () => {
   let http: HttpClient;
   const ADMIN = mockToken(1, 1);
   const STAFF = mockToken(1, 2); // สมชาย ใจดี (role user)
@@ -4440,30 +4546,23 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
       () => null,
       (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
     );
-  const login = (username: string, password: string, mfa?: boolean) =>
-    call<LoginResult>('POST', 'auth/login', {
-      companyCode: 'DEMO',
-      username,
-      password,
-      ...(mfa && { mfa }),
-    });
+  const login = (username: string, password: string) =>
+    call<LoginResult>('POST', 'auth/login', { companyCode: 'DEMO', username, password });
   const verify = (code: string) => call<LoginResponse>('POST', 'auth/mfa/verify', { code });
-  const codeNow = (secret: string, ahead = 0) => totpCode(secret, totpStep(Date.now()) + ahead);
   const mfaSession = () => JSON.parse(localStorage.getItem('an22.mock.mfaSession') ?? 'null');
   const audit = async () =>
     (await call<AuditEvent[]>('GET', 'audit-log', undefined, ADMIN)).map((e) => [
       e.action,
       e.detail,
     ]);
-  const setRequirement = async (mfaRequired: CompanyInfo['mfaRequired']) => {
-    const info = await call<CompanyInfo>('GET', 'settings/company', undefined, ADMIN);
-    await call('PUT', 'settings/company', { ...info, mfaRequired }, ADMIN);
-  };
-  /** Sets somchai up through /auth/login-mfa; returns the secret. */
+  /** The step its code was used in, so later codes don't depend on the clock ticking (no flake). */
+  let enrolStep = 0;
+  /** somchai's first login: sets it up; returns the secret. */
   const enrolStaff = async (): Promise<string> => {
-    const challenge = (await login('somchai', '1234', true)) as MfaChallenge;
+    const challenge = (await login('somchai', '1234')) as MfaChallenge;
     if (challenge.mfa !== 'setup') throw new Error('expected setup');
-    await verify(codeNow(challenge.setup.secret));
+    enrolStep = totpStep(Date.now());
+    await verify(totpCode(challenge.setup.secret, enrolStep));
     await call('POST', 'auth/logout');
     return challenge.setup.secret;
   };
@@ -4476,14 +4575,8 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
     http = TestBed.inject(HttpClient);
   });
 
-  it('keeps /auth/login one step for a user without Authenticator', async () => {
-    const session = await login('somchai', '1234');
-    expect('mfa' in session).toBe(false);
-    expect(sessionToken()).toBe(STAFF);
-  });
-
-  it('asks for set-up through /auth/login-mfa and logs in on the first right code', async () => {
-    const challenge = await login('somchai', '1234', true);
+  it('sets it up on the first login and logs in only on the first right code', async () => {
+    const challenge = await login('somchai', '1234');
     expect(challenge).toMatchObject({ mfa: 'setup' });
     expect('challenge' in challenge).toBe(false); // kept by the web server's session
     expect(sessionToken()).toBeNull();
@@ -4493,11 +4586,11 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
       `otpauth://totp/AN22%3ADEMO%3Asomchai?secret=${setup.secret}&issuer=AN22&algorithm=SHA1&digits=6&period=30`,
     );
     // The same waiting secret on another try (the user may have scanned it already).
-    const again = (await login('somchai', '1234', true)) as typeof challenge;
-    expect(again).toEqual(challenge);
+    const again = (await login('somchai', '1234')) as typeof challenge;
+    expect({ ...again, demoSecret: undefined }).toEqual({ ...challenge, demoSecret: undefined });
 
     expect(await failure(verify('000000'))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
-    const session = await verify(codeNow(setup.secret));
+    const session = await verify(totpCode(setup.secret, totpStep(Date.now())));
     expect(session.user).toMatchObject({ username: 'somchai', mfaEnabled: true });
     expect(sessionToken()).toBe(STAFF);
     expect(mfaSession()).toBeNull();
@@ -4510,10 +4603,13 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
 
   it('never skips the code once a user has it, and a used code never passes again', async () => {
     const secret = await enrolStaff();
-    expect(await login('somchai', '1234')).toEqual({ mfa: 'verify' });
+    expect(await login('somchai', '1234')).toMatchObject({ mfa: 'verify' });
     expect(sessionToken()).toBeNull();
-    expect(await failure(verify(codeNow(secret)))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
-    expect((await verify(codeNow(secret, 1))).user.username).toBe('somchai');
+    expect(await failure(verify(totpCode(secret, enrolStep)))).toEqual([
+      400,
+      'รหัสยืนยันไม่ถูกต้อง',
+    ]);
+    expect((await verify(totpCode(secret, enrolStep + 1))).user.username).toBe('somchai');
   });
 
   it('refuses the code step without a waiting login (400, not 401)', async () => {
@@ -4523,58 +4619,28 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
     ]);
   });
 
-  it('makes the users the company requires set it up at /auth/login', async () => {
-    await setRequirement('admins');
-    expect('mfa' in (await login('somchai', '1234'))).toBe(false);
-    expect(await login('admin', 'admin')).toMatchObject({ mfa: 'setup' });
-    await setRequirement('all');
-    expect(await login('somchai', '1234')).toMatchObject({ mfa: 'setup' });
-    expect(
-      await failure(
-        call(
-          'PUT',
-          'settings/company',
-          {
-            ...COMPANY_INFO_DEFAULTS,
-            name: 'x',
-            taxId: '',
-            vatRegistered: false,
-            mfaRequired: 'x',
-          },
-          ADMIN,
-        ),
-      ),
-    ).toEqual([400, 'การบังคับใช้ Microsoft Authenticator ไม่ถูกต้อง']);
-  });
-
-  it('lets a user turn their own on and off on the settings page', async () => {
-    const setup = await call<MfaSetup>('POST', 'me/mfa/setup', {}, STAFF);
-    expect(await failure(call('POST', 'me/mfa/confirm', { code: '000000' }, STAFF))).toEqual([
-      400,
-      'รหัสยืนยันไม่ถูกต้อง',
-    ]);
-    const on = await call<User>('POST', 'me/mfa/confirm', { code: codeNow(setup.secret) }, STAFF);
-    expect(on.mfaEnabled).toBe(true);
-    expect(await failure(call('POST', 'me/mfa/setup', {}, STAFF))).toEqual([
-      400,
-      'เปิดใช้ Microsoft Authenticator อยู่แล้ว',
-    ]);
-    expect(await failure(call('POST', 'me/mfa/disable', { password: 'x' }, STAFF))).toEqual([
-      400,
-      'รหัสผ่านไม่ถูกต้อง',
-    ]);
-    await setRequirement('all');
-    expect(await failure(call('POST', 'me/mfa/disable', { password: '1234' }, STAFF))).toEqual([
-      400,
-      'บริษัทบังคับให้ใช้ Microsoft Authenticator — ปิดเองไม่ได้',
-    ]);
-    await setRequirement('none');
-    const off = await call<User>('POST', 'me/mfa/disable', { password: '1234' }, STAFF);
-    expect(off.mfaEnabled).toBe(false);
-    expect((await audit()).filter(([a]) => a.startsWith('mfa_'))).toEqual([
-      ['mfa_disable', 'ปิดใช้จากหน้าตั้งค่า'],
-      ['mfa_enable', 'เปิดใช้จากหน้าตั้งค่า'],
-    ]);
+  it('makes the owner of a new company set it up before getting in (signup)', async () => {
+    const challenge = await call<MfaChallenge>('POST', 'auth/signup', {
+      companyCode: 'NEWCO',
+      companyName: 'บริษัทใหม่',
+      taxId: '',
+      vatRegistered: false,
+      branch: {
+        code: 'HQ',
+        name: 'สำนักงานใหญ่',
+        branchNo: '00000',
+        address: 'กรุงเทพฯ',
+        phone: '',
+      },
+      owner: { name: 'เจ้าของ', username: 'boss', email: 'boss@newco.test', password: 'secret1' },
+      planId: 'starter',
+    });
+    expect(challenge).toMatchObject({ mfa: 'setup' });
+    expect(sessionToken()).toBeNull();
+    const { setup } = challenge as Extract<MfaChallenge, { mfa: 'setup' }>;
+    expect(setup.otpauthUrl).toContain('AN22%3ANEWCO%3Aboss');
+    const session = await verify(totpCode(setup.secret, totpStep(Date.now())));
+    expect(session.user).toMatchObject({ username: 'boss', role: 'owner', mfaEnabled: true });
   });
 
   it('lets an admin clear a lost phone, never their own; the flag is never written by the form', async () => {
@@ -4585,17 +4651,82 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55)', () => {
     expect((await failure(call('DELETE', 'users/2/mfa', undefined, STAFF)))?.[0]).toBe(403);
     expect(await failure(call('DELETE', 'users/1/mfa', undefined, ADMIN))).toEqual([
       400,
-      'ล้าง Microsoft Authenticator ของตัวเองไม่ได้ — ปิดได้ที่หน้าตั้งค่า',
+      'ล้าง Microsoft Authenticator ของตัวเองไม่ได้ — ให้ผู้ดูแลระบบคนอื่นล้างให้',
     ]);
     const cleared = await call<User>('DELETE', 'users/2/mfa', undefined, ADMIN);
     expect(cleared.mfaEnabled).toBe(false);
-    expect('mfa' in (await login('somchai', '1234'))).toBe(false);
-    expect((await audit())[1]).toEqual([
+    // Cleared = set up again at the next login (never a way around the code)
+    expect(await login('somchai', '1234')).toMatchObject({ mfa: 'setup' });
+    expect((await audit())[0]).toEqual([
       'mfa_reset',
       'ผู้ดูแลระบบล้าง Microsoft Authenticator ให้',
     ]);
     // Never in the company export (E38), like passwords.
     const exported = await call<CompanyExport>('GET', 'company/export', undefined, ADMIN);
     expect('mfa' in exported.data).toBe(false);
+  });
+
+  it("moves one's own Authenticator to a new phone with the password + the old phone (E58)", async () => {
+    const old = await enrolStaff();
+    const start = (password: string, code: string) =>
+      call<MfaChange>('POST', 'me/mfa/change', { password, code }, STAFF);
+    expect(await failure(start('nope', totpCode(old, enrolStep + 1)))).toEqual([
+      400,
+      'รหัสผ่านไม่ถูกต้อง',
+    ]);
+    expect(await failure(start('1234', '000000'))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    const change = await start('1234', totpCode(old, enrolStep + 1));
+    expect(change.setup.secret).not.toBe(old);
+    expect(change.setup.otpauthUrl).toContain('AN22%3ADEMO%3Asomchai');
+
+    const confirm = (proof: string, code: string) =>
+      call<User>('POST', 'me/mfa/change/confirm', { change: proof, code }, STAFF);
+    const fresh = totpCode(change.setup.secret, totpStep(Date.now()));
+    expect(await failure(confirm('other', fresh))).toEqual([
+      400,
+      'หมดเวลาเปลี่ยนเครื่อง กรุณาเริ่มใหม่',
+    ]);
+    expect(await failure(confirm(change.change, '000000'))).toEqual([400, 'รหัสยืนยันไม่ถูกต้อง']);
+    // Until confirmed the old phone stays the one.
+    expect(lastStepOf(old)).toBe(enrolStep + 1);
+
+    expect((await confirm(change.change, fresh)).mfaEnabled).toBe(true);
+    expect((await audit())[0]).toEqual(['mfa_enable', 'เปลี่ยนเครื่องจากหน้าตั้งค่า']);
+    // The old phone no longer works, the new one does; the proof is used up.
+    await login('somchai', '1234');
+    expect(await failure(verify(totpCode(old, totpStep(Date.now()) + 1)))).toEqual([
+      400,
+      'รหัสยืนยันไม่ถูกต้อง',
+    ]);
+    const next = totpStep(Date.now()) + 1;
+    expect((await verify(totpCode(change.setup.secret, next))).user.username).toBe('somchai');
+    expect(await failure(confirm(change.change, fresh))).toEqual([
+      400,
+      'หมดเวลาเปลี่ยนเครื่อง กรุณาเริ่มใหม่',
+    ]);
+  });
+
+  it("lets the platform clear a user's Authenticator, e.g. the owner (E58)", async () => {
+    await enrolStaff();
+    await passPlatformLogin((url, body) => call('POST', url, body));
+    const platform = sessionToken(true);
+    const reset = (username: string) =>
+      call('POST', 'platform/companies/1/mfa-reset', { username }, platform);
+    expect(await failure(reset('nobody'))).toEqual([400, 'ไม่พบชื่อผู้ใช้นี้ในบริษัท']);
+    expect(await reset('SomChai')).toBeNull();
+    expect(await failure(reset('somchai'))).toEqual([
+      400,
+      'ผู้ใช้นี้ยังไม่ได้ผูก Microsoft Authenticator',
+    ]);
+    // A shop token never reaches the platform endpoint.
+    expect((await failure(call('POST', 'platform/companies/1/mfa-reset', {}, ADMIN)))?.[0]).toBe(
+      401,
+    );
+    expect(await login('somchai', '1234')).toMatchObject({ mfa: 'setup' });
+    const events = await call<AuditEvent[]>('GET', 'audit-log', undefined, ADMIN);
+    expect(events.find((e) => e.action === 'mfa_reset')).toMatchObject({
+      detail: 'ผู้ให้บริการล้าง Microsoft Authenticator ให้',
+      actorKind: 'platform',
+    });
   });
 });
