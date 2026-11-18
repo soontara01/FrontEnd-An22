@@ -3,7 +3,6 @@ import { authGuard, guestGuard } from '@core/auth/auth.guard';
 import ForgotPassword from './pages/forgot-password/forgot-password';
 import Login from './pages/login/login';
 import ResetPassword from './pages/reset-password/reset-password';
-import Signup from './pages/signup/signup';
 import SelectBranch from './pages/select-branch/select-branch';
 
 export default [
@@ -16,8 +15,8 @@ export default [
   },
   // Every login asks the Authenticator code now (E57): the old URL leads to the one login page.
   { path: 'login-mfa', redirectTo: 'login' },
-  // Signing up (E37) and an owner's password reset (E41): no session needed.
-  { path: 'signup', title: 'สมัครใช้งาน', canMatch: [guestGuard], component: Signup },
+  // An owner's password reset (E41) / first password (E59): no session needed. Nobody signs up
+  // by themselves any more (E59) — `/auth/signup` falls to the app's 404.
   {
     path: 'forgot-password',
     title: 'ลืมรหัสผ่าน',
@@ -26,7 +25,7 @@ export default [
   },
   {
     path: 'reset-password',
-    title: 'ตั้งรหัสผ่านใหม่',
+    title: 'ตั้งรหัสผ่าน',
     canMatch: [guestGuard],
     component: ResetPassword,
   },

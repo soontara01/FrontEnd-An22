@@ -18,7 +18,10 @@ import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
 import { PlatformApi } from '../../data/platform-api.service';
 
-/** Every company on the platform (E36): package, billing status, usage, unpaid amount. */
+/**
+ * Every company on the platform (E36): package, billing status, usage, unpaid amount; creating one
+ * is only here (E59).
+ */
 @Component({
   selector: 'app-company-list',
   imports: [
@@ -33,6 +36,10 @@ import { PlatformApi } from '../../data/platform-api.service';
   ],
   template: `
     <app-page-header title="บริษัทลูกค้า" [subtitle]="'ทั้งหมด ' + rows().length + ' บริษัท'">
+      <a mat-flat-button routerLink="new">
+        <mat-icon>add</mat-icon>
+        สร้างบริษัท
+      </a>
       <button mat-icon-button matTooltip="โหลดใหม่" (click)="data.reload()">
         <mat-icon>refresh</mat-icon>
       </button>

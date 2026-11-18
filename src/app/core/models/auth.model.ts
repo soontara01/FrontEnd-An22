@@ -37,7 +37,7 @@ export interface MfaChange {
 }
 
 /**
- * `POST /auth/login` / `POST /auth/signup`: always the code step (E57) — the session comes from
+ * `POST /auth/login`: always the code step (E57) — the session comes from
  * `POST /auth/mfa/verify`. Kept a union so an answer is never taken for a session by accident.
  */
 export type LoginResult = LoginResponse | MfaChallenge;

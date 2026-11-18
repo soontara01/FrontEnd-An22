@@ -17,6 +17,9 @@
           <dd>
             @if (c.owner; as o) {
               {{ o.name }} ({{ o.username }}) · {{ o.email || 'ไม่มีอีเมล' }}
+              @if (!c.ownerPasswordSet) {
+                · <span class="badge badge-warn">รอตั้งรหัสผ่าน</span>
+              }
             } @else {
               -
             }
@@ -134,23 +137,25 @@
       <mat-card appearance="outlined">
         <mat-card-header><mat-card-title>รหัสผ่านเจ้าของบริษัท</mat-card-title></mat-card-header>
         <mat-card-content class="stack">
-          <mat-form-field appearance="outline">
-            <mat-label>รหัสผ่านใหม่</mat-label>
-            <input
-              matInput
-              type="password"
-              autocomplete="new-password"
-              [value]="password()"
-              (input)="password.set($any($event.target).value)"
-            />
-            @if (passwordTouched() && passwordProblem(); as p) {
-              <mat-hint class="field-error">{{ p }}</mat-hint>
-            } @else {
-              <mat-hint>เมื่อเจ้าของติดต่อมาเพราะเข้าระบบไม่ได้ (ยืนยันตัวตนก่อน)</mat-hint>
-            }
-          </mat-form-field>
-          <button mat-stroked-button [disabled]="busy() || !c.owner" (click)="setOwnerPassword()">
-            ตั้งรหัสผ่านใหม่
+          @if (!c.owner) {
+            <p class="text-muted">บริษัทนี้ไม่มีเจ้าของบริษัท</p>
+          } @else if (c.ownerPasswordSet) {
+            <p>
+              <span class="badge badge-success">ตั้งแล้ว</span>
+              เจ้าของลืมรหัสผ่าน: ให้ใช้ "ลืมรหัสผ่าน" หน้าเข้าสู่ระบบ หรือออกลิงก์ใหม่ให้
+              (ยืนยันตัวตนก่อน)
+            </p>
+          } @else {
+            <p>
+              <span class="badge badge-warn">รอตั้งรหัสผ่าน</span>
+              เจ้าของยังเข้าสู่ระบบไม่ได้จนกว่าจะตั้งรหัสผ่านจากลิงก์
+            </p>
+          }
+          @if (setupLink(); as link) {
+            <app-setup-link-card [link]="link" />
+          }
+          <button mat-stroked-button [disabled]="busy() || !c.owner" (click)="issueSetupLink()">
+            ออกลิงก์ตั้งรหัสผ่าน
           </button>
         </mat-card-content>
       </mat-card>

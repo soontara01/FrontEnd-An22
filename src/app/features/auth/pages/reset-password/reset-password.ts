@@ -5,18 +5,26 @@ import { passwordError } from '@core/models';
 import { AutofocusDirective } from '@shared/directives/autofocus.directive';
 import { MATERIAL } from '@shared/material';
 
-/** The owner sets a new password from the e-mailed link `/auth/reset-password?token=` (E41). */
+/**
+ * The owner sets a password from a single-use link `/auth/reset-password?token=`: a reset link
+ * e-mailed after "ลืมรหัสผ่าน" (E41), or the first password of a company the platform created —
+ * the setup link the platform passed on (E59). Same page and endpoint for both.
+ */
 @Component({
   selector: 'app-reset-password',
   imports: [RouterLink, AutofocusDirective, MATERIAL],
   template: `
     <mat-card class="card" appearance="outlined">
       <mat-card-header>
-        <mat-card-title>ตั้งรหัสผ่านใหม่</mat-card-title>
+        <mat-card-title>ตั้งรหัสผ่าน</mat-card-title>
+        <mat-card-subtitle>เจ้าของบริษัท — ลิงก์นี้ใช้ได้ครั้งเดียว</mat-card-subtitle>
       </mat-card-header>
       @if (done()) {
         <mat-card-content>
-          <p role="status">ตั้งรหัสผ่านใหม่เรียบร้อย — เข้าสู่ระบบด้วยรหัสผ่านใหม่ได้เลย</p>
+          <p role="status">
+            ตั้งรหัสผ่านเรียบร้อย — เข้าสู่ระบบด้วยรหัสบริษัท ชื่อผู้ใช้ และรหัสผ่านนี้
+            (ครั้งแรกจะให้สแกน QR ด้วย Microsoft Authenticator)
+          </p>
         </mat-card-content>
         <mat-card-actions>
           <a mat-flat-button routerLink="/auth/login">เข้าสู่ระบบ</a>
@@ -24,7 +32,7 @@ import { MATERIAL } from '@shared/material';
       } @else {
         <mat-card-content>
           <mat-form-field appearance="outline">
-            <mat-label>รหัสผ่านใหม่</mat-label>
+            <mat-label>รหัสผ่าน</mat-label>
             <input
               matInput
               appAutofocus

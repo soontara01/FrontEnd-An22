@@ -23,6 +23,8 @@ export type AuditAction =
   | 'owner_transfer'
   | 'plan_change'
   | 'signup'
+  | 'company_create'
+  | 'owner_setup_link'
   | 'company_suspend'
   | 'company_reactivate'
   | 'invoice_paid'
@@ -30,6 +32,7 @@ export type AuditAction =
   | 'deletion_request'
   | 'deletion_cancel'
   | 'password_reset'
+  | 'password_set'
   | 'menu_access'
   | 'company_settings'
   | 'branch_settings'
@@ -58,7 +61,9 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   user_password: 'ตั้งรหัสผ่านใหม่',
   owner_transfer: 'โอนความเป็นเจ้าของ',
   plan_change: 'เปลี่ยนแพ็กเกจ',
-  signup: 'สมัครใช้งาน',
+  signup: 'สมัครใช้งาน (เดิม)',
+  company_create: 'ผู้ให้บริการสร้างบริษัท',
+  owner_setup_link: 'ออกลิงก์ตั้งรหัสผ่านเจ้าของ',
   company_suspend: 'ระงับบริษัท',
   company_reactivate: 'เปิดใช้งานบริษัทอีกครั้ง',
   invoice_paid: 'รับชำระค่าบริการ',
@@ -66,6 +71,7 @@ export const AUDIT_ACTION_LABEL: Record<AuditAction, string> = {
   deletion_request: 'ขอลบข้อมูลบริษัท',
   deletion_cancel: 'ยกเลิกคำขอลบข้อมูล',
   password_reset: 'ตั้งรหัสผ่านใหม่ (ลิงก์อีเมล)',
+  password_set: 'ตั้งรหัสผ่านครั้งแรก (ลิงก์)',
   menu_access: 'แก้สิทธิ์เมนู',
   company_settings: 'แก้ตั้งค่าบริษัท',
   branch_settings: 'แก้ข้อมูลสาขา (ตั้งค่า)',
