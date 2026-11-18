@@ -1,7 +1,15 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiService } from '@core/http/api.service';
-import { PlanId, PlatformCompanyDetail, PlatformCompanyRow, PlatformEmail } from '@core/models';
+import {
+  NewCompanyPayload,
+  NewCompanyResult,
+  PlanId,
+  PlatformCompanyDetail,
+  PlatformCompanyRow,
+  PlatformEmail,
+  SetupLink,
+} from '@core/models';
 
 /** HTTP calls of the platform pages (E36, provided in platform.routes.ts). */
 @Injectable()
@@ -10,6 +18,11 @@ export class PlatformApi {
 
   companies(): Observable<PlatformCompanyRow[]> {
     return this.api.get<PlatformCompanyRow[]>('platform/companies');
+  }
+
+  /** A new company (E59 — only the platform creates them) + the owner's setup link, shown once. */
+  createCompany(payload: NewCompanyPayload): Observable<NewCompanyResult> {
+    return this.api.post<NewCompanyResult>('platform/companies', payload);
   }
 
   company(id: number): Observable<PlatformCompanyDetail> {
@@ -28,8 +41,9 @@ export class PlatformApi {
     return this.api.post<PlatformCompanyDetail>(`platform/companies/${id}/reactivate`, {});
   }
 
-  setOwnerPassword(id: number, password: string): Observable<null> {
-    return this.api.put<null>(`platform/companies/${id}/owner-password`, { password });
+  /** A new setup link for the owner (E59): their earlier unused links stop working. */
+  ownerSetupLink(id: number): Observable<SetupLink> {
+    return this.api.post<SetupLink>(`platform/companies/${id}/owner-setup-link`, {});
   }
 
   /** Clears a user's Microsoft Authenticator (E58): they set it up again at the next login. */

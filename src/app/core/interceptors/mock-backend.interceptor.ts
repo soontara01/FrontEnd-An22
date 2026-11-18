@@ -118,9 +118,12 @@ import {
   FORGOT_PASSWORD_ANSWER,
   OnboardingCounts,
   RESET_LINK_MINUTES,
-  SignupPayload,
+  NewCompanyPayload,
+  NewCompanyResult,
+  SETUP_LINK_HOURS,
+  SetupLink,
   TRIAL_DAYS,
-  signupError,
+  newCompanyError,
   BillingInvoice,
   CompanySuspendReason,
   INVOICE_DUE_DAYS,
@@ -338,8 +341,12 @@ interface MockDb {
   /** Branches of the company with their printed details (seed: HQ + BN). */
   branches: Branch[];
   nextBranchId: number;
-  /** Passwords by user id (a real API keeps a hash); none = `admin` for the first user, else `1234` (E10). */
-  passwords: Record<number, string>;
+  /**
+   * Passwords by user id (a real API keeps a hash); none = `admin` for the first user, else `1234`
+   * (E10); `null` = not set yet — the owner of a company the platform created (E59) cannot log in
+   * until they use the setup link.
+   */
+  passwords: Record<number, string | null>;
   /**
    * Microsoft Authenticator per user id (E55): the base32 secret (a real API keeps it encrypted),
    * `confirmed` once the first code was right (before that = set up but not on), the last step used.
@@ -392,7 +399,10 @@ interface MockPlatform {
   /** Invoices of the SaaS to every company (E35) */
   invoices: BillingInvoice[];
   nextInvoiceId: number;
-  /** Password reset links of owners (E41): single use, `RESET_LINK_MINUTES` */
+  /**
+   * Single-use password links of owners: `reset` (forgot password, E41, `RESET_LINK_MINUTES`) and
+   * `setup` (first password of a company the platform created, E59, `SETUP_LINK_HOURS`)
+   */
   resetTokens: ResetToken[];
   /** E-mails the platform "sent" (the mock sends none — read on the platform pages) */
   outbox: PlatformEmail[];
@@ -404,6 +414,8 @@ interface MockPlatform {
 }
 
 interface ResetToken {
+  /** Missing = `reset` (stored before E59) */
+  kind?: 'reset' | 'setup';
   token: string;
   companyId: number;
   userId: number;
@@ -1291,7 +1303,7 @@ function loadTenantDb(
 /**
  * Saves one company's data; derived fields (`storeInfo`, the products' branch stock) never are.
  * `branch` = the branch `db.products` were projected for (`atBranch()`), whose stock fields go back
- * into `branchStock`; null = not projected (platform writes, reset link, signup) — `branchStock`
+ * into `branchStock`; null = not projected (platform writes, reset link, new company) — `branchStock`
  * is left as it is, never overwritten with the unprojected zeros.
  */
 function saveTenantDb(
@@ -1354,7 +1366,6 @@ let stockBranch = 1;
 /** Paths whose answer carries a token for the web server's session (E48). */
 const LOGIN_PATHS = [
   'auth/login',
-  'auth/signup',
   'auth/mfa/verify',
   'platform/auth/login',
   'platform/auth/mfa/verify',
@@ -1473,8 +1484,8 @@ function requestCompany(
 }
 
 /**
- * Requests without a session that are not a login (E37 / E41): signing up, asking for a password
- * reset link, setting the new password. Null = not one of them.
+ * Requests without a session that are not a login (E41 / E59): asking for a password reset link,
+ * setting a password with a link. Null = not one of them.
  */
 function publicResponse(
   req: HttpRequest<unknown>,
@@ -1483,45 +1494,55 @@ function publicResponse(
 ): Observable<HttpResponse<unknown>> | null {
   if (req.method !== 'POST') return null;
   terminalId = null;
-  if (path === 'auth/signup') return signup(req.body as SignupPayload, storage);
+  // Nobody signs up by themselves any more (E59): only the platform creates companies.
+  if (path === 'auth/signup') return notFound(req, path);
   if (path === 'auth/forgot-password') return forgotPassword(req.body, storage);
   if (path === 'auth/reset-password') return resetPassword(req.body, storage);
   return null;
 }
 
 /**
- * A new company (E37): registry entry on a `TRIAL_DAYS` trial of the chosen package, and its own
- * data — first branch, the owner, one cash payment method, nothing else. Logs the owner in.
+ * `POST /platform/companies` (E59 — only the platform creates companies): registry entry on a
+ * trial of `trialDays` (0 = none: the first invoice comes at once), and its own data — first
+ * branch, the owner without a password, one cash payment method, nothing else. The owner sets
+ * their password with the setup link the answer carries.
  */
-function signup(
-  body: SignupPayload | null,
+function createCompany(
+  body: Partial<NewCompanyPayload> | null,
+  by: { id: null; name: string; kind: 'platform' },
   storage: StorageService,
-): Observable<HttpResponse<ApiMfaChallenge>> {
-  const p: SignupPayload = {
+): Observable<HttpResponse<NewCompanyResult>> {
+  const p: NewCompanyPayload = {
     companyCode: body?.companyCode ?? '',
     companyName: (body?.companyName ?? '').trim(),
     taxId: (body?.taxId ?? '').trim(),
     vatRegistered: !!body?.vatRegistered,
     branch: { code: '', name: '', branchNo: '', address: '', phone: '', ...body?.branch },
-    owner: { name: '', username: '', email: '', password: '', ...body?.owner },
+    owner: { name: '', username: '', email: '', ...body?.owner },
     planId: body?.planId ?? ('' as PlanId),
+    trialDays: body?.trialDays ?? TRIAL_DAYS,
   };
-  const problem = signupError(p);
+  const problem = newCompanyError(p);
   if (problem) return error(400, problem);
   const code = normalizeCompanyCode(p.companyCode);
   // Codes of deleted companies stay taken (E39): the registry keeps them.
   if (platform.companies.some((c) => c.code === code)) return error(400, 'รหัสบริษัทนี้ถูกใช้แล้ว');
   const today = todayIso();
-  const trialEndsOn = addDaysIso(today, TRIAL_DAYS);
+  // No trial: the first billing period starts today (`refreshBilling()` invoices it below).
+  const trialEndsOn = p.trialDays > 0 ? addDaysIso(today, p.trialDays) : null;
   const company: StoredCompany = {
     id: platform.nextCompanyId++,
     code,
     active: true,
     planId: p.planId,
-    subscription: { trialEndsOn, nextInvoiceOn: addDaysIso(trialEndsOn, 1) },
+    subscription: {
+      trialEndsOn,
+      nextInvoiceOn: trialEndsOn ? addDaysIso(trialEndsOn, 1) : today,
+    },
     suspendedReason: null,
   };
   platform.companies.push(company);
+  refreshBilling(platform, company, today);
   platformChanged = true;
   const owner: User = {
     id: 1,
@@ -1557,23 +1578,56 @@ function signup(
     nextBranchId: 2,
     users: [owner],
     nextId: 2,
-    passwords: { [owner.id]: p.owner.password },
+    // No password until the owner uses the setup link (E59): nobody else ever knows it.
+    passwords: { [owner.id]: null },
     mfa: {},
     paymentMethods: [{ ...structuredClone(cash), id: 1, sortOrder: 1 }],
     nextPaymentMethodId: 2,
   };
+  const before = tenant;
   tenant = company;
-  actor = owner;
-  branchHeader = null;
-  pushAudit(db, {
-    action: 'signup',
-    ref: { kind: 'company', id: company.id, label: code },
-    detail: `สมัครใช้งาน แพ็กเกจ ${planOf(p.planId).name} ทดลองใช้ถึง ${trialEndsOn}`,
-  });
-  // The owner gets in only after setting up Microsoft Authenticator (E57).
-  const challenge = mfaChallenge(db, owner);
+  pushAudit(
+    db,
+    {
+      action: 'company_create',
+      ref: { kind: 'company', id: company.id, label: code },
+      detail: `แพ็กเกจ ${planOf(p.planId).name} ${
+        trialEndsOn ? `ทดลองใช้ถึง ${trialEndsOn}` : 'ไม่มีช่วงทดลองใช้'
+      }`,
+    },
+    by,
+  );
   saveTenantDb(storage, company.id, db, null);
-  return ok(challenge);
+  tenant = before;
+  return ok({
+    company: platformDetail(company, storage),
+    setupLink: issueSetupLink(company, owner),
+  });
+}
+
+/**
+ * A new setup link for the owner (E59): every link of theirs not used yet stops working, so only
+ * the newest one the platform passed on is valid.
+ */
+function issueSetupLink(company: StoredCompany, owner: User): SetupLink {
+  const now = new Date();
+  for (const t of platform.resetTokens) {
+    if (t.companyId === company.id && t.userId === owner.id && !t.usedAt) {
+      t.usedAt = now.toISOString();
+    }
+  }
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(now.getTime() + SETUP_LINK_HOURS * 3_600_000).toISOString();
+  platform.resetTokens.push({
+    kind: 'setup',
+    token,
+    companyId: company.id,
+    userId: owner.id,
+    expiresAt,
+    usedAt: null,
+  });
+  platformChanged = true;
+  return { path: `/auth/reset-password?token=${token}`, expiresAt };
 }
 
 /**
@@ -1594,6 +1648,7 @@ function forgotPassword(body: unknown, storage: StorageService): Observable<Http
   if (!owner) return answer;
   const token = crypto.randomUUID();
   platform.resetTokens.push({
+    kind: 'reset',
     token,
     companyId: company.id,
     userId: owner.id,
@@ -1612,7 +1667,7 @@ function forgotPassword(body: unknown, storage: StorageService): Observable<Http
   return answer;
 }
 
-/** Sets the owner's new password with a reset link (once, before it expires). */
+/** Sets the owner's password with a reset (E41) or setup (E59) link — once, before it expires. */
 function resetPassword(body: unknown, storage: StorageService): Observable<HttpResponse<unknown>> {
   const { token, password } = (body ?? {}) as { token?: string; password?: string };
   const link = platform.resetTokens.find((t) => t.token === token);
@@ -1629,12 +1684,13 @@ function resetPassword(body: unknown, storage: StorageService): Observable<HttpR
   link.usedAt = new Date().toISOString();
   platformChanged = true;
   tenant = company;
+  const setup = link.kind === 'setup';
   pushAudit(
     db,
     {
-      action: 'password_reset',
+      action: setup ? 'password_set' : 'password_reset',
       ref: { kind: 'user', id: user.id, label: user.username },
-      detail: 'ตั้งรหัสผ่านใหม่ด้วยลิงก์ทางอีเมล',
+      detail: setup ? 'ตั้งรหัสผ่านด้วยลิงก์จากผู้ให้บริการ' : 'ตั้งรหัสผ่านใหม่ด้วยลิงก์ทางอีเมล',
     },
     user,
   );
@@ -1687,8 +1743,8 @@ function verifyPlatformMfa(
 
 /**
  * The SaaS operator's API (E36): `POST /platform/auth/login`, then with a platform token —
- * companies (list / detail / package / suspend / reactivate / owner password), invoices (paid)
- * and the mock outbox. Every action is written to the company's own audit log as `platform`.
+ * companies (create, E59 / list / detail / package / suspend / reactivate / owner setup link),
+ * invoices (paid) and the mock outbox. Every action is written to the company's own audit log as `platform`.
  */
 function platformResponse(
   req: HttpRequest<unknown>,
@@ -1725,6 +1781,9 @@ function platformResponse(
   }
   if (path === 'platform/companies' && req.method === 'GET') {
     return ok(platform.companies.map((c) => platformRow(c, storage)));
+  }
+  if (path === 'platform/companies' && req.method === 'POST') {
+    return createCompany(req.body as Partial<NewCompanyPayload> | null, by, storage);
   }
   const payMatch = /^platform\/invoices\/(\d+)\/pay$/.exec(path);
   if (payMatch && req.method === 'POST') {
@@ -1830,27 +1889,17 @@ function platformResponse(
     });
     return typeof result === 'string' ? error(400, result) : ok(null);
   }
-  if (action === 'owner-password' && req.method === 'PUT') {
-    const password = String(body['password'] ?? '');
-    const problem = passwordError(password);
-    if (problem) return error(400, problem);
-    let owner: User | undefined;
-    withTenantDb(storage, company, (db) => {
-      owner = db.users.find((u) => isOwner(u));
-      if (!owner) return;
-      db.passwords[owner.id] = password;
-      pushAudit(
-        db,
-        {
-          action: 'user_password',
-          ref: { kind: 'user', id: owner.id, label: owner.username },
-          detail: 'ผู้ให้บริการตั้งรหัสผ่านใหม่ให้เจ้าของบริษัท',
-        },
-        by,
-      );
-    });
+  if (action === 'owner-setup-link' && req.method === 'POST') {
+    // E59: the platform never types an owner's password — it passes on a link instead.
+    const owner = loadTenantDb(storage, company.id).db.users.find((u) => isOwner(u) && u.active);
     if (!owner) return error(400, 'บริษัทนี้ไม่มีเจ้าของบริษัท');
-    return ok(null);
+    const link = issueSetupLink(company, owner);
+    record({
+      action: 'owner_setup_link',
+      ref: { kind: 'user', id: owner.id, label: owner.username },
+      detail: `ลิงก์ใช้ได้ถึง ${link.expiresAt}`,
+    });
+    return ok(link);
   }
   return notFound(req, path);
 }
@@ -1893,15 +1942,15 @@ function platformRow(company: StoredCompany, storage: StorageService): PlatformC
 
 function platformDetail(company: StoredCompany, storage: StorageService): PlatformCompanyDetail {
   const row = platformRow(company, storage);
-  const owner = row.deletedAt
-    ? undefined
-    : loadTenantDb(storage, company.id).db.users.find((u) => isOwner(u));
+  const db = row.deletedAt ? undefined : loadTenantDb(storage, company.id).db;
+  const owner = db?.users.find((u) => isOwner(u));
   return {
     ...row,
     invoices: invoicesOf(platform, company.id).sort((a, b) => b.id - a.id),
     owner: owner
       ? { id: owner.id, name: owner.name, username: owner.username, email: owner.email }
       : null,
+    ownerPasswordSet: !!db && !!owner && passwordOf(db, owner.id) !== null,
     suspendNote: company.suspendNote ?? '',
   };
 }
@@ -5823,9 +5872,14 @@ function checkCredentials(
 /** Password of every non-admin mock user that never got one of their own. */
 const MOCK_USER_PASSWORD = '1234';
 
-/** A user's password: the stored one, else `admin` for the first user and `1234` for the rest. */
-function passwordOf(db: MockDb, userId: number): string {
-  return db.passwords[userId] ?? (userId === db.users[0]?.id ? 'admin' : MOCK_USER_PASSWORD);
+/**
+ * A user's password: the stored one, else `admin` for the first user and `1234` for the rest;
+ * null = not set yet (E59) — matches no password.
+ */
+function passwordOf(db: MockDb, userId: number): string | null {
+  const stored = db.passwords[userId];
+  if (stored !== undefined) return stored;
+  return userId === db.users[0]?.id ? 'admin' : MOCK_USER_PASSWORD;
 }
 
 /** A fake token naming tenant + user (a real one is a signed JWT with these claims). Specs use it. */

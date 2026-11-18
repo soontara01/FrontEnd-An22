@@ -46,7 +46,9 @@ import {
   PlatformCompanyDetail,
   PlatformCompanyRow,
   PlatformLoginResponse,
-  SignupPayload,
+  NewCompanyPayload,
+  NewCompanyResult,
+  SetupLink,
   HeldBill,
   SubscriptionInfo,
   SerialNumber,
@@ -133,7 +135,7 @@ function lastStepOf(secret: string): number | null {
 }
 
 /**
- * A shop login / signup with its Authenticator step (E57): the first answer is the code step; the
+ * A shop login with its Authenticator step (E57): the first answer is the code step; the
  * mock-only `demoSecret` stands in for the phone. Failures of the first step come through as is.
  */
 async function viaCode<T = unknown>(
@@ -147,6 +149,38 @@ async function viaCode<T = unknown>(
   return (await post('auth/mfa/verify', { code: totpCode(first.demoSecret, step) })) as T;
 }
 
+/** A valid new company for `POST /platform/companies` (E59). */
+const NEW_COMPANY: NewCompanyPayload = {
+  companyCode: ' acme ',
+  companyName: 'บริษัท แอคมี จำกัด',
+  taxId: '0105550123451',
+  vatRegistered: true,
+  branch: { code: 'hq', name: 'สำนักงานใหญ่', branchNo: '00000', address: 'กรุงเทพฯ', phone: '' },
+  owner: { name: 'สมศักดิ์', username: 'Boss', email: 'boss@acme.test' },
+  planId: 'starter',
+  trialDays: 14,
+};
+
+/**
+ * Creates a company the only way there is (E59): a platform admin's login (the platform slot of
+ * the web session), then `POST /platform/companies`; `password` also sets the owner's first
+ * password with the setup link.
+ */
+async function createCompany(
+  post: <T>(url: string, body: unknown) => Promise<T>,
+  payload: Partial<NewCompanyPayload> = {},
+  password?: string,
+): Promise<NewCompanyResult> {
+  await passPlatformLogin(post);
+  const result = await post<NewCompanyResult>('platform/companies', { ...NEW_COMPANY, ...payload });
+  if (password) await post('auth/reset-password', { token: linkToken(result.setupLink), password });
+  return result;
+}
+
+/** The token of a setup / reset link path. */
+const linkToken = (link: SetupLink | string): string | null =>
+  new URLSearchParams((typeof link === 'string' ? link : link.path).split('?')[1]).get('token');
+
 /** What `terminalInterceptor` adds on a POS device set to terminal 1. */
 const atTerminal1: HttpInterceptorFn = (req, next) =>
   next(req.clone({ setHeaders: { 'X-Terminal-Id': '1' } }));
@@ -159,7 +193,7 @@ const atTerminal1: HttpInterceptorFn = (req, next) =>
 const asAdminByDefault: HttpInterceptorFn = (req, next) => {
   let headers = req.headers;
   // Logins (and their Authenticator step) go without: the web server gives the code step its challenge.
-  if (!headers.has('Authorization') && !/\/api\/auth\/(login|signup|mfa\/verify)$/.test(req.url)) {
+  if (!headers.has('Authorization') && !/\/api\/auth\/(login|mfa\/verify)$/.test(req.url)) {
     headers = headers.set('Authorization', `Bearer ${mockToken(1, 1)}`);
   }
   if (!headers.has('X-Branch-Id')) headers = headers.set('X-Branch-Id', '1');
@@ -3792,7 +3826,7 @@ describe('mockBackendInterceptor – billing (E35)', () => {
   });
 });
 
-describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)', () => {
+describe('mockBackendInterceptor – companies created by the platform + password links (E59 / E41)', () => {
   let http: HttpClient;
   const post = <T>(url: string, body: unknown, token?: string) =>
     firstValueFrom(
@@ -3811,16 +3845,10 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
       () => null,
       (e: { status: number; error: { message: string } }) => [e.status, e.error.message],
     );
-  const payload = {
-    companyCode: ' acme ',
-    companyName: 'บริษัท แอคมี จำกัด',
-    taxId: '0105550123451',
-    vatRegistered: true,
-    branch: { code: 'hq', name: 'สำนักงานใหญ่', branchNo: '00000', address: 'กรุงเทพฯ', phone: '' },
-    owner: { name: 'สมศักดิ์', username: 'Boss', email: 'boss@acme.test', password: 'secret' },
-    planId: 'starter',
-  };
+  const ownerLogin = (password: string) =>
+    viaCode<LoginResponse>(post, 'auth/login', { companyCode: 'ACME', username: 'boss', password });
   const platform = () => JSON.parse(localStorage.getItem('an22.mock.platform') ?? '{}');
+  const INVALID_LINK = 'ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่';
 
   beforeEach(() => {
     localStorage.clear();
@@ -3830,15 +3858,40 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
     http = TestBed.inject(HttpClient);
   });
 
-  it('creates a company on a trial with only its first branch, owner and cash', async () => {
-    const session = await viaCode<LoginResponse>(post, 'auth/signup', payload);
-    expect(session.company).toMatchObject({ id: 2, code: 'ACME', name: 'บริษัท แอคมี จำกัด' });
+  it('has no signup any more; only a platform admin creates a company', async () => {
+    expect((await failure(post('auth/signup', { ...NEW_COMPANY })))?.[0]).toBe(404);
+    expect((await failure(post('platform/companies', NEW_COMPANY)))?.[0]).toBe(401);
+    expect(platform().companies).toHaveLength(1);
+  });
+
+  it('creates a company on a trial with only its first branch, an owner without a password and cash', async () => {
+    const { company, setupLink } = await createCompany(post);
+    expect(company).toMatchObject({
+      id: 2,
+      code: 'ACME',
+      name: 'บริษัท แอคมี จำกัด',
+      planId: 'starter',
+      status: 'trial',
+      owner: { name: 'สมศักดิ์', username: 'boss', email: 'boss@acme.test' },
+      ownerPasswordSet: false,
+    });
+    expect(company.subscription.trialEndsOn).toBe(addDaysIso(todayIso(), 14));
+    expect(company.invoices).toEqual([]);
+    expect(setupLink.path).toMatch(/^\/auth\/reset-password\?token=[\w-]+$/);
+    expect(Date.parse(setupLink.expiresAt) - Date.now()).toBeGreaterThan(71 * 3_600_000);
+    // Nobody gets in before the owner sets a password — not even with the mock's default ones.
+    for (const password of ['', 'admin', '1234']) {
+      expect((await failure(ownerLogin(password)))?.[0]).toBe(401);
+    }
+    expect(sessionToken()).toBeNull();
+
+    await post('auth/reset-password', { token: linkToken(setupLink), password: 'secret' });
+    const session = await ownerLogin('secret');
     expect(session.user).toMatchObject({ username: 'boss', role: 'owner', allBranches: true });
     expect(session.branches.map((b) => b.code)).toEqual(['HQ']);
     expect(sessionToken()).toBe(mockToken(2, 1));
     const info = await get<SubscriptionInfo>('company/subscription', sessionToken());
     expect(info).toMatchObject({ planId: 'starter', status: 'trial' });
-    expect(info.subscription.trialEndsOn).toBe(addDaysIso(todayIso(), 14));
     expect(await get<Product[]>('products', sessionToken())).toEqual([]);
     expect(
       (await get<PaymentMethod[]>('payment-methods', sessionToken())).map((m) => m.type),
@@ -3851,31 +3904,69 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
       users: 1,
     });
     const events = await get<AuditEvent[]>('audit-log', sessionToken());
-    // Getting in after signup sets Authenticator up and logs in (E57).
-    expect(events.map((e) => e.action)).toEqual(['login', 'mfa_enable', 'signup']);
-    // the new owner logs in with their own code; DEMO is untouched
-    const login = await viaCode<LoginResponse>(post, 'auth/login', {
-      companyCode: 'ACME',
-      username: 'boss',
-      password: 'secret',
-    });
-    expect(login.company.id).toBe(2);
+    expect(events.map((e) => [e.action, e.actorKind])).toEqual([
+      ['login', 'user'],
+      ['mfa_enable', 'user'],
+      ['password_set', 'user'],
+      // the three refused logins before the password was set
+      ...Array.from({ length: 3 }, () => ['login_failed', 'user']),
+      ['company_create', 'platform'],
+    ]);
+    const after = await firstValueFrom(
+      http.get<PlatformCompanyDetail>('/api/platform/companies/2'),
+    );
+    expect(after.ownerPasswordSet).toBe(true);
+    // DEMO is untouched
     expect((await get<Product[]>('products', mockToken(1, 1))).length).toBeGreaterThan(0);
   });
 
-  it('refuses a taken code and an invalid form', async () => {
-    expect(
-      await failure(viaCode(post, 'auth/signup', { ...payload, companyCode: 'demo' })),
-    ).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
-    expect(await failure(viaCode(post, 'auth/signup', { ...payload, companyCode: 'x' }))).toEqual([
+  it('refuses a taken code (a deleted company keeps its code) and an invalid form', async () => {
+    await passPlatformLogin(post);
+    const create = (payload: Partial<NewCompanyPayload>) =>
+      failure(post('platform/companies', { ...NEW_COMPANY, ...payload }));
+    expect(await create({ companyCode: 'demo' })).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
+    expect(await create({ companyCode: 'x' })).toEqual([
       400,
       'รหัสบริษัทใช้ได้เฉพาะ A-Z, 0-9 ยาว 3–20 ตัว',
     ]);
+    expect(await create({ trialDays: 91 })).toEqual([400, 'วันทดลองใช้ต้องเป็นจำนวนเต็ม 0–90 วัน']);
     expect(platform().companies).toHaveLength(1);
   });
 
+  it('bills at once when the platform gives no trial', async () => {
+    const { company } = await createCompany(post, { trialDays: 0 });
+    expect(company.subscription.trialEndsOn).toBeNull();
+    expect(company.invoices.map((i) => [i.periodStart, i.status])).toEqual([[todayIso(), 'open']]);
+    expect(company.status).not.toBe('trial');
+  });
+
+  it('a new setup link ends the old one; every link is single use and expires', async () => {
+    const { setupLink: first } = await createCompany(post);
+    const second = await post<SetupLink>('platform/companies/2/owner-setup-link', {});
+    expect(linkToken(second)).not.toBe(linkToken(first));
+    expect(
+      await failure(post('auth/reset-password', { token: linkToken(first), password: 'p1234' })),
+    ).toEqual([400, INVALID_LINK]);
+
+    const stored = platform();
+    stored.resetTokens.at(-1).expiresAt = new Date(Date.now() - 1000).toISOString();
+    localStorage.setItem('an22.mock.platform', JSON.stringify(stored));
+    expect(
+      await failure(post('auth/reset-password', { token: linkToken(second), password: 'p1234' })),
+    ).toEqual([400, INVALID_LINK]);
+
+    const third = await post<SetupLink>('platform/companies/2/owner-setup-link', {});
+    await post('auth/reset-password', { token: linkToken(third), password: 'p1234' });
+    expect(
+      await failure(post('auth/reset-password', { token: linkToken(third), password: 'again' })),
+    ).toEqual([400, INVALID_LINK]);
+    expect((await ownerLogin('p1234')).user.role).toBe('owner');
+    const actions = (await get<AuditEvent[]>('audit-log', sessionToken())).map((e) => e.action);
+    expect(actions.filter((a) => a === 'owner_setup_link')).toHaveLength(2);
+  });
+
   it('sends a single-use reset link only to the owner, with one answer for everything', async () => {
-    await viaCode(post, 'auth/signup', payload);
+    await createCompany(post, {}, 'secret');
     const ask = (companyCode: string, email: string) =>
       post<{ message: string }>('auth/forgot-password', { companyCode, email });
     const same = (await ask('NOPE', 'x@y.z')).message;
@@ -3884,20 +3975,18 @@ describe('mockBackendInterceptor – signup + owner password reset (E37 / E41)',
     expect((await ask('acme', 'BOSS@acme.test')).message).toBe(same);
     const mail = platform().outbox[0];
     expect(mail).toMatchObject({ companyId: 2, to: 'boss@acme.test' });
-    const token = new URLSearchParams(mail.body.split('?')[1]).get('token');
+    const token = linkToken(mail.body);
 
     expect((await failure(post('auth/reset-password', { token, password: '1' })))?.[0]).toBe(400);
     await post('auth/reset-password', { token, password: 'new-pass' });
     expect(await failure(post('auth/reset-password', { token, password: 'again-pass' }))).toEqual([
       400,
-      'ลิงก์ตั้งรหัสผ่านไม่ถูกต้อง หมดอายุ หรือใช้ไปแล้ว — ขอลิงก์ใหม่',
+      INVALID_LINK,
     ]);
-    const login = await viaCode<LoginResponse>(post, 'auth/login', {
-      companyCode: 'ACME',
-      username: 'boss',
-      password: 'new-pass',
-    });
+    const login = await ownerLogin('new-pass');
     expect(login.user.role).toBe('owner');
+    const actions = (await get<AuditEvent[]>('audit-log', sessionToken())).map((e) => e.action);
+    expect(actions).toContain('password_reset');
   });
 });
 
@@ -4015,7 +4104,7 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
 
     const token = await loginPlatform();
     await at('1'); // the last company request worked in HQ
-    await call('PUT', 'platform/companies/1/owner-password', { password: 'owner-new' }, token);
+    await call('POST', 'platform/companies/1/owner-setup-link', {}, token);
     await call('POST', 'platform/companies/1/suspend', { note: 'ทดสอบ' }, token);
     await call('POST', 'platform/companies/1/reactivate', {}, token);
 
@@ -4056,7 +4145,7 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
     });
   });
 
-  it('suspends with a reason, turns back on, changes the package and the owner password', async () => {
+  it('suspends with a reason, turns back on, changes the package, gives the owner a setup link', async () => {
     const token = await loginPlatform();
     expect(
       (await failure(call('POST', 'platform/companies/1/suspend', { note: '' }, token)))?.[1],
@@ -4077,7 +4166,14 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
       token,
     );
     expect(changed.planId).toBe('standard');
-    await call('PUT', 'platform/companies/1/owner-password', { password: 'owner-new' }, token);
+    // E59: the platform never types a password — the owner sets it with the link.
+    expect(
+      (
+        await failure(call('PUT', 'platform/companies/1/owner-password', { password: 'x' }, token))
+      )?.[0],
+    ).toBe(404);
+    const link = await call<SetupLink>('POST', 'platform/companies/1/owner-setup-link', {}, token);
+    await call('POST', 'auth/reset-password', { token: linkToken(link), password: 'owner-new' });
     const login = await viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
       companyCode: 'DEMO',
       username: 'admin',
@@ -4092,7 +4188,8 @@ describe('mockBackendInterceptor – platform admin (E36)', () => {
         'company_suspend',
         'company_reactivate',
         'plan_change',
-        'user_password',
+        'owner_setup_link',
+        'password_set',
       ]),
     );
   });
@@ -4204,26 +4301,16 @@ describe('mockBackendInterceptor – export + deletion (E38 / E39)', () => {
       'รหัสบริษัท ชื่อผู้ใช้ หรือรหัสผ่านไม่ถูกต้อง',
     );
     expect((await failure(call('GET', 'me')))?.[0]).toBe(401);
-    const signup = await failure(
+    const again = await failure(
       firstValueFrom(
-        http.post('/api/auth/signup', {
-          companyCode: 'DEMO',
-          companyName: 'ใหม่',
-          taxId: '0105550123451',
-          vatRegistered: true,
-          branch: {
-            code: 'HQ',
-            name: 'สำนักงานใหญ่',
-            branchNo: '00000',
-            address: 'กรุงเทพฯ',
-            phone: '',
-          },
-          owner: { name: 'x', username: 'boss', email: 'b@x.test', password: 'secret' },
-          planId: 'starter',
-        }),
+        http.post(
+          '/api/platform/companies',
+          { ...NEW_COMPANY, companyCode: 'DEMO' },
+          { headers: { Authorization: `Bearer ${token}` } },
+        ),
       ),
     );
-    expect(signup).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
+    expect(again).toEqual([400, 'รหัสบริษัทนี้ถูกใช้แล้ว']);
   });
 });
 
@@ -4449,22 +4536,18 @@ describe('mockBackendInterceptor – web server session (E48)', () => {
     expect(sessionToken()).toBeNull();
   });
 
-  it('signing up logs the new owner in through the session', async () => {
-    const session = await viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/signup', {
+  it('a setup link logs nobody in; the new owner logs in through the session', async () => {
+    await createCompany(
+      (u, b) => call('POST', u, b),
+      { vatRegistered: false, taxId: '' },
+      'acme1234',
+    );
+    expect(sessionToken()).toBeNull();
+    const session = await viaCode<LoginResponse>((u, b) => call('POST', u, b), 'auth/login', {
       companyCode: 'ACME',
-      companyName: 'บริษัท แอคมี จำกัด',
-      taxId: '',
-      vatRegistered: false,
-      branch: {
-        code: 'HQ',
-        name: 'สำนักงานใหญ่',
-        branchNo: '00000',
-        address: 'กรุงเทพฯ',
-        phone: '',
-      },
-      owner: { name: 'บอส', username: 'boss', email: 'boss@acme.test', password: 'acme1234' },
-      planId: 'starter',
-    } satisfies SignupPayload);
+      username: 'boss',
+      password: 'acme1234',
+    });
     expect(session).not.toHaveProperty('token');
     expect((await call<MeResponse>('GET', 'me')).company.code).toBe('ACME');
   });
@@ -4619,21 +4702,19 @@ describe('mockBackendInterceptor – Microsoft Authenticator (E55 / E57 / E58)',
     ]);
   });
 
-  it('makes the owner of a new company set it up before getting in (signup)', async () => {
-    const challenge = await call<MfaChallenge>('POST', 'auth/signup', {
-      companyCode: 'NEWCO',
-      companyName: 'บริษัทใหม่',
-      taxId: '',
-      vatRegistered: false,
-      branch: {
-        code: 'HQ',
-        name: 'สำนักงานใหญ่',
-        branchNo: '00000',
-        address: 'กรุงเทพฯ',
-        phone: '',
+  it('makes the owner of a new company set it up before getting in (E59)', async () => {
+    await createCompany(
+      (u, b) => call('POST', u, b),
+      {
+        companyCode: 'NEWCO',
+        owner: { name: 'เจ้าของ', username: 'boss', email: 'boss@newco.test' },
       },
-      owner: { name: 'เจ้าของ', username: 'boss', email: 'boss@newco.test', password: 'secret1' },
-      planId: 'starter',
+      'secret1',
+    );
+    const challenge = await call<MfaChallenge>('POST', 'auth/login', {
+      companyCode: 'NEWCO',
+      username: 'boss',
+      password: 'secret1',
     });
     expect(challenge).toMatchObject({ mfa: 'setup' });
     expect(sessionToken()).toBeNull();

@@ -5,6 +5,7 @@ import { PlatformApi } from './data/platform-api.service';
 import { PlatformAuth } from './data/platform-auth.service';
 import CompanyDetail from './pages/company-detail/company-detail';
 import CompanyList from './pages/company-list/company-list';
+import CompanyNew from './pages/company-new/company-new';
 import Outbox from './pages/outbox/outbox';
 import PlatformLayout from './pages/platform-layout/platform-layout';
 import PlatformLogin from './pages/platform-login/platform-login';
@@ -46,6 +47,7 @@ export default [
         children: [
           { path: '', pathMatch: 'full', redirectTo: 'companies' },
           { path: 'companies', title: 'บริษัทลูกค้า', component: CompanyList },
+          { path: 'companies/new', title: 'สร้างบริษัท', component: CompanyNew },
           { path: 'companies/:id', title: 'บริษัทลูกค้า', component: CompanyDetail },
           { path: 'outbox', title: 'อีเมลที่ส่ง (mock)', component: Outbox },
         ],

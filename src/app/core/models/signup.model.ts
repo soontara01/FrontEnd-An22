@@ -6,21 +6,41 @@ import {
   normalizeCompanyCode,
 } from './company.model';
 import { PLANS, PlanId } from './plan.model';
-import { passwordError, userIdentityError } from './user.model';
+import { userIdentityError } from './user.model';
 
 /**
- * Signing up a new company (E37, SaaS step 6.6): the company, its first branch and its owner, on a
- * trial of the chosen package. `POST /auth/signup` answers a `LoginResponse` (logged in at once).
+ * A new company, created only by the platform (E59 — nobody signs up by themselves since then,
+ * E37): the company, its first branch and its owner, on a trial of the chosen package.
+ * `POST /platform/companies` answers `NewCompanyResult`; the owner has no password until they use
+ * the setup link the platform passes on.
  */
-export interface SignupPayload {
+export interface NewCompanyPayload {
   /** Company code used at login (D4): A-Z 0-9, 3–20, unique on the platform forever (E39) */
   companyCode: string;
   companyName: string;
   taxId: string;
   vatRegistered: boolean;
   branch: { code: string; name: string; branchNo: string; address: string; phone: string };
-  owner: { name: string; username: string; email: string; password: string };
+  owner: { name: string; username: string; email: string };
   planId: PlanId;
+  /** Trial days (E59): `TRIAL_DAYS` by default, 0 = no trial — the first invoice is issued at once */
+  trialDays: number;
+}
+
+/** Longest trial the platform may give (E59). */
+export const MAX_TRIAL_DAYS = 90;
+
+/** Hours a setup link (owner's first password, E59) stays valid. */
+export const SETUP_LINK_HOURS = 72;
+
+/**
+ * A single-use link for the owner to set their password (E59): `path` is
+ * `/auth/reset-password?token=…` — the platform page puts its own origin in front and the platform
+ * admin passes it on (LINE / SMS / e-mail). Shown once: the api keeps only a hash of the token.
+ */
+export interface SetupLink {
+  path: string;
+  expiresAt: string;
 }
 
 const COMPANY_CODE_PATTERN = /^[A-Z0-9]{3,20}$/;
@@ -34,10 +54,11 @@ export function companyCodeError(code: string): string | null {
 }
 
 /**
- * The single rule for a signup (form + server), in the order the form shows: company, first
- * branch, owner, package. Whether the code is free is the server's (`รหัสบริษัทนี้ถูกใช้แล้ว`).
+ * The single rule for a new company (platform form + server), in the order the form shows:
+ * company, first branch, owner, package, trial. Whether the code is free is the server's
+ * (`รหัสบริษัทนี้ถูกใช้แล้ว`).
  */
-export function signupError(p: SignupPayload): string | null {
+export function newCompanyError(p: NewCompanyPayload): string | null {
   const company =
     companyCodeError(p.companyCode) ??
     companyInfoError({
@@ -50,14 +71,16 @@ export function signupError(p: SignupPayload): string | null {
   const branch = branchError({ ...BRANCH_DEFAULTS, ...p.branch, active: true }, []);
   if (branch) return branch;
   if (!p.owner.name.trim()) return 'กรุณากรอกชื่อเจ้าของบริษัท';
-  const owner =
-    userIdentityError(
-      [],
-      { username: p.owner.username, email: p.owner.email, role: 'owner' },
-      null,
-    ) ?? passwordError(p.owner.password);
+  const owner = userIdentityError(
+    [],
+    { username: p.owner.username, email: p.owner.email, role: 'owner' },
+    null,
+  );
   if (owner) return owner;
   if (!PLANS.some((plan) => plan.id === p.planId)) return 'กรุณาเลือกแพ็กเกจ';
+  if (!Number.isInteger(p.trialDays) || p.trialDays < 0 || p.trialDays > MAX_TRIAL_DAYS) {
+    return `วันทดลองใช้ต้องเป็นจำนวนเต็ม 0–${MAX_TRIAL_DAYS} วัน`;
+  }
   return null;
 }
 
@@ -68,7 +91,7 @@ export const FORGOT_PASSWORD_ANSWER =
 /** Minutes a password reset link stays valid (E41). */
 export const RESET_LINK_MINUTES = 60;
 
-/** What a new company still has to set up (E37): counts from `GET /company/onboarding`. */
+/** What a new company still has to set up (E37 / E59): counts from `GET /company/onboarding`. */
 export interface OnboardingCounts {
   terminals: number;
   categories: number;

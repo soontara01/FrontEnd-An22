@@ -11,8 +11,6 @@ import type {
   LoginResponse,
   LoginResult,
   MeResponse,
-  MfaChallenge,
-  SignupPayload,
   User,
 } from '../models';
 import { StorageService } from '../services/storage.service';
@@ -135,14 +133,6 @@ export class AuthService {
     return this.api
       .post<LoginResponse>('auth/mfa/verify', { code })
       .pipe(tap((session) => this.startSession(session)));
-  }
-
-  /**
-   * Signs a new company up (E37): the owner sets up Microsoft Authenticator next (E57) — the answer
-   * is the code step, then `verifyMfa()` like a login.
-   */
-  signup(payload: SignupPayload): Observable<MfaChallenge> {
-    return this.api.post<MfaChallenge>('auth/signup', payload);
   }
 
   private startSession(session: LoginResponse): void {

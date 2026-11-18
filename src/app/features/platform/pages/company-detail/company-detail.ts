@@ -19,10 +19,10 @@ import {
   PLANS,
   PlanId,
   PlatformCompanyDetail,
+  SetupLink,
   SUBSCRIPTION_STATUS_LABEL,
   SUSPEND_REASON_LABEL,
   isInvoiced,
-  passwordError,
   payInvoiceError,
   purgeError,
   todayIso,
@@ -36,11 +36,13 @@ import { LoadingSpinner } from '@shared/components/loading-spinner/loading-spinn
 import { PageHeader } from '@shared/components/page-header/page-header';
 import { MATERIAL } from '@shared/material';
 import { ThaiDatePipe } from '@shared/pipes/thai-date.pipe';
+import { SetupLinkCard } from '../../components/setup-link-card/setup-link-card';
 import { PlatformApi } from '../../data/platform-api.service';
 
 /**
  * One company for the SaaS operator (E36): package, suspend / turn back on, invoices (mark paid),
- * the owner's password, clearing a user's Authenticator (E58). Same rules as the server (`platform.model.ts`).
+ * the owner's setup link (E59 — the platform never types a password), clearing a user's
+ * Authenticator (E58). Same rules as the server (`platform.model.ts`).
  */
 @Component({
   selector: 'app-company-detail',
@@ -50,6 +52,7 @@ import { PlatformApi } from '../../data/platform-api.service';
     MatTableModule,
     PageHeader,
     LoadingSpinner,
+    SetupLinkCard,
     ThaiDatePipe,
     MATERIAL,
   ],
@@ -78,8 +81,8 @@ export default class CompanyDetail {
   protected readonly busy = signal(false);
   protected readonly planId = signal<PlanId | null>(null);
   protected readonly note = signal('');
-  protected readonly password = signal('');
-  protected readonly passwordTouched = signal(false);
+  /** The owner's newest setup link (E59), shown once on this page */
+  protected readonly setupLink = signal<SetupLink | null>(null);
   /** E58: whose Authenticator to clear — empty = the owner */
   protected readonly mfaUsername = signal('');
   protected readonly mfaTarget = computed(
@@ -110,7 +113,6 @@ export default class CompanyDetail {
     const c = this.company();
     return c ? reactivateCompanyError(c) : null;
   });
-  protected readonly passwordProblem = computed(() => passwordError(this.password()));
   protected readonly purgeProblem = computed(() => {
     const c = this.company();
     return c ? purgeError(c.deletion, todayIso()) : null;
@@ -179,20 +181,29 @@ export default class CompanyDetail {
     );
   }
 
-  protected setOwnerPassword(): void {
+  protected issueSetupLink(): void {
     const c = this.company();
-    this.passwordTouched.set(true);
-    if (!c || this.passwordProblem() || this.busy()) return;
-    this.busy.set(true);
-    this.api.setOwnerPassword(c.id, this.password()).subscribe({
-      next: () => {
-        this.busy.set(false);
-        this.password.set('');
-        this.passwordTouched.set(false);
-        this.notify.success('ตั้งรหัสผ่านใหม่ให้เจ้าของบริษัทแล้ว — แจ้งรหัสนี้ให้เจ้าของ');
-      },
-      error: () => this.busy.set(false),
-    });
+    if (!c?.owner || this.busy()) return;
+    openConfirm(this.dialog, {
+      title: 'ออกลิงก์ตั้งรหัสผ่าน',
+      message: `ออกลิงก์ใหม่ให้ ${c.owner.name} (${c.owner.username})? ลิงก์ที่ออกไปก่อนหน้าและยังไม่ได้ใช้จะใช้ไม่ได้ — ยืนยันตัวตนเจ้าของก่อนส่ง`,
+      confirmText: 'ออกลิงก์',
+    })
+      .pipe(
+        filter(Boolean),
+        switchMap(() => {
+          this.busy.set(true);
+          return this.api.ownerSetupLink(c.id);
+        }),
+      )
+      .subscribe({
+        next: (link) => {
+          this.busy.set(false);
+          this.setupLink.set(link);
+          this.notify.success('ออกลิงก์แล้ว — คัดลอกส่งให้เจ้าของ');
+        },
+        error: () => this.busy.set(false),
+      });
   }
 
   protected resetMfa(): void {

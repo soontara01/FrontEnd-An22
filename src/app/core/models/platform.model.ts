@@ -1,6 +1,7 @@
 import type { MfaChallenge } from './auth.model';
 import { PlanId, PlanUsage } from './plan.model';
 import { CompanyDeletion } from './company-data.model';
+import type { SetupLink } from './signup.model';
 import {
   BillingInvoice,
   CompanySuspendReason,
@@ -59,7 +60,15 @@ export interface PlatformCompanyRow {
 export interface PlatformCompanyDetail extends PlatformCompanyRow {
   invoices: BillingInvoice[];
   owner: { id: number; name: string; username: string; email: string } | null;
+  /** The owner has set a password (E59): false = still waiting for the setup link to be used */
+  ownerPasswordSet: boolean;
   suspendNote: string;
+}
+
+/** `POST /platform/companies` (E59): the new company and the owner's setup link (shown once). */
+export interface NewCompanyResult {
+  company: PlatformCompanyDetail;
+  setupLink: SetupLink;
 }
 
 /** An e-mail the platform "sent" (mock outbox, E41). */
